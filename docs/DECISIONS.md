@@ -68,7 +68,10 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Off-topic queries are redirected to what the platform is for.
   - Vague queries get clarifying questions through an interrupt.
   - Unanswerable queries are declined honestly.
-- **Open:** Which model makes the fast classification decisions, the exact rules for personal data, and which languages are supported.
+- **Personal data:** Identifiers are blocked: NRIC/FIN, phone numbers, email addresses, card numbers, bank accounts, and street addresses with unit numbers. Names are not blocked, because policy questions legitimately name ministers and MPs. The screen runs in the API before the graph starts, because LangGraph checkpoints its input.
+- **Languages:** Singapore's four official languages (English, Chinese, Malay, Tamil). Only report prose is translated; source titles, tables and citations stay as published. If a translation changes any number, the user gets the English report with a note.
+- **Plan approval:** Optional, and off by default. Clarifying questions for vague queries are always on.
+- **Open:** Which model makes the fast classification decisions. Candidates are a free local model and Jev, compared on the same labelled query set.
 
 ## D-011 · 2026-10-14 · Evaluation with standard metrics
 - **Decision:**
@@ -77,11 +80,31 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Subjective quality: an LLM-as-a-judge with a written rubric.
   - Consistency: the same question asked repeatedly.
   - Guardrail classifiers: precision and recall.
-- **Open:** Whether to use our own implementations or an evaluation library.
+- **Implementation:** Our own code, following the standard metric definitions. It is short, has no extra dependencies, and is easy to explain.
 
 ## D-012 · 2026-10-14 · No hosted demo
 - **Decision:** No public live site. Reviewers run the stack locally with Docker Compose, and the README will include a demo video once the app is complete.
 - **Why:** A public URL would need access control and spend limits to keep strangers from using the LLM keys, and none of that is required.
+- **Release:** CI runs the tests and builds the Docker images on every push. A version tag also publishes the images to GitHub Container Registry, so a release can be run without building it.
 
 ## D-013 · 2026-10-14 · Public repository
 - **Decision:** The repository is public at `agentic-policy-analytics`.
+
+## D-014 · 2026-10-14 · Data sources: scope
+- **Decision:**
+  - **Structured data** comes through the data.gov.sg API, which covers 4,655 datasets from 74 agencies. Examples: COE bidding results, HDB resale prices, CEA transaction records, URA private-property data, new-flat bookings, the Master Plan 2025 rail-station layers, MOH and IMDA statistics, and employment by industry. SingStat's Table Builder API and a mock internal API add to this.
+  - **Documents** come from agency newsrooms and statistics pages whose robots.txt allows crawling: MOM, MOF, PMO, MAS, MOH and URA. They are added through one configurable connector.
+  - **Web search** is a separate tool for recent context.
+- **Excluded:**
+  - Parliamentary Hansard: its search API returns errors and the parliament site blocks automated access.
+  - Commercial news: copyright.
+  - Sites that block automated access: gov.sg, MOE, HDB and Statutes Online.
+  - Services that need a separate registered key (LTA DataMall, URA's data API, OneMap): data.gov.sg already carries their datasets.
+- **Why:** One catalogue API covers the whole of government with consistent metadata (size, columns, coverage), and every source is used within its access rules.
+
+## D-015 · 2026-10-14 · LLM layer
+- **Decision:**
+  - LangChain chat models arranged in two tiers, each with an OpenAI primary and an Anthropic fallback: **quality** (`gpt-6.1-sol`, then `claude-sonnet-5-5`) and **fast** (`gpt-6-luna`, then `claude-haiku-5-5`). The models in each tier cost the same per token, so a fallback does not change the cost.
+  - Provider endpoints are set in the app's own config, so ambient shell variables cannot redirect calls.
+  - Prices come from the official pricing pages and are dated in `app/llm/pricing.py`. A model without a listed price is reported as unpriced, never estimated.
+- **Alternatives:** One model per provider for everything. Hosted embeddings for retrieval (rejected in D-006).
