@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.8",
     "pydantic-settings>=2.4",
     "tiktoken>=0.8",
+    "lingua-language-detector>=2.0",
 ]
 
 [dependency-groups]
