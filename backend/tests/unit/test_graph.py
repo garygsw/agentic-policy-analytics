@@ -6,7 +6,7 @@ from langgraph.types import Command
 from app.graph import prompts
 from app.graph.build import Deps, build_graph
 from app.graph.checkpoint import serializer, sqlite_checkpointer
-from app.graph.state import Claim, CoordinatorStep, Report, Review, StandaloneQuestion, TriageDecision
+from app.graph.state import Claim, CoordinatorStep, Report, ReportTexts, Review, StandaloneQuestion, TriageDecision
 from app.llm.fake import FakeLLMs
 
 QUESTION = "Analyse employment trends in the technology sector from 2020-2024"
@@ -66,6 +66,7 @@ def test_happy_path_extract_analyse_report_review():
     assert state["outcome"] == "answered" and state["grounding_issues"] == []
     assert "# Tech employment grew" in state["answer"] and "[F1, F2, S1]" in state["answer"]
     assert "[S1] Employed residents by industry" in state["answer"]
+    assert state["report_html"].startswith("<!doctype html>") and 'id="F2"' in state["report_html"]
     assert isinstance(state["messages"][-1], AIMessage) and state["messages"][-1].content == state["answer"]
     # A first English message is used as-is: no rewriting call before triage.
     assert llm.keys() == ["TriageDecision", "CoordinatorStep", "CoordinatorStep", "CoordinatorStep", "Report", "Review"]
@@ -134,26 +135,30 @@ def test_llm_failure_routes_to_deterministic_fallback():
     assert "[F3]" in state["answer"]
 
 
+def zh_texts(finding: str) -> ReportTexts:
+    return ReportTexts(title="科技就业增长", summary="2020年至2024年，资讯通信业就业增长25.0%。", findings=[finding],
+                       caveats=[], chart_titles=[])
+
+
 def test_chinese_question_is_answered_in_chinese_with_numbers_checked():
-    translated = ("# 科技就业增长\n\n2020年至2024年，资讯通信业就业增长25.0%。\n\n## Findings\n"
-                  "- 就业人数从100,000增至125,000。 [F1, F2, S1]\n\n## Sources\n- [S1] Employed residents by industry "
-                  "https://data.gov.sg/datasets/x")
     graph, llm, _ = make({"StandaloneQuestion": [StandaloneQuestion(question=QUESTION)], "TriageDecision": [IN_SCOPE],
                           "CoordinatorStep": steps("extract", "analyse", "report"), "Report": [GOOD],
-                          "Review": [PASS], "text": [translated]})
+                          "Review": [PASS], "ReportTexts": [zh_texts("就业人数从100,000增至125,000。")]})
     state = ask(graph, "分析2020至2024年科技行业的就业趋势").values
     assert state["language"] == "zh" and state["question"] == QUESTION
-    assert state["answer"] == translated
+    assert state["answer"].startswith("# 科技就业增长")
+    assert "就业人数从100,000增至125,000。 [F1, F2, S1]" in state["answer"]
+    assert state["report"].title == "Tech employment grew"  # the checked English report is kept for the record
+    assert '<html lang="zh">' in state["report_html"] and "主要发现" in state["report_html"]
     assert llm.keys()[0] == "StandaloneQuestion"  # non-English input is rewritten into English first
 
 
 def test_translation_that_changes_a_number_falls_back_to_english():
     graph, _, _ = make({"StandaloneQuestion": [StandaloneQuestion(question=QUESTION)], "TriageDecision": [IN_SCOPE],
                         "CoordinatorStep": steps("extract", "analyse", "report"), "Report": [GOOD],
-                        "Review": [PASS], "text": ["就业人数从100,000增至130,000。"]})
+                        "Review": [PASS], "ReportTexts": [zh_texts("就业人数从100,000增至130,000。")]})
     state = ask(graph, "分析2020至2024年科技行业的就业趋势").values
-    assert state["answer"].startswith("# Tech employment grew")
-    assert "translation altered some numbers" in state["answer"]
+    assert state["answer"].startswith("# Tech employment grew") and '<html lang="zh">' in state["report_html"]
 
 
 def test_second_turn_keeps_history_and_resets_working_state():

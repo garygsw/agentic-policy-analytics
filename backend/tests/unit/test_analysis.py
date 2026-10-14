@@ -148,6 +148,13 @@ def test_compute_trend_records_numbered_facts():
     assert [f["id"] for f in ws.facts] == [f"F{i}" for i in range(1, len(ws.facts) + 1)]
 
 
+def test_compare_groups_labels_say_what_was_filtered():
+    _, t = tools()
+    out = call(t["compare_groups"], dataset_id="employment", measure="employed", group_by="sex",
+               filters={"industry": "ict"}, period="2024")
+    assert out["facts"][0]["label"] == "employed (industry = ict), sex = female, 2024"
+
+
 def test_compare_groups_gives_shares_that_add_to_100():
     _, t = tools()
     out = call(t["compare_groups"], dataset_id="employment", measure="employed", group_by="industry", period="2024")

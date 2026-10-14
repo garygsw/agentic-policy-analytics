@@ -48,6 +48,15 @@ class Report(BaseModel):
     caveats: list[str] = Field(default_factory=list)
 
 
+class ReportTexts(BaseModel):
+    """The translatable texts of a report, in order. IDs and numbers stay as they are."""
+    title: str
+    summary: str
+    findings: list[str]
+    caveats: list[str]
+    chart_titles: list[str]
+
+
 class Review(BaseModel):
     verdict: Literal["pass", "wrong_analysis", "poor_report"]
     reason: str
@@ -67,6 +76,9 @@ class AgentState(TypedDict, total=False):
     plan_approved: bool
     findings: dict[str, Any]
     report: Report | None
+    report_display: Report | None       # the checked report in the user's language
+    chart_titles: dict[str, str]         # chart ID -> title in the user's language
+    report_html: str
     grounding_issues: list[str]
     review: Review | None
     revisions: int
@@ -78,6 +90,7 @@ class AgentState(TypedDict, total=False):
 
 TURN_RESET: dict[str, Any] = {
     "question": "", "clarifications": 0, "pending_question": "", "coordinator_steps": [], "plan_approved": False,
-    "findings": {}, "report": None, "grounding_issues": [], "review": None, "revisions": 0, "answer": "",
+    "findings": {}, "report": None, "report_display": None, "chart_titles": {}, "report_html": "",
+    "grounding_issues": [], "review": None, "revisions": 0, "answer": "",
     "outcome": "", "failed_node": None, "errors": [],
 }

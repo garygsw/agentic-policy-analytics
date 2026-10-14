@@ -88,6 +88,11 @@ TRANSLATE = """Translate the text into {language}.
 - Keep citation markers such as [F1] and [S1] unchanged, and keep names of agencies and datasets in English.
 Output only the translation."""
 
+TRANSLATE_FIELDS = """Translate every text in this JSON report into {language} and return the same structure.
+- Keep the same number of findings, caveats and chart titles, in the same order.
+- Keep every number exactly as written, in digits, with the same unit words.
+- Keep names of agencies and datasets in English."""
+
 # Off-topic replies are written in advance, so no LLM call is needed to send one.
 REDIRECT = {
     "en": "I can help with questions about Singapore public policy and official statistics, for example employment "

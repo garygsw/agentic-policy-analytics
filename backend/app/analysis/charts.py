@@ -8,6 +8,11 @@ import pandas as pd
 PALETTE = ["#c96442", "#3b6ea8", "#5b8a5a", "#9a6fb0", "#b58a2b", "#6b7280"]
 
 
+def plain(text: str) -> str:
+    """Plotly renders some HTML tags in titles and labels; model-written text must stay plain."""
+    return text.replace("<", "").replace(">", "")
+
+
 def line_chart(series: list[tuple[str, pd.Series, str]], title: str) -> tuple[dict, dict]:
     """Lines over time. Two units get two y-axes; more than two units cannot share a chart."""
     units = list(dict.fromkeys(unit for _, _, unit in series))
@@ -15,12 +20,12 @@ def line_chart(series: list[tuple[str, pd.Series, str]], title: str) -> tuple[di
         raise ValueError(f"a chart can show at most two units; got {units}")
     traces = []
     for i, (label, values, unit) in enumerate(series):
-        trace = {"type": "scatter", "mode": "lines+markers", "name": label, "x": list(values.index),
+        trace = {"type": "scatter", "mode": "lines+markers", "name": plain(label), "x": list(values.index),
                  "y": [round(float(v), 4) for v in values], "line": {"color": PALETTE[i % len(PALETTE)]}}
         if unit != units[0]:
             trace["yaxis"] = "y2"
         traces.append(trace)
-    layout = {"title": {"text": title}, "xaxis": {"type": "category"}, "yaxis": {"title": {"text": units[0]}},
+    layout = {"title": {"text": plain(title)}, "xaxis": {"type": "category"}, "yaxis": {"title": {"text": units[0]}},
               "legend": {"orientation": "h"}, "margin": {"t": 60, "r": 60}}
     if len(units) == 2:
         layout["yaxis2"] = {"title": {"text": units[1]}, "overlaying": "y", "side": "right"}
@@ -33,7 +38,7 @@ def line_chart(series: list[tuple[str, pd.Series, str]], title: str) -> tuple[di
 def bar_chart(values: pd.Series, title: str, unit: str) -> tuple[dict, dict]:
     spec = {"data": [{"type": "bar", "x": list(values.index), "y": [round(float(v), 4) for v in values],
                       "marker": {"color": PALETTE[0]}}],
-            "layout": {"title": {"text": title}, "yaxis": {"title": {"text": unit}}, "margin": {"t": 60}}}
+            "layout": {"title": {"text": plain(title)}, "yaxis": {"title": {"text": unit}}, "margin": {"t": 60}}}
     table = {"columns": ["group", unit], "rows": [[k, round(float(v), 4)] for k, v in values.items()]}
     return spec, table
 

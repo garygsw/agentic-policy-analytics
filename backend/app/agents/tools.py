@@ -166,12 +166,14 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
             raise stats.AnalysisError(f"no {measure} values for period {period}")
         ranked = sorted(values.items(), key=lambda kv: kv[1], reverse=True)[:MAX_GROUPS]
         total = sum(values.values()) if group_by in loaded.dataset.summable.get(measure, ()) else None
+        # The label carries every filter, so a fact read on its own says exactly what it counts.
+        scope = f" ({', '.join(f'{k} = {v}' for k, v in filters.items())})" if filters else ""
         facts = []
         for group, value in ranked:
-            facts.append(ws.add_fact(f"{measure}, {group_by} = {group}, {period}", value, unit, [source_id]))
+            facts.append(ws.add_fact(f"{measure}{scope}, {group_by} = {group}, {period}", value, unit, [source_id]))
             if total:
-                facts.append(ws.add_fact(f"share of {measure}, {group_by} = {group}, {period}", value / total * 100,
-                                         "%", [source_id], f"share of total across {group_by}"))
+                facts.append(ws.add_fact(f"share of {measure}{scope}, {group_by} = {group}, {period}",
+                                         value / total * 100, "%", [source_id], f"share of total across {group_by}"))
         return _json({"period": period, "facts": [f for f in ws.facts if f["id"] in facts],
                       "groups_shown": len(ranked), "groups_total": len(values)})
 

@@ -13,6 +13,7 @@ import time
 import uuid
 
 from langchain_core.messages import HumanMessage
+from langchain_core.utils.json import parse_partial_json
 from langgraph.types import Command
 
 from app.config import REPO_ROOT
@@ -23,6 +24,7 @@ from app.guardrails.pii import rejection_message, screen
 from app.llm.ledger import Ledger
 
 CHECKPOINTS = REPO_ROOT / "var" / "checkpoints.sqlite"
+REPORTS = REPO_ROOT / "var" / "reports"
 
 
 def screened(text: str) -> str | None:
@@ -57,8 +59,27 @@ class Display:
         self.level = VERBOSITY[verbosity]
         self.started = time.time()
         self.tokens, self.cost = 0, 0.0
+        self.draft_id, self.draft_text, self.draft_shown = None, "", 0
+
+    def draft(self, chunk, metadata: dict) -> None:
+        """Stream the report summary as the writer produces it (option A: shown before the check, labelled)."""
+        if metadata.get("langgraph_node") != "report_writer":
+            return
+        if chunk.id != self.draft_id:  # a new draft (first one, or a revision)
+            self.draft_id, self.draft_text, self.draft_shown = chunk.id, "", 0
+            print("\n  Draft (checking numbers…): ", end="", flush=True)
+        content = chunk.content
+        self.draft_text += content if isinstance(content, str) else "".join(
+            b.get("text", "") for b in content if isinstance(b, dict))
+        summary = (parse_partial_json(self.draft_text) or {}).get("summary", "") if self.draft_text else ""
+        if isinstance(summary, str) and len(summary) > self.draft_shown:
+            print(summary[self.draft_shown:], end="", flush=True)
+            self.draft_shown = len(summary)
 
     def show(self, event: dict) -> None:
+        if event["node"] == "validate" and "passed" in event:
+            print("\n  " + ("✓ Checked: every number matches a computed fact" if event["passed"]
+                             else f"Revised after check: {len(event['issues'])} problem(s) sent back to the writer"))
         if event["kind"] == "usage":
             self.tokens = event["input_total"] + event["output"]
             self.cost = event["cost_usd"]
@@ -81,8 +102,11 @@ def run_turn(graph, config: dict, payload, display: Display) -> dict | None:
     the agents were waiting for an answer (the checkpoint keeps the paused conversation)."""
     while True:
         if payload is not None:
-            for event in graph.stream(payload, config, stream_mode="custom"):
-                display.show(event)
+            for mode, chunk in graph.stream(payload, config, stream_mode=["custom", "messages"]):
+                if mode == "custom":
+                    display.show(chunk)
+                else:
+                    display.draft(*chunk)
         snapshot = graph.get_state(config)
         if not snapshot.interrupts:
             return snapshot.values
@@ -118,10 +142,21 @@ def print_calls(ledger: Ledger) -> None:
               + ", ".join(f"{k} {v}" for k, v in last.context_estimate.items() if v))
 
 
-def print_result(values: dict, ledger: Ledger, display: Display) -> None:
+def save_report(values: dict, thread: str) -> str | None:
+    if not values.get("report_html"):
+        return None
+    REPORTS.mkdir(parents=True, exist_ok=True)
+    path = REPORTS / f"{thread}-{time.strftime('%Y%m%d-%H%M%S')}.html"
+    path.write_text(values["report_html"], encoding="utf-8")
+    return str(path)
+
+
+def print_result(values: dict, ledger: Ledger, display: Display, thread: str) -> None:
     totals = ledger.totals()
     elapsed = int(time.time() - display.started)
     print("\n" + values.get("answer", ""))
+    if report_path := save_report(values, thread):
+        print(f"\nHTML report: {report_path}")
     print(f"\n[{values.get('outcome')}] {elapsed // 60}:{elapsed % 60:02d} · {totals['llm_calls']} LLM calls "
           f"({totals['failed_llm_calls']} failed) · {totals['input_total']:,} input / {totals['output']:,} output "
           f"tokens ({totals['cache_read']:,} cached) · ${totals['cost_usd']:.4f}"
@@ -158,7 +193,7 @@ def main() -> None:
         values = run_turn(graph, config(ledger), None, display)
         if values is None:
             return
-        print_result(values, ledger, display)
+        print_result(values, ledger, display, thread)
     while True:
         try:
             text = screened(args.question) if args.question else ask_until_clean("\nYou> ")
@@ -171,7 +206,7 @@ def main() -> None:
                                                   "require_plan_approval": args.plan_approval}, display)
         if values is None:
             return
-        print_result(values, ledger, display)
+        print_result(values, ledger, display, thread)
         if args.calls:
             print_calls(ledger)
         if args.question:

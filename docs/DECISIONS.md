@@ -167,3 +167,16 @@ Each entry records the date, the decision, the alternatives considered and the r
 ## D-021 · 2026-10-14 · Occupation-based tech workforce data
 - **Decision:** IMDA's *Employed Tech and Media Professionals* series (published through SingStat; 2017 to 2025) is curated, alongside MOM's industry-based employment. The agents report both readings of "technology sector" (the industry, and tech jobs across all industries) as separate series, never combined.
 - **Why:** The two measures answer different questions, and the demo question is ambiguous between them.
+
+## D-022 · 2026-10-14 · HTML report and streaming
+- **Decision:**
+  - **Streaming (option A).** The report streams to the user while it is being written, under a "Checking numbers…" label. It is then marked "✓ Checked", or "Revised after check" when the check sends it back to the writer.
+  - **Translation.** The checked report is translated field by field into the user's language. Citations and chart IDs stay as they are. If any translated text changes a number, the whole report stays in English.
+  - **The HTML page.** It is self-contained, light and dark, and covers:
+    - the summary, findings with citation chips, charts and caveats
+    - the sources, with agency, link, licence, retrieval date and data-quality summary, plus any fallback warning
+    - a collapsible table of every computed fact, where each citation opens its row
+  - **Charts.** Plotly specs are drawn by plotly.js 4.1.2 from cdnjs, with a subresource-integrity hash. Each chart's data table is always in the page, so the numbers stay readable offline.
+  - **Safety.** All model-written text is escaped, and chart titles are kept plain. Fixed page labels in four languages live in `app/report/labels.json` for translators to review.
+- **Alternatives:** Showing the report only after the check: nothing unchecked is visible, but the text appears about 10 to 15 seconds later. Letting the LLM write HTML directly (rejected in D-007).
+- **Why:** The user sees progress at once, and verification stays visible instead of hidden.

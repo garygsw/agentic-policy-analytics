@@ -4,11 +4,13 @@ from collections.abc import Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from app.analysis.charts import plain
 from app.graph import prompts
 from app.graph.events import STATUS, emit, guarded
-from app.graph.state import AgentState, Report, Review
+from app.graph.state import AgentState, Report, ReportTexts, Review
 from app.guardrails.language import LANGUAGE_NAMES
 from app.quality.grounding import numbers_in, numbers_preserved, ungrounded
+from app.report.html import render_html
 
 MAX_REVISIONS = 2  # shared by grounding fixes and reviewer feedback
 
@@ -67,7 +69,7 @@ def validate(state: AgentState) -> dict:
     if unknown_charts:
         issues.append(f"charts: unknown IDs {unknown_charts}")
     emit("validate", "observation", "Grounded: every number matches a computed fact" if not issues
-         else f"{len(issues)} problem(s): " + "; ".join(issues))
+         else f"{len(issues)} problem(s): " + "; ".join(issues), passed=not issues, issues=issues)
     return {"grounding_issues": issues}
 
 
@@ -83,23 +85,72 @@ def make_reviewer(llm) -> Callable:
     return reviewer
 
 
+def make_localize_report(llm) -> Callable:
+    """Translate a checked report field by field (citations and chart IDs are kept), before rendering.
+    If any translated text changes a number, the whole report stays in English."""
+    def localize_report(state: AgentState) -> dict:
+        report: Report = state["report"]
+        charts = charts_of(state)
+        english = {"report_display": report, "chart_titles": {c["id"]: c["title"] for c in charts}}
+        if state["language"] == "en":
+            return english
+        emit("localize", "status", STATUS["localize"])
+        source = ReportTexts(title=report.title, summary=report.summary, findings=[f.text for f in report.findings],
+                             caveats=report.caveats, chart_titles=[c["title"] for c in charts])
+        try:
+            system = prompts.TRANSLATE_FIELDS.format(language=LANGUAGE_NAMES[state["language"]])
+            texts = llm("fast", schema=ReportTexts).invoke([SystemMessage(system),
+                                                            HumanMessage(source.model_dump_json())])
+        except Exception as error:  # noqa: BLE001 - an English report beats no report
+            emit("localize", "error", f"Translation failed ({type(error).__name__}); showing the report in English")
+            return english
+        pairs = ([(source.title, texts.title), (source.summary, texts.summary)]
+                 + list(zip(source.findings, texts.findings, strict=False))
+                 + list(zip(source.caveats, texts.caveats, strict=False)))
+        same_shape = (len(texts.findings), len(texts.caveats), len(texts.chart_titles)) == (
+            len(source.findings), len(source.caveats), len(source.chart_titles))
+        if not same_shape or not all(numbers_preserved(a, b) for a, b in pairs):
+            emit("localize", "error", "Translation changed a number or dropped a line; keeping the English report")
+            return english
+        emit("localize", "action", f"Translated the report into {LANGUAGE_NAMES[state['language']]}")
+        findings = [f.model_copy(update={"text": t}) for f, t in zip(report.findings, texts.findings, strict=True)]
+        translated = report.model_copy(update={"title": texts.title, "summary": texts.summary,
+                                               "caveats": texts.caveats, "findings": findings})
+        titles = {c["id"]: t for c, t in zip(charts, texts.chart_titles, strict=True)}
+        return {"report_display": translated, "chart_titles": titles}
+    return localize_report
+
+
+def _charts_for_display(state: AgentState) -> list[dict]:
+    titles = state.get("chart_titles") or {}
+    shown = []
+    for chart in charts_of(state):
+        title = titles.get(chart["id"], chart["title"])
+        spec = {**chart["spec"], "layout": {**chart["spec"]["layout"], "title": {"text": plain(title)}}}
+        shown.append({**chart, "title": title, "spec": spec})
+    return shown
+
+
 def render(state: AgentState) -> dict:
-    report: Report = state["report"]
+    """The answer for the conversation (markdown) and the full report page (HTML), in the user's language."""
+    report: Report = state.get("report_display") or state["report"]
+    review: Review | None = state.get("review")
+    review_note = review.reason if review and review.verdict != "pass" else None
+    charts = _charts_for_display(state)
     lines = [f"# {report.title}", "", report.summary, "", "## Findings"]
     lines += [f"- {c.text} [{', '.join(c.citations)}]" for c in report.findings]
-    caveats = list(report.caveats)
-    review: Review | None = state.get("review")
-    if review and review.verdict != "pass":
-        caveats.append(f"Reviewer note: {review.reason}")
+    caveats = list(report.caveats) + ([f"Reviewer note: {review_note}"] if review_note else [])
     if caveats:
         lines += ["", "## Caveats", *[f"- {c}" for c in caveats]]
-    charts = {c["id"]: c for c in charts_of(state)}
+    by_id = {c["id"]: c for c in charts}
     if report.charts:
-        lines += ["", "## Charts", *[f"- [{cid}] {charts[cid]['title']}" for cid in report.charts if cid in charts]]
+        lines += ["", "## Charts", *[f"- [{cid}] {by_id[cid]['title']}" for cid in report.charts if cid in by_id]]
     if sources_of(state):
         lines += ["", "## Sources", *[f"- [{s['id']}] {s.get('title', '')} ({s.get('agency', '')}) {s.get('url', '')}"
                                       .rstrip() for s in sources_of(state)]]
-    return {"answer": "\n".join(lines), "outcome": "answered"}
+    html = render_html(question=state["question"], language=state["language"], report=report,
+                       facts=facts_of(state), sources=sources_of(state), charts=charts, review_note=review_note)
+    return {"answer": "\n".join(lines), "report_html": html, "outcome": "answered"}
 
 
 def fallback_report(state: AgentState) -> dict:
@@ -116,7 +167,9 @@ def fallback_report(state: AgentState) -> dict:
     if state.get("errors"):
         lines += ["", "Details: " + "; ".join(state["errors"])]
     emit("fallback_report", "action", "Using the deterministic template report")
-    return {"answer": "\n".join(lines), "outcome": "fallback"}
+    html = render_html(question=state.get("question", ""), language=state.get("language", "en"), report=None,
+                       facts=facts, sources=sources_of(state), charts=charts_of(state)) if facts else ""
+    return {"answer": "\n".join(lines), "report_html": html, "outcome": "fallback"}
 
 
 def cancel(state: AgentState) -> dict:
@@ -125,7 +178,8 @@ def cancel(state: AgentState) -> dict:
 
 def make_localize(llm) -> Callable:
     def localize(state: AgentState) -> dict:
-        """Translate the English answer into the user's language, unless a number changed on the way."""
+        """Translate a plain-text answer (decline, fallback, cancel) unless a number changed on the way.
+        Reports are translated field by field in localize_report instead."""
         if state["language"] == "en":
             return {}
         emit("localize", "status", STATUS["localize"])
