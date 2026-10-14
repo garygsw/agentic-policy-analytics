@@ -140,6 +140,16 @@ def test_reviewer_sends_wrong_analysis_back_to_the_coordinator():
     assert "Reviewer sent the analysis back: use residents only" in coordinator_prompt
 
 
+def test_the_reviewer_sends_the_analysis_back_only_once():
+    wrong = Review(verdict="wrong_analysis", reason="compare all flat types")
+    graph, _, workers = make({"TriageDecision": [IN_SCOPE],
+                              "CoordinatorStep": steps("extract", "analyse", "report", "analyse", "report"),
+                              "Report": [GOOD, GOOD], "Review": [wrong, wrong]})
+    state = ask(graph, QUESTION).values
+    assert workers.calls == ["extract", "analyse", "analyse"]  # one rework, not a loop until the step limit
+    assert state["outcome"] == "partial" and "Reviewer note: compare all flat types" in state["answer"]
+
+
 def test_a_report_the_reviewer_still_rejects_is_partial():
     poor = Review(verdict="poor_report", reason="does not compare with overall employment")
     graph, _, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),

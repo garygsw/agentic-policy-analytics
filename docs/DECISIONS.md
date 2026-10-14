@@ -297,3 +297,19 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Rendering the report in React from structured JSON: it would duplicate the HTML template the API already serves and exports.
 - **Testing:** Unit tests cover the reducer and formatting (vitest). The page was checked end to end in headless Chrome against the live API: history, the inspector, a personal-data refusal, two live questions, a clarification then a resume then a stop, phone width and dark mode.
 
+## D-029 · 2026-10-14 · Ranking tool, one reviewer send-back, and planning with published figures
+- **Decision:**
+  - **Ranking tool.** A new analytics tool, `rank_changes`, ranks groups (towns, industries) by their rise or fall between two periods in one call. Every group is compared over the same two periods; groups missing either period are left out and named. It ranks by percentage or absolute change, highest or lowest first, and records the start value, end value and both changes as facts for the groups it shows.
+  - **Reviewer limit.** The reviewer may send the analysis back once per question. A second objection is shown with the report, and the run ends as `partial` (D-027).
+  - **Coordinator prompt.** The coordinator's prompt now says what the analysis can and cannot do. It works with published series and cannot compute new statistics, such as medians, from individual records. So it plans with published figures and states those choices as caveats.
+- **Measured** on "Which HDB towns saw the largest rise in median resale prices since 2020?" (low effort, through the API):
+
+  | | Time | LLM calls | Cost | Result |
+  |---|---|---|---|---|
+  | Before | 245 s | 31 | $0.31 | Partial: one trend per town, and the reviewer looped |
+  | Ranking tool and reviewer limit | 166 s | 26 | $0.12 | Partial: the coordinator chased raw transactions |
+  | Plus the coordinator prompt | 100 s | 15 | $0.14 | Answered: matched-quarter rankings by flat type, reviewer passed |
+- **Alternatives:**
+  - A median-from-records tool: rejected for now. It would recompute official statistics differently from the publisher, and the published medians answer the question.
+  - Raising the step limit: this makes runs slower and costlier without fixing the cause.
+

@@ -13,6 +13,7 @@ from app.quality.grounding import numbers_in, numbers_preserved, ungrounded
 from app.report.html import render_html
 
 MAX_REVISIONS = 2  # shared by grounding fixes and reviewer feedback
+MAX_ANALYSIS_REWORKS = 1  # the reviewer may send the analysis back once; after that its objection is shown
 
 
 def facts_of(state: AgentState) -> list[dict]:
@@ -94,7 +95,8 @@ def make_reviewer(llm) -> Callable:
                    f"Report:\n{state['report'].model_dump_json()}")
         review = llm("quality", schema=Review).invoke([SystemMessage(prompts.REVIEW), HumanMessage(content)])
         emit("reviewer", "reasoning", f"{review.verdict}: {review.reason}")
-        return {"review": review}
+        reworks = state.get("analysis_reworks", 0) + int(review.verdict == "wrong_analysis")
+        return {"review": review, "analysis_reworks": reworks}
     return reviewer
 
 

@@ -33,6 +33,12 @@ Choose the next action:
   Write the instructions as a short explanation addressed to the user, in plain language without internal
   details, and suggest a related question that can be answered.
 - report: the evidence is sufficient; the report writer takes over.
+What the analysis can do: trends and growth of a published series, changes between two periods, rankings of
+groups (e.g. towns) by their change, comparisons and shares across groups in one period, and correlations. It
+cannot compute new statistics from individual records (e.g. a median of transactions). So plan with the published
+figures: for "which towns rose most", rank the published town medians between the same two quarters; for a
+question about annual change in a quarterly series, compare the same quarter in each year. State such choices as
+caveats rather than searching for a more exact source.
 Rules: extract before analyse, and analyse before report. Do not repeat a step that succeeded unless the
 reviewer asked for changes. If a step returned no usable data, retry it at most once with different
 instructions; after that, report what is known (stating what is missing) or decline.
@@ -71,6 +77,8 @@ How to work:
   For any other dimension, filter to one exact value (use describe_dataset to see the values).
 - Compute the main trend over the requested period with compute_trend. Add context where it helps: a comparison
   with the total or other groups (compare_groups), a related measure, or a correlation across datasets.
+- To find which groups (towns, industries...) rose or fell most, use rank_changes once: it compares every group
+  over the same two periods. Do not call compute_trend group by group.
 - If a chart tool is available, create one to three charts that show the main findings.
 - Use only the tools you have been given; some may be switched off for this request.
 - Every tool call needs a short reason. If a tool returns an error, fix the call and try again.

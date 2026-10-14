@@ -28,6 +28,11 @@ RETRENCH = pd.DataFrame([{"period": p, "industry": ind, "measure": "retrench", "
                          for ind in ("ict", "services")])
 GDP = pd.DataFrame([{"period": y, "industry": "ict", "measure": "gdp", "unit": "S$ million", "value": 50.0 + 5 * i}
                     for i, y in enumerate(YEARS)])
+# Quarterly prices by town; town C has no value in the last quarter, D has none in the range at all.
+PRICES = pd.DataFrame([{"period": p, "town": t, "measure": "price", "unit": "S$", "value": v}
+                       for t, values in (("A", [100, 110, 150]), ("B", [200, 210, 220]), ("C", [300, 330, None]))
+                       for p, v in zip(["2020-Q1", "2020-Q2", "2020-Q3"], values, strict=True) if v is not None]
+                      + [{"period": "2019-Q4", "town": "D", "measure": "price", "unit": "S$", "value": 90.0}])
 STATIONS = pd.DataFrame([{"period": "", "station": s, "status": st, "measure": "exits", "unit": "exits", "value": v}
                          for s, st, v in (("A", "open", 3.0), ("B", "planned", 0.0), ("C", "planned", 0.0))])
 
@@ -42,6 +47,7 @@ DATASETS = {
     "retrenchment": (RETRENCH, dataset("retrenchment", frequency="quarterly")),  # nothing may be added up
     "stations": (STATIONS, dataset("stations", {"exits": ("station", "status")}, "none")),
     "gdp": (GDP, dataset("gdp")),
+    "prices": (PRICES, dataset("prices", frequency="quarterly")),
 }
 
 
@@ -148,6 +154,23 @@ def test_compute_trend_records_numbered_facts():
     assert [f["id"] for f in ws.facts] == [f"F{i}" for i in range(1, len(ws.facts) + 1)]
     # Each year's change is a fact too, so the agent does not need one call per pair of years.
     assert [lbl for lbl in labels if "year-on-year" in lbl] == [f"ICT, year-on-year change to {y}" for y in YEARS[1:]]
+
+
+def test_rank_changes_compares_every_group_over_the_same_periods():
+    ws, t = tools()
+    out = call(t["rank_changes"], dataset_id="prices", measure="price", group_by="town", start="2020")
+    assert (out["from"], out["to"], out["groups_compared"]) == ("2020-Q1", "2020-Q3", 2)
+    assert [r["town"] for r in out["ranking"]] == ["A", "B"]  # +50% before +10%
+    assert out["excluded_for_missing_data"] == ["C", "D"]  # C lacks 2020-Q3, D has nothing from 2020
+    pct = {f["label"]: f["value"] for f in out["facts"] if f["unit"] == "%"}
+    assert pct == {"percentage change in price, town = A, 2020-Q1 to 2020-Q3": 50.0,
+                   "percentage change in price, town = B, 2020-Q1 to 2020-Q3": 10.0}
+    by_amount = call(t["rank_changes"], dataset_id="prices", measure="price", group_by="town", start="2020",
+                     by="absolute", lowest_first=True, top=1)
+    assert [r["town"] for r in by_amount["ranking"]] == ["B"] and len(by_amount["facts"]) == 4
+    # Summing rules still apply: industries are compared with sexes added up, as the dataset allows.
+    jobs = call(t["rank_changes"], dataset_id="employment", measure="employed", group_by="industry", start="2020")
+    assert [r["industry"] for r in jobs["ranking"]] == ["ict", "retail"]
 
 
 def test_compare_groups_labels_say_what_was_filtered():

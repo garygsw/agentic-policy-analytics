@@ -26,6 +26,7 @@ REQUIRED_TOOLS: dict[str, str] = {
     "describe_dataset": "List a dimension's values",
     "compute_trend": "Trend, growth and year-on-year change of a series",
     "compare_groups": "Compare groups in one period, with shares",
+    "rank_changes": "Rank groups by their rise or fall between two periods",
 }
 
 # When a model is chosen as the main model, the fallback is the other provider's model at the same price.

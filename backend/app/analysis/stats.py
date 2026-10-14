@@ -22,6 +22,11 @@ def _period_key(period: str) -> str:
     return period.removeprefix("FY")
 
 
+def period_key(period: str) -> str:
+    """Sort key for periods ("FY2020" sorts with "2020")."""
+    return _period_key(period)
+
+
 def _in_range(periods: pd.Series, start: str | None, end: str | None) -> pd.Series:
     """Compare on the period prefix, so end="2024" keeps 2024-Q4 and start="2020" keeps 2020-01."""
     keys = periods.map(_period_key)

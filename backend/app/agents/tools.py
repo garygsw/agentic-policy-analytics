@@ -148,6 +148,20 @@ class CompareArgs(BaseModel):
     reason: str = REASON
 
 
+class RankChangesArgs(BaseModel):
+    dataset_id: str
+    measure: str
+    group_by: str = Field(description="Dimension whose groups to rank, e.g. 'town' or 'industry'")
+    filters: dict[str, str] = Field(default_factory=dict,
+                                    description="Hold other dimensions fixed, e.g. {'flat_type': '4-ROOM'}")
+    start: str = Field(description="Baseline period or year, e.g. '2020' or '2020-Q1'")
+    end: str | None = Field(default=None, description="Last period or year; default: latest available")
+    by: Literal["percent", "absolute"] = Field(default="percent", description="Rank by percentage or absolute change")
+    lowest_first: bool = Field(default=False, description="True to list the largest falls (or smallest rises) first")
+    top: int = Field(default=10, ge=1, le=30, description="How many groups to record as facts")
+    reason: str = REASON
+
+
 class CorrelateArgs(BaseModel):
     a: SeriesSpec
     b: SeriesSpec
@@ -240,6 +254,53 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
         return _json({"period": period, "facts": [f for f in ws.facts if f["id"] in facts],
                       "groups_shown": len(ranked), "groups_total": len(values)})
 
+    def rank_changes(dataset_id: str, measure: str, group_by: str, start: str, filters: dict | None = None,
+                     end: str | None = None, by: str = "percent", lowest_first: bool = False, top: int = 10,
+                     reason: str = "") -> str:
+        """Which groups rose or fell most: every group is compared over the same two periods, in one call."""
+        loaded, source_id = ws.dataset(dataset_id)
+        frame, filters = loaded.frame, dict(filters or {})
+        if group_by not in stats.dimensions(frame):
+            raise stats.AnalysisError(f"unknown dimension '{group_by}'; dimensions: {stats.dimensions(frame)}")
+        series, unit, excluded = {}, "", []
+        for group in sorted(frame[frame["measure"] == measure][group_by].unique()):
+            try:
+                series[group], unit, _ = stats.select_series(frame, loaded.dataset, measure,
+                                                             {**filters, group_by: group}, start, end)
+            except stats.AnalysisError as error:
+                if "cannot be added" in str(error) or "unknown" in str(error):
+                    raise
+                excluded.append(group)  # no data for this group in the range
+        if not series:
+            raise stats.AnalysisError(f"no {measure} data between {start} and {end or 'the latest period'}")
+        # The same two periods for every group: the first and last in the range. A group without a value at
+        # either one is left out (and named), rather than compared over a different span.
+        periods = sorted({p for s in series.values() for p in s.index}, key=stats.period_key)
+        first, last = periods[0], periods[-1]
+        if first == last:
+            raise stats.AnalysisError(f"only one period ({first}) in range; widen start or end")
+        changes = []
+        for group, values in series.items():
+            if first not in values.index or last not in values.index or not values[first]:
+                excluded.append(group)
+                continue
+            a, b = float(values[first]), float(values[last])
+            changes.append((group, a, b, b - a, (b / a - 1) * 100))
+        changes.sort(key=lambda c: c[4] if by == "percent" else c[3], reverse=not lowest_first)
+        scope = f" ({', '.join(f'{k} = {v}' for k, v in filters.items())})" if filters else ""
+        method = f"change from {first} to {last}, the same periods for every {group_by}"
+        ranked = []
+        for rank, (group, a, b, change, pct) in enumerate(changes[:top], start=1):
+            label = f"{measure}{scope}, {group_by} = {group}"
+            ids = [ws.add_fact(f"{label}, {first}", a, unit, [source_id]),
+                   ws.add_fact(f"{label}, {last}", b, unit, [source_id]),
+                   ws.add_fact(f"change in {label}, {first} to {last}", change, unit, [source_id], method),
+                   ws.add_fact(f"percentage change in {label}, {first} to {last}", pct, "%", [source_id], method)]
+            ranked.append({"rank": rank, group_by: group, "facts": ids})
+        return _json({"from": first, "to": last, "ranked_by": by, "groups_compared": len(changes),
+                      "excluded_for_missing_data": sorted(excluded)[:25], "ranking": ranked,
+                      "facts": [f for f in ws.facts if f["id"] in {i for r in ranked for i in r["facts"]}]})
+
     def compute_correlation(a: SeriesSpec, b: SeriesSpec, start: str | None = None, end: str | None = None,
                             reason: str = "") -> str:
         series = []
@@ -316,6 +377,10 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
         StructuredTool.from_function(compute_trend, name="compute_trend", args_schema=TrendArgs,
                                      description="A series over time: its values, change, compound annual growth, "
                                                  "peak and latest year-on-year change, recorded as facts."),
+        StructuredTool.from_function(rank_changes, name="rank_changes", args_schema=RankChangesArgs,
+                                     description="Rank groups (e.g. towns, industries) by how much they rose or "
+                                                 "fell between two periods. Every group is compared over the same "
+                                                 "two periods; one call replaces a trend per group."),
         StructuredTool.from_function(compare_groups, name="compare_groups", args_schema=CompareArgs,
                                      description="Compare groups (e.g. industries, towns) in one period, with "
                                                  "shares of the total where the measure can be added up."),
