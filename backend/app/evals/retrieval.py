@@ -25,6 +25,7 @@ from app.config import REPO_ROOT
 from app.evals.metrics import first_hit, mrr, percentile, recall_at
 from app.guardrails.pii import screen
 from app.llm.providers import chat
+from app.rag.embed import get_reranker
 from app.rag.retriever import get_retriever
 from app.rag.search import search
 
@@ -91,7 +92,7 @@ def build(per_agency: int, datasets: int) -> None:
 def ranked_urls(question: str, mode: str, rerank: bool, datasets: bool, retriever) -> list[str]:
     """Distinct documents in rank order (search returns passages, at most two per document)."""
     hits = search(question, index=retriever.index, embedder=retriever.embedder,
-                  reranker=retriever.reranker if rerank else None, mode=mode, k=2 * K, datasets=datasets)
+                  reranker=get_reranker() if rerank else None, mode=mode, k=2 * K, datasets=datasets)
     return list(dict.fromkeys(h.url for h in hits))[:K]
 
 

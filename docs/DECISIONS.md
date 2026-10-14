@@ -336,3 +336,18 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Evaluation frameworks such as RAGAS or DeepEval: they add dependencies, and their metrics are harder to explain line by line than the ones used here.
   - Human labelling: better, but not feasible in the time available; the retrieval labels and question set are open to review.
 
+## D-031 · 2026-10-14 · Reducing hallucination in prose; reranker off by default
+- **Decision:**
+  - **Tighter report prompt.** Every statement, caveats included, must be supported by the facts, the source notes and quality reports, or the passages. No background knowledge: no definitions, dates, reasons or descriptions of the data that the material does not state.
+  - **Caveats carry citations.** Caveats now cite their sources, as findings do, and the report check covers them: numbers grounded, citations present and known. Reports saved earlier with plain-text caveats still load.
+  - **What a claim may draw numbers from.** A claim may use numbers from the notes and quality report of a dataset it cites, as well as from passages it cites.
+  - **Report check rules.** The check scales a fact by its unit ("S$5,845.3 million" for a fact of 5,845.3 in S$ million), ignores the sign ("fell 6.8%" for −6.8), and accepts chart IDs as citations.
+  - **Coordinator's view of progress.** The coordinator's progress view now includes what is recorded in the state: the datasets loaded and the number of facts computed. Both prompts say that extraction never returns figures.
+  - **Reranker.** Cross-encoder reranking is off by default (`RAG_RERANK=false`; available per search with `/api/search?rerank=true`).
+- **Measured** (answer evaluation, before and after): judge faithfulness 3.62 → 4.38 and caveats 3.88 → 4.75. Outcomes as expected 11/11 → 10/11; the miss was COE ending "partial" on reviewer feedback, after it answered in the two previous runs. Numbers grounded: 100% in both. Cost per run: unchanged. Reranking: MRR 0.74 without it versus 0.64 with it, and 0.5 s less per search (`docs/EVALUATION.md`).
+- **Why:** numbers were already guaranteed by code; prose was not. Requiring citations on every statement and checking them in code extends the same guarantee to caveats. The prompt rule covers what code cannot check: whether a sentence means what its sources say.
+- **Alternatives:**
+  - A claim-by-claim LLM verifier: deferred. It adds a call to every question, and the cheaper changes closed most of the gap.
+  - Keeping the reranker, or blending it into the fusion: neither scored better than plain hybrid search on the golden set.
+- **Trade-off:** ignoring signs means a report that says "rose" for a fall still passes the number check. Direction is wording, left to the reviewer and the judge.
+

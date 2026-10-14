@@ -10,7 +10,7 @@ Deterministic checks, per question:
 - groundedness: share of the numbers in the final report that match a computed fact or a passage the same
   finding cites (the report check enforces this, so it should be 100%), and how many drafts the check rejected
   first (what the check caught)
-- citation coverage: share of findings that cite a fact or source that exists
+- citation coverage: share of findings and caveats that cite a fact or source that exists
 - language: an answer to a question in Chinese comes back in Chinese
 
 LLM-as-judge: a model from the *other* provider (to avoid a model grading its own work) scores each report from
@@ -36,11 +36,11 @@ from app.evals.metrics import citation_coverage, groundedness, mean_pairwise_jac
 from app.evals.retrieval import EVAL_DIR
 from app.graph.build import build_graph
 from app.graph.checkpoint import serializer
-from app.graph.nodes.reporting import facts_of, sources_of
+from app.graph.nodes.reporting import citable_text, facts_of, sources_of
 from app.graph.options import FALLBACK_FOR, RunOptions
 from app.llm.ledger import Ledger
 from app.llm.providers import chat, make_model
-from app.quality.grounding import numbers_in
+from app.quality.grounding import fact_values, numbers_in
 
 QUESTIONS = EVAL_DIR / "questions.jsonl"
 RESULTS = EVAL_DIR / "answers_results.json"
@@ -78,17 +78,17 @@ def judge_model() -> tuple:
 def report_numbers(values: dict) -> tuple[int, int]:
     """(numbers stated, numbers grounded) in the final report, checked the same way as the report check."""
     report, facts, sources = values["report"], facts_of(values), sources_of(values)
-    allowed = [f["value"] for f in facts if isinstance(f.get("value"), int | float)]
+    allowed = fact_values(facts)
     allowed += numbers_in(" ".join(str(f.get("label", "")) for f in facts)) + numbers_in(values["question"])
-    passages = {s["id"]: s.get("text", "") for s in sources if s.get("kind") in ("document", "web")}
+    citable = citable_text(sources)
 
     def quoted(ids: list[str]) -> list[float]:
-        return numbers_in(" ".join(passages[i] for i in ids if i in passages))
+        return numbers_in(" ".join(citable[i] for i in ids if i in citable))
 
     everywhere = [c for f in report.findings for c in f.citations]
     stated, grounded = groundedness([report.summary], allowed + quoted(everywhere))
-    for finding in report.findings:
-        s, g = groundedness([finding.text], allowed + quoted(finding.citations))
+    for claim in [*report.findings, *report.caveats]:
+        s, g = groundedness([claim.text], allowed + quoted(claim.citations))
         stated, grounded = stated + s, grounded + g
     return stated, grounded
 
@@ -97,7 +97,7 @@ def judge_material(values: dict) -> dict:
     """What the judge sees: the same facts and sources the report writer had. Every cited fact is included
     (long fact lists are otherwise trimmed), with dataset caveats and the text of cited passages."""
     report = values["report"]
-    cited = {c for f in report.findings for c in f.citations}
+    cited = {c for claim in [*report.findings, *report.caveats] for c in claim.citations}
     facts = facts_of(values)
     shown = [f for f in facts if f["id"] in cited] + [f for f in facts if f["id"] not in cited][:150]
     sources = []
@@ -132,11 +132,12 @@ def run_one(item: dict, run: int, judge_llm) -> dict:
     ledger = Ledger()
     config = {"configurable": {"thread_id": f"{item['id']}-{run}", "options": RunOptions().model_dump()},
               "callbacks": [ledger]}
-    checks, error, started = [], None, time.time()
+    checks, objections, error, started = [], [], None, time.time()
     try:
         for event in graph.stream({"messages": [HumanMessage(item["question"])]}, config, stream_mode="custom"):
             if event.get("node") == "validate" and "passed" in event:
                 checks.append(event["passed"])
+                objections += event.get("issues", [])
     except Exception as exc:  # noqa: BLE001 - a crashed run is a result too
         error = f"{type(exc).__name__}: {exc}"
     snapshot = graph.get_state(config)
@@ -155,7 +156,8 @@ def run_one(item: dict, run: int, judge_llm) -> dict:
         stated, grounded = report_numbers(values)
         known = {f["id"] for f in facts_of(values)} | {s["id"] for s in sources_of(values)}
         result |= {"numbers_stated": stated, "numbers_grounded": grounded,
-                   "citation_coverage": citation_coverage([f.citations for f in report.findings], known),
+                   "citation_coverage": citation_coverage([c.citations for c in [*report.findings, *report.caveats]],
+                                                          known),
                    "facts": len(facts_of(values)), "findings": len(report.findings),
                    "numbers": sorted({round(n, 1) for t in [report.summary, *(f.text for f in report.findings)]
                                       for n in numbers_in(t)})}
@@ -165,6 +167,7 @@ def run_one(item: dict, run: int, judge_llm) -> dict:
     # Why a run ended as it did: node errors, and the report check's last objections.
     result["errors"] = values.get("errors") or []
     result["grounding_issues"] = values.get("grounding_issues") or []
+    result["check_objections"] = objections  # every problem the report check raised, across all drafts
     return result
 
 

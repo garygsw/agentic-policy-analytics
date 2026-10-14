@@ -38,14 +38,29 @@ def numbers_in(text: str) -> list[float]:
     return values
 
 
+def fact_values(facts: Iterable[dict]) -> list[float]:
+    """The values a text may state for these facts. A fact in "S$ million" may be written as "5,845.3" or as
+    "S$5,845.3 million", which reads as 5,845,300,000, so the scaled value is allowed too."""
+    values = []
+    for fact in facts:
+        value = fact.get("value")
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            values.append(value)
+            for word in re.findall(r"[a-z]+", str(fact.get("unit", "")).lower()):
+                if len(word) > 2 and word in MULTIPLIERS:  # "million", "billion", "thousand"; not "m" or "k"
+                    values.append(value * MULTIPLIERS[word])
+    return values
+
+
 def _close(a: float, b: float) -> bool:
     return a == b or abs(a - b) <= RELATIVE_TOLERANCE * max(abs(a), abs(b))
 
 
 def ungrounded(text: str, allowed: Iterable[float]) -> list[float]:
-    """Numbers in `text` that match none of the `allowed` values (within 1%)."""
-    allowed = list(allowed)
-    return [v for v in numbers_in(text) if not any(_close(v, a) for a in allowed)]
+    """Numbers in `text` that match none of the `allowed` values (within 1%). Signs are ignored: a change of
+    -6.8% is correctly written as "fell 6.8%". Whether it rose or fell is wording, which the reviewer checks."""
+    allowed = [abs(a) for a in allowed]
+    return [v for v in numbers_in(text) if not any(_close(abs(v), a) for a in allowed)]
 
 
 def numbers_preserved(original: str, translated: str) -> bool:

@@ -18,6 +18,14 @@ def describe_progress(state: AgentState) -> str:
     for agent in ("extraction", "analytics"):
         if agent in findings:
             lines.append(f"{agent} result: {findings[agent].get('summary', '')}")
+    # Recorded by the system, so an agent's summary cannot hide what is actually available.
+    loaded = [s for s in (findings.get("extraction") or {}).get("sources", []) if s.get("kind", "dataset") == "dataset"]
+    if loaded:
+        lines.append("Datasets loaded and ready to analyse: " + "; ".join(f"{s['id']} {s.get('title', '')}"
+                                                                         for s in loaded))
+    analytics = findings.get("analytics") or {}
+    if "facts" in analytics:
+        lines.append(f"Facts computed so far: {len(analytics['facts'])}; charts: {len(analytics.get('charts', []))}")
     if findings.get("plan_feedback"):
         lines.append(f"User feedback on the plan: {findings['plan_feedback']}")
     review = state.get("review")

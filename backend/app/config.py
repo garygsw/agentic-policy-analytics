@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     ingest_since: str = "2024-01-01"
     ingest_limit_per_source: int = 500
 
+    # Cross-encoder reranking of search results. Off: on the retrieval evaluation it ranked worse than hybrid
+    # search alone and added about half a second per search (see docs/EVALUATION.md).
+    rag_rerank: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

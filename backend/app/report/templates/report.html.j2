@@ -104,7 +104,7 @@
   {% if report and report.caveats %}
   <section>
     <h2>{{ L.caveats }}</h2>
-    <ul class="caveats">{% for caveat in report.caveats %}<li>{{ caveat }}</li>{% endfor %}</ul>
+    <ul class="caveats">{% for caveat in report.caveats %}<li>{{ caveat.text }}{% for anchor, label in caveat.citations|citation_groups %}<a class="cite" href="#{{ anchor }}">{{ label }}</a>{% endfor %}</li>{% endfor %}</ul>
   </section>
   {% endif %}
 

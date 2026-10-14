@@ -63,7 +63,8 @@ def warm_up() -> None:
     from app.guardrails.triage import production_local_classifier
     from app.rag.embed import get_reranker
     production_local_classifier()
-    get_reranker()
+    if get_settings().rag_rerank:
+        get_reranker()
 
 
 def create_app(graph=None, sessions=None, retriever=None, store: DataStore | None = None,
@@ -286,13 +287,15 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
     # -- search and data ---------------------------------------------------------------------------------------
     @app.get("/api/search")
     def search_documents(q: str, mode: str = "hybrid", k: int = 5, source: str | None = None,
-                         rerank: bool = True, datasets: bool = False):
+                         rerank: bool = False, datasets: bool = False):
         if mode not in ("hybrid", "keyword", "vector"):
             raise HTTPException(422, "mode must be hybrid, keyword or vector")
+        from app.rag.embed import get_reranker
         from app.rag.retriever import get_retriever
         from app.rag.search import search
         r = retriever or get_retriever()
-        hits = search(q, index=r.index, embedder=r.embedder, reranker=r.reranker if rerank else None, mode=mode,
+        reranker = (r.reranker or get_reranker()) if rerank else None  # loaded on request when off by default
+        hits = search(q, index=r.index, embedder=r.embedder, reranker=reranker, mode=mode,
                       k=min(k, 20), source=source, datasets=datasets)
         return [{"title": h.title, "agency": h.agency, "url": h.url, "published": h.published,
                  "doc_type": h.doc_type, "text": h.text, "ranks": h.ranks} for h in hits]

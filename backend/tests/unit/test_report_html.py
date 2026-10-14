@@ -23,7 +23,7 @@ CHARTS = [{"id": "C1", "title": "ICT jobs", "spec": SPEC, "table": TABLE, "sourc
 def report(**overrides):
     base = dict(title="Tech employment grew", summary="Up 24.7% to 139,200.",
                 findings=[Claim(text="Employment reached 139,200.", citations=["F1", "S1"])], charts=["C1"],
-                caveats=["Residents only."])
+                caveats=[Claim(text="Residents only.", citations=["S1"])])
     return Report(**{**base, **overrides})
 
 

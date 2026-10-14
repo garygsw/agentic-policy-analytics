@@ -1,11 +1,12 @@
 """Hybrid search over the document index: BM25 keywords + vector similarity, merged by reciprocal rank fusion,
-then reranked by a cross-encoder.
+optionally reranked by a cross-encoder.
 
-    uv run python -m app.rag.search "tech sector hiring outlook" --mode hybrid -k 5
+    uv run python -m app.rag.search "tech sector hiring outlook" --mode hybrid -k 5 [--rerank]
 
 Keyword search finds exact terms (scheme names, acronyms, figures); vector search finds paraphrases. Reciprocal
-rank fusion combines the two rank lists without having to compare their incompatible scores, and the reranker
-reads query and passage together, which ranks better than either list alone.
+rank fusion combines the two rank lists without having to compare their incompatible scores. The cross-encoder
+reranker reads query and passage together; it is off by default because, on the retrieval evaluation, it ranked
+worse than the fused lists and added half a second per search (docs/EVALUATION.md).
 """
 import argparse
 from dataclasses import dataclass, field
@@ -78,12 +79,12 @@ def main() -> None:
     parser.add_argument("query")
     parser.add_argument("--mode", choices=["hybrid", "keyword", "vector"], default="hybrid")
     parser.add_argument("-k", type=int, default=5)
-    parser.add_argument("--no-rerank", action="store_true")
+    parser.add_argument("--rerank", action="store_true", help="rerank with the cross-encoder")
     parser.add_argument("--source", help="only this agency source (mom, mof, pmo, moh, ura)")
     parser.add_argument("--datasets", action="store_true", help="search the dataset catalogue instead")
     args = parser.parse_args()
     results = search(args.query, index=open_index(), embedder=get_embedder(),
-                     reranker=None if args.no_rerank else get_reranker(), mode=args.mode, k=args.k,
+                     reranker=get_reranker() if args.rerank else None, mode=args.mode, k=args.k,
                      source=args.source, datasets=args.datasets)
     for i, p in enumerate(results, 1):
         print(f"{i}. [{p.agency}, {p.published[:10]}] {p.title}\n   {p.url}\n   ranks {p.ranks}")

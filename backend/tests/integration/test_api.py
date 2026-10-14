@@ -176,7 +176,9 @@ def test_unknown_things_and_invalid_options(tmp_path):
 def test_search_and_dataset_endpoints(tmp_path):
     with client_for({}, tmp_path) as client:
         hits = client.get("/api/search", params={"q": "information and communications employment"}).json()
-        assert hits[0]["url"] == "https://mom.gov.sg/a" and "rerank" in hits[0]["ranks"]
+        assert hits[0]["url"] == "https://mom.gov.sg/a" and "rerank" not in hits[0]["ranks"]  # off by default
+        reranked = client.get("/api/search", params={"q": "information and communications employment", "rerank": True})
+        assert "rerank" in reranked.json()[0]["ranks"]
         assert client.get("/api/search", params={"q": "x", "mode": "magic"}).status_code == 422
         datasets = client.get("/api/datasets").json()
         assert len(datasets) == 19 and next(d for d in datasets if d["key"] == "coe_bidding_results")["coverage"]

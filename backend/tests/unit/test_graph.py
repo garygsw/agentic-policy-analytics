@@ -122,6 +122,36 @@ def test_ungrounded_numbers_are_sent_back_then_fall_back_to_template():
     assert "ICT employment, 2024: 125000 persons [F2]" in state["answer"]
 
 
+def test_caveats_are_checked_like_findings():
+    uncited = GOOD.model_copy(update={"caveats": [Claim(text="Figures are June snapshots.", citations=[])]})
+    wrong_number = GOOD.model_copy(update={"caveats": [Claim(text="About 7.5% of rows were removed.",
+                                                             citations=["S1"])]})
+    graph, llm, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
+                          "Report": [uncited, wrong_number, GOOD], "Review": [PASS]})
+    state = ask(graph, QUESTION).values
+    requests = [m[-1].content for key, m in llm.calls if key == "Report"]
+    assert "caveat 1: has no citation" in requests[1]
+    assert "caveat 1: 7.5 does not match any computed fact or a source this caveat cites" in requests[2]
+    assert state["outcome"] == "answered" and state["revisions"] == 2
+
+
+def test_a_caveat_may_quote_the_quality_report_of_the_dataset_it_cites():
+    quality = "5,546 values (one per measure per row) from 12,012 source rows"
+    sources = [{"id": "S1", "kind": "dataset", "title": "Medians", "quality": quality}, {"id": "S2", "kind": "dataset"}]
+    report = Report(title="t", summary="s", findings=[Claim(text="Prices rose.", citations=["S1"])],
+                    caveats=[Claim(text="5,546 values came from 12,012 source rows.", citations=["S1"])])
+    state = {"question": "q", "report": report, "findings": {"extraction": {"sources": sources}}}
+    assert reporting.validate(state)["grounding_issues"] == []
+    wrong_source = report.model_copy(update={"caveats": [Claim(text="5,546 values remained.", citations=["S2"])]})
+    assert reporting.validate({**state, "report": wrong_source})["grounding_issues"] == [
+        "caveat 1: 5,546 does not match any computed fact or a source this caveat cites"]
+
+
+def test_reports_saved_with_plain_caveats_still_load():
+    old = Report.model_validate({"title": "t", "summary": "s", "findings": [], "caveats": ["Residents only."]})
+    assert old.caveats == [Claim(text="Residents only.", citations=[])]
+
+
 def test_fixed_report_passes_after_one_revision():
     graph, llm, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
                           "Report": [BAD, GOOD], "Review": [PASS]})
@@ -138,6 +168,9 @@ def test_reviewer_sends_wrong_analysis_back_to_the_coordinator():
     assert workers.previous_analysis["facts"] == FACTS  # the second analysis builds on the first
     coordinator_prompt = [m for key, m in llm.calls if key == "CoordinatorStep"][3][0].content
     assert "Reviewer sent the analysis back: use residents only" in coordinator_prompt
+    # What is loaded and computed comes from the state, not only from the agents' own summaries.
+    assert "Datasets loaded and ready to analyse: S1 Employed residents by industry" in coordinator_prompt
+    assert "Facts computed so far: 3; charts: 0" in coordinator_prompt
 
 
 def test_the_reviewer_sends_the_analysis_back_only_once():

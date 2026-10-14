@@ -30,6 +30,9 @@ is the relevant result. Built with `python -m app.evals.retrieval build`.
 | Hybrid (reciprocal rank fusion) | 64% | 82% | 90% | 0.74 | 16 ms | 34 ms |
 | Hybrid + cross-encoder rerank (ms-marco-MiniLM-L-6-v2) | 48% | 78% | 90% | 0.64 | 536 ms | 802 ms |
 
+**Decision (D-031):** reranking is off by default. It can be turned on with `RAG_RERANK=true`, or for a
+single search with `/api/search?rerank=true`.
+
 Index: 2,990 agency documents and 4,655 catalogue entries, 14,363 passages (14 Oct 2026).
 
 **Reading the results.**
@@ -82,46 +85,64 @@ default options (gpt-6.1-sol, low effort, all tools). The two consistency questi
   what the report writer saw: every cited fact, the dataset caveats and the cited passages.
 - **Consistency.** The average overlap (Jaccard) of the numbers stated by repeated runs of the same question.
 
-**Results** (14 Oct 2026; `answers_results.json`):
+**Results** (14 Oct 2026, final run; `answers_results.json`):
 
-| Question | Expected | Outcome | Time | LLM calls | Cost | Numbers grounded | Findings cited | Judge: rel / comp / faith / clarity / caveats |
+| Question | Expected | Outcome | Time | LLM calls | Cost | Numbers grounded | Statements cited | Judge: rel / comp / faith / clarity / caveats |
 |---|---|---|---|---|---|---|---|---|
-| tech-employment | answered | answered | 91 s | 13 | $0.16 | 42/42 | 100% | 5 / 5 / 4 / 5 / 4 |
-| hdb-towns | answered | answered | 106 s | 14 | $0.34 | 37/37 | 100% | 5 / 4 / 3 / 5 / 4 |
-| coe | answered | answered | 136 s | 18 | $0.16 | 33/33 | 100% | 5 / 4 / 3 / 4 / 4 |
-| life-expectancy | answered | answered | 102 s | 17 | $0.11 | 30/30 | 100% | 5 / 4 / 3 / 5 / 3 |
-| retrenchment-gdp | answered | answered | 123 s | 16 | $0.11 | 16/16 | 100% | 5 / 4 / 5 / 4 / 5 |
-| mrt-stations | answered or partial | partial | 197 s | 25 | $0.24 | 5/5 | 100% | 4 / 3 / 2 / 4 / 3 |
-| internal-programmes | answered | answered | 66 s | 12 | $0.05 | 32/32 | 100% | 5 / 5 / 5 / 5 / 4 |
-| chinese (in Chinese) | answered | answered | 75 s | 13 | $0.15 | 32/32 | 100% | 5 / 4 / 4 / 5 / 4 |
-| forecast | declined | declined | 6 s | 1 | $0.00 | | | |
+| tech-employment | answered | answered | 104 s | 14 | $0.13 | 32/32 | 100% | 5 / 5 / 5 / 5 / 4 |
+| hdb-towns | answered | answered | 127 s | 15 | $0.23 | 46/46 | 100% | 4 / 4 / 4 / 5 / 5 |
+| coe | answered | partial | 154 s | 16 | $0.17 | 37/37 | 100% | 5 / 4 / 5 / 5 / 5 |
+| life-expectancy | answered | answered | 88 s | 14 | $0.11 | 38/38 | 100% | 5 / 4 / 4 / 5 / 5 |
+| retrenchment-gdp | answered | answered | 138 s | 18 | $0.12 | 21/21 | 100% | 5 / 4 / 4 / 4 / 5 |
+| mrt-stations | answered or partial | answered | 101 s | 15 | $0.10 | 2/2 | 100% | 4 / 3 / 4 / 5 / 4 |
+| internal-programmes | answered | answered | 84 s | 13 | $0.08 | 32/32 | 100% | 5 / 5 / 5 / 4 / 5 |
+| chinese (in Chinese) | answered | answered | 125 s | 18 | $0.38 | 49/49 | 100% | 5 / 4 / 4 / 4 / 5 |
+| forecast | declined | declined | 4 s | 1 | $0.00 | | | |
 | off-topic | off_topic | off_topic | 0 s | 0 | $0.00 | | | |
 | vague | clarification | clarification | 2 s | 1 | $0.00 | | | |
 
-| Summary | |
-|---|---|
-| Outcomes as expected | 11 of 11 |
-| Numbers grounded | 227 of 227 (100%) |
-| Drafts rejected by the report check | 1 of 13 |
-| Findings with a valid citation | 100% |
-| Judge, mean of 8 reports | relevance 4.88, completeness 4.12, faithfulness 3.62, clarity 4.62, caveats 3.88 |
-| Consistency (same numbers across 3 runs) | tech-employment 0.79, hdb-towns 0.80; same outcome every time |
-| Median time for an answered question | 104 s |
-| Cost of the whole evaluation | $1.94 |
+"Statements cited" counts findings and caveats.
 
-**What the evaluation found, and what was changed because of it:**
-- **The judge's own inputs.** The first run gave the judge only 150 facts and no dataset caveats, so correct
-  citations looked invented. Fixed before the results above.
-- **Datasets the coordinator didn't know about.** The coordinator asked a clarifying question about "internal
-  tech talent programmes" because it did not know that dataset existed. It now sees the curated dataset titles.
-- **Questions the data doesn't fit.** Two questions were reworded or given wider expectations, because the data
-  could not answer them as first written:
-  - The internal dataset records participants, not completions. The agents declined rather than relabel one
-    measure as the other.
-  - The stations dataset has no line information, so "partial" is an honest outcome for "on which lines".
-- **Qualitative claims are the weak point.** Faithfulness is the lowest judge score (3.6 of 5). Numbers are
-  checked in code, but sentences are not. The judge flagged claims such as "2025 figures are preliminary" and
-  "these are June snapshots", which no listed fact or passage supports. See D-030 in `DECISIONS.md`.
+**Reducing hallucination (D-031).** The first evaluation showed that numbers were always grounded, but sentences
+were not: faithfulness was the lowest judge score. Two changes were made:
+1. **Tighter report prompt.** Every statement must be supported by the facts, source notes or passages, with no
+   background knowledge.
+2. **Caveats checked like findings.** Caveats now carry citations, and the report check covers them as it does
+   findings.
+
+Before and after:
+
+| | Before | After |
+|---|---|---|
+| Outcomes as expected | 11 of 11 | 10 of 11 |
+| Numbers grounded | 227 of 227 | 257 of 257 |
+| Judge: faithfulness | 3.62 | **4.38** |
+| Judge: caveats | 3.88 | **4.75** |
+| Judge: relevance / completeness / clarity | 4.88 / 4.12 / 4.62 | 4.75 / 4.12 / 4.62 |
+| Drafts rejected by the report check | 1 of 13 | 3 of 16 |
+| Consistency (tech-employment / hdb-towns) | 0.79 / 0.80 | 0.77 / 0.44 |
+| Median time for an answered question | 104 s | 115 s |
+| Cost of a full run | $1.94 | $1.91 |
+
+**What the intermediate runs exposed** (three runs between before and after):
+- **Declines.** Some questions were declined when they could have been answered. The extraction agent reported
+  "no annual figures", because loading a dataset returns its profile, not its values, and the coordinator
+  believed it. The coordinator now also sees, recorded by the system, which datasets are loaded and how many
+  facts exist. Both prompts now say that extraction never returns figures.
+- **False alarms in the report check.** The stricter rules made the check fire more often, which exposed four
+  problems with the check itself. All four are fixed and covered by tests:
+  1. A caveat quoting a dataset's quality report ("5,546 values from 12,012 source rows") was rejected. A claim
+     may now use numbers from the notes of the dataset it cites.
+  2. "S$5,845.3 million" was rejected because the fact is stored in millions. Units are now applied.
+  3. "Fell 6.8%" was rejected because the fact is −6.8. Signs are now ignored, and direction is left to the
+     reviewer.
+  4. Citing a chart ID was treated as an unknown citation.
+
+  Every objection in the final run was one of the last two, so none was a real error by the writer. The three
+  rejected drafts were all rewritten and passed.
+- **Remaining variation.** COE ended "partial" here, after the reviewer's objection, but answered in the
+  previous two runs. The HDB question is answered every time, but runs pick different flat types and periods to
+  rank, so their numbers overlap less (0.44).
 
 **Limits.**
 - Eleven questions show the system's behaviour, not its accuracy across all questions.

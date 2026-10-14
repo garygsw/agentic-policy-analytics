@@ -9,7 +9,7 @@ from app.graph import prompts
 from app.graph.events import STATUS, emit, guarded
 from app.graph.state import AgentState, Report, ReportTexts, Review
 from app.guardrails.language import LANGUAGE_NAMES
-from app.quality.grounding import numbers_in, numbers_preserved, ungrounded
+from app.quality.grounding import fact_values, numbers_in, numbers_preserved, ungrounded
 from app.report.html import render_html
 
 MAX_REVISIONS = 2  # shared by grounding fixes and reviewer feedback
@@ -54,31 +54,44 @@ def make_report_writer(llm) -> Callable:
     return report_writer
 
 
+def citable_text(sources: list[dict]) -> dict[str, str]:
+    """What a finding or caveat may take numbers from when it cites a source: a passage's text, or a dataset's
+    notes and quality report (e.g. "5,546 values from 12,012 source rows")."""
+    texts = {}
+    for s in sources:
+        keys = ("text",) if s.get("kind") in ("document", "web") else ("notes", "quality", "warning")
+        texts[s["id"]] = " ".join(str(s.get(k) or "") for k in keys)
+    return texts
+
+
 def validate(state: AgentState) -> dict:
-    """Deterministic checks: every number must match a computed fact (or the question), or appear in a document
-    passage the same finding cites; and every finding must cite known facts or sources."""
+    """Deterministic checks: every number must match a computed fact (or the question), or appear in a source the
+    same finding or caveat cites; and every finding and caveat must cite known facts or sources."""
     emit("validate", "status", STATUS["validate"])
     report: Report = state["report"]
     facts = facts_of(state)
-    allowed = [f["value"] for f in facts if isinstance(f.get("value"), int | float)]
+    allowed = fact_values(facts)
     allowed += numbers_in(" ".join(str(f.get("label", "")) for f in facts)) + numbers_in(state["question"])
-    known_ids = {f["id"] for f in facts} | {s["id"] for s in sources_of(state)}
-    passages = {s["id"]: s.get("text", "") for s in sources_of(state) if s.get("kind") in ("document", "web")}
+    known_ids = {f["id"] for f in facts} | {s["id"] for s in sources_of(state)} | {c["id"] for c in charts_of(state)}
+    citable = citable_text(sources_of(state))
 
     def quoted(citations: list[str]) -> list[float]:
-        return numbers_in(" ".join(passages[c] for c in citations if c in passages))
+        return numbers_in(" ".join(citable[c] for c in citations if c in citable))
 
     cited_anywhere = [c for claim in report.findings for c in claim.citations]
     issues = [f"summary: {_show(n)} does not match any computed fact or cited passage"
               for n in ungrounded(report.summary, allowed + quoted(cited_anywhere))]
-    for i, claim in enumerate(report.findings, 1):
-        issues += [f"finding {i}: {_show(n)} does not match any computed fact or a passage this finding cites"
+    # Findings and caveats are checked alike: numbers grounded, citations present and known.
+    claims = [("finding", i, c) for i, c in enumerate(report.findings, 1)]
+    claims += [("caveat", i, c) for i, c in enumerate(report.caveats, 1)]
+    for kind, i, claim in claims:
+        issues += [f"{kind} {i}: {_show(n)} does not match any computed fact or a source this {kind} cites"
                    for n in ungrounded(claim.text, allowed + quoted(claim.citations))]
         unknown = [c for c in claim.citations if c not in known_ids]
         if unknown:
-            issues.append(f"finding {i}: cites unknown IDs {unknown}")
+            issues.append(f"{kind} {i}: cites unknown IDs {unknown}")
         if not claim.citations:
-            issues.append(f"finding {i}: has no citation")
+            issues.append(f"{kind} {i}: has no citation")
     unknown_charts = [c for c in report.charts if c not in {chart["id"] for chart in charts_of(state)}]
     if unknown_charts:
         issues.append(f"charts: unknown IDs {unknown_charts}")
@@ -111,7 +124,7 @@ def make_localize_report(llm) -> Callable:
             return english
         emit("localize", "status", STATUS["localize"])
         source = ReportTexts(title=report.title, summary=report.summary, findings=[f.text for f in report.findings],
-                             caveats=report.caveats, chart_titles=[c["title"] for c in charts])
+                             caveats=[c.text for c in report.caveats], chart_titles=[c["title"] for c in charts])
         try:
             system = prompts.TRANSLATE_FIELDS.format(language=LANGUAGE_NAMES[state["language"]])
             texts = llm("fast", schema=ReportTexts).invoke([SystemMessage(system),
@@ -129,8 +142,9 @@ def make_localize_report(llm) -> Callable:
             return english
         emit("localize", "action", f"Translated the report into {LANGUAGE_NAMES[state['language']]}")
         findings = [f.model_copy(update={"text": t}) for f, t in zip(report.findings, texts.findings, strict=True)]
+        caveats = [c.model_copy(update={"text": t}) for c, t in zip(report.caveats, texts.caveats, strict=True)]
         translated = report.model_copy(update={"title": texts.title, "summary": texts.summary,
-                                               "caveats": texts.caveats, "findings": findings})
+                                               "caveats": caveats, "findings": findings})
         titles = {c["id"]: t for c, t in zip(charts, texts.chart_titles, strict=True)}
         return {"report_display": translated, "chart_titles": titles}
     return localize_report
@@ -155,7 +169,8 @@ def render(state: AgentState) -> dict:
     sources = shown_sources(sources_of(state), report)
     lines = [f"# {report.title}", "", report.summary, "", "## Findings"]
     lines += [f"- {c.text} [{', '.join(c.citations)}]" for c in report.findings]
-    caveats = list(report.caveats) + ([f"Reviewer note: {review_note}"] if review_note else [])
+    caveats = [f"{c.text} [{', '.join(c.citations)}]" for c in report.caveats]
+    caveats += [f"Reviewer note: {review_note}"] if review_note else []
     if caveats:
         lines += ["", "## Caveats", *[f"- {c}" for c in caveats]]
     by_id = {c["id"]: c for c in charts}

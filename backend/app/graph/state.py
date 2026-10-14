@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.guardrails.language import LangCode
 
@@ -36,7 +36,7 @@ class CoordinatorStep(BaseModel):
 
 
 class Claim(BaseModel):
-    text: str = Field(description="One finding, stated with its numbers.")
+    text: str = Field(description="One finding or caveat, stated with its numbers.")
     citations: list[str] = Field(default_factory=list, description="IDs of the facts or sources supporting it.")
 
 
@@ -45,7 +45,13 @@ class Report(BaseModel):
     summary: str
     findings: list[Claim]
     charts: list[str] = Field(default_factory=list, description="IDs of charts to show, in reading order.")
-    caveats: list[str] = Field(default_factory=list)
+    caveats: list[Claim] = Field(default_factory=list, description="Limitations, each citing what it is based on.")
+
+    @field_validator("caveats", mode="before")
+    @classmethod
+    def plain_caveats(cls, value: list) -> list:
+        """Reports saved before caveats had citations hold plain strings."""
+        return [{"text": v, "citations": []} if isinstance(v, str) else v for v in value or []]
 
 
 class ReportTexts(BaseModel):

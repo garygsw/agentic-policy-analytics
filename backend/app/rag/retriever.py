@@ -41,4 +41,5 @@ def get_retriever() -> Retriever:
         web = TavilySearch()
     except WebSearchUnavailable:
         web = None
-    return Retriever(open_index(), get_embedder(), get_reranker(), web)
+    from app.config import get_settings
+    return Retriever(open_index(), get_embedder(), get_reranker() if get_settings().rag_rerank else None, web)

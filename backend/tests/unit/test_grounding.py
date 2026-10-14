@@ -1,4 +1,4 @@
-from app.quality.grounding import numbers_in, numbers_preserved, ungrounded
+from app.quality.grounding import fact_values, numbers_in, numbers_preserved, ungrounded
 
 
 def test_numbers_apply_units_and_skip_small_counts():
@@ -18,6 +18,18 @@ def test_citation_markers_and_ranges_are_not_misread():
 
 def test_ungrounded_allows_one_percent_rounding():
     assert ungrounded("rose to 125,000 (up 25%), about 3.7 million in total", [125_000, 25.0, 3_712_345]) == []
+
+
+def test_a_fall_may_be_written_without_the_minus_sign():
+    assert ungrounded("Employment fell 6.8%, after rising 2.3%.", [-6.8, 2.3]) == []
+    assert ungrounded("Employment fell 7.8%.", [-6.8]) == [7.8]
+
+
+def test_facts_in_millions_may_be_written_with_the_unit_word():
+    allowed = fact_values([{"value": 5845.3, "unit": "S$ million"}, {"value": 12.0, "unit": "%"},
+                           {"value": 1.5, "unit": "m"}])  # "m" (metres?) is not scaled
+    assert ungrounded("GDP was S$5,845.3 million, or 5,845.3 in S$ million", allowed) == []
+    assert 1_500_000 not in allowed
     assert ungrounded("rose to 130,000", [125_000]) == [130_000]
 
 
