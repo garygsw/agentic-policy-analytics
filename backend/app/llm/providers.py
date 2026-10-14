@@ -87,6 +87,10 @@ def chat(
         if tools:
             return model.bind_tools(tools)
         if schema:
+            # Anthropic: native structured outputs (constrained decoding). LangChain's default, forced tool
+            # calling, is not available on the newest Claude models and silently degrades to unforced calls.
+            if isinstance(model, ChatAnthropic):
+                return model.with_structured_output(schema, method="json_schema")
             return model.with_structured_output(schema)
         return model
 

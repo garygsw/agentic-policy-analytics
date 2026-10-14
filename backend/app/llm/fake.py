@@ -10,6 +10,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.language_models.base import LangSmithParams
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.runnables import RunnableLambda
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -61,3 +62,34 @@ def reply(text: str = "", *, tool_calls: list[dict] | None = None, input_tokens:
 def structured(obj: BaseModel, **usage: int) -> AIMessage:
     """A reply that LangChain's with_structured_output parses into `obj`."""
     return reply(tool_calls=[{"name": type(obj).__name__, "args": obj.model_dump()}], **usage)
+
+
+class FakeLLMs:
+    """An LLM factory for graph tests, used in place of providers.chat.
+
+    Replies are scripted per output schema name, or "text" for free-text calls, and consumed in order:
+        FakeLLMs({"TriageResult": [TriageResult(...)], "text": ["translated answer"]})
+    `calls` records (key, messages) for every call, so tests can assert what each step was given.
+    """
+
+    def __init__(self, replies: dict[str, list]):
+        self.replies = {key: list(items) for key, items in replies.items()}
+        self.calls: list[tuple[str, list]] = []
+
+    def __call__(self, tier: str, *, tools=None, schema=None):
+        key = schema.__name__ if schema else "text"
+
+        def run(messages):
+            self.calls.append((key, messages))
+            queue = self.replies.get(key)
+            if not queue:
+                raise AssertionError(f"no scripted reply left for {key}")
+            item = queue.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return AIMessage(item) if isinstance(item, str) else item
+
+        return RunnableLambda(run)
+
+    def keys(self) -> list[str]:
+        return [key for key, _ in self.calls]
