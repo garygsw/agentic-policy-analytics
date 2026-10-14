@@ -313,3 +313,26 @@ Each entry records the date, the decision, the alternatives considered and the r
   - A median-from-records tool: rejected for now. It would recompute official statistics differently from the publisher, and the published medians answer the question.
   - Raising the step limit: this makes runs slower and costlier without fixing the cause.
 
+## D-030 · 2026-10-14 · Evaluations: retrieval, answers and LLM-as-judge
+- **Decision:** The evaluations are implemented in the project itself (`app/evals/`), using standard metrics. Results are saved in `backend/data/eval/`, and method and results are described in `docs/EVALUATION.md`.
+  - **Retrieval** is scored with recall@1, @5 and @10 and MRR@10, on a golden set of 50 questions generated from sampled passages. The source document is the relevant result.
+  - **Answers** are scored end to end on 11 questions:
+    - outcome against the expected one
+    - groundedness of numbers
+    - drafts rejected by the report check
+    - citation coverage
+    - time and cost
+    - a judge from the other provider (relevance, completeness, faithfulness, clarity, caveats)
+    - consistency over three repeated runs
+- **Results (14 Oct 2026):**
+  - **Answers.** 11 of 11 outcomes as expected; 227 of 227 numbers grounded; every finding cited. Judge means: relevance 4.9, completeness 4.1, faithfulness 3.6, clarity 4.6, caveats 3.9. Consistency 0.8. Median 104 s per answered question; $1.94 for the whole evaluation.
+  - **Retrieval.** Hybrid search has the best MRR (0.74). The cross-encoder reranker lowers it to 0.64 and adds 0.5 s per search.
+- **Changed because of the evaluation:**
+  - The coordinator now sees the curated dataset titles.
+  - The judge now sees every cited fact, dataset caveats and cited passages.
+  - Two eval questions were reworded or given wider expectations where the data does not fit them.
+- **Open:** whether to switch the reranker off by default, and how to check qualitative claims (faithfulness is the weakest score). Both await a decision.
+- **Alternatives:**
+  - Evaluation frameworks such as RAGAS or DeepEval: they add dependencies, and their metrics are harder to explain line by line than the ones used here.
+  - Human labelling: better, but not feasible in the time available; the retrieval labels and question set are open to review.
+

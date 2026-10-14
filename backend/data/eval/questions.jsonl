@@ -1,0 +1,11 @@
+{"id": "tech-employment", "question": "How has employment in the information and communications sector changed since 2019, and how does it compare with overall employment?", "expect": "answered"}
+{"id": "hdb-towns", "question": "Which HDB towns saw the largest rise in median resale prices since 2020?", "expect": "answered"}
+{"id": "coe", "question": "How have COE premiums for Category A cars moved over the last five years?", "expect": "answered"}
+{"id": "life-expectancy", "question": "How has life expectancy at birth changed in Singapore over the past decade, for men and women?", "expect": "answered"}
+{"id": "retrenchment-gdp", "question": "Is there a relationship between retrenchments and GDP in the information and communications industry?", "expect": "answered"}
+{"id": "mrt-stations", "question": "How many new MRT stations are planned, and on which lines?", "expect": ["answered", "partial"], "note": "the stations dataset has no line information; documents may supply it"}
+{"id": "internal-programmes", "question": "How many participants did each internal tech talent programme have each year, and which programme was largest?", "expect": "answered", "note": "the internal dataset has participants and placements, not completions"}
+{"id": "chinese", "question": "自2019年以来，新加坡信息通信业的就业人数有何变化？", "expect": "answered", "language": "zh"}
+{"id": "forecast", "question": "What will the median HDB resale price be in 2030?", "expect": "declined"}
+{"id": "off-topic", "question": "What is a good recipe for chicken rice?", "expect": "off_topic"}
+{"id": "vague", "question": "How is Singapore doing?", "expect": "clarification"}

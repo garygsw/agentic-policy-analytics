@@ -4,6 +4,7 @@ from collections.abc import Callable
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.types import interrupt
 
+from app.analysis.workspace import curated_titles
 from app.graph import prompts
 from app.graph.events import emit, guarded
 from app.graph.state import AgentState, CoordinatorStep
@@ -33,7 +34,8 @@ def make_coordinator(llm) -> Callable:
             step = CoordinatorStep(thought="Step limit reached.", action="report",
                                    instructions="Report what has been found so far, and say what is missing.")
         else:
-            system = prompts.COORDINATOR.format(max_steps=MAX_STEPS, progress=describe_progress(state))
+            system = prompts.COORDINATOR.format(max_steps=MAX_STEPS, progress=describe_progress(state),
+                                                datasets=curated_titles())
             step = llm("quality", schema=CoordinatorStep).invoke([SystemMessage(system),
                                                                   HumanMessage(state["question"])])
         emit("coordinator", "status", step.headline or f"Next: {step.action}")

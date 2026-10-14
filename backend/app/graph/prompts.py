@@ -44,6 +44,9 @@ reviewer asked for changes. If a step returned no usable data, retry it at most 
 instructions; after that, report what is known (stating what is missing) or decline.
 You have at most {max_steps} steps in total.
 
+Curated datasets (the Extraction agent can also search 4,655 more on data.gov.sg, and agency documents):
+{datasets}
+
 Progress so far:
 {progress}"""
 

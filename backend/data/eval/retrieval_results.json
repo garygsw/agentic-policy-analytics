@@ -1,0 +1,84 @@
+{
+ "date": "2026-10-14",
+ "questions": 50,
+ "k": 10,
+ "index": {
+  "documents": {
+   "datagovsg": 4655,
+   "mof": 498,
+   "moh": 500,
+   "mom": 492,
+   "pmo": 500,
+   "ura": 500
+  },
+  "chunks": 14363
+ },
+ "modes": {
+  "keyword (BM25)": {
+   "recall@1": 0.64,
+   "recall@5": 0.84,
+   "recall@10": 0.88,
+   "mrr@10": 0.7116904761904762,
+   "median_ms": 6.837791499492596,
+   "p95_ms": 12.183881400414972
+  },
+  "vector": {
+   "recall@1": 0.46,
+   "recall@5": 0.78,
+   "recall@10": 0.88,
+   "mrr@10": 0.6157777777777778,
+   "median_ms": 7.81670799915446,
+   "p95_ms": 10.871035598938759
+  },
+  "hybrid (RRF)": {
+   "recall@1": 0.64,
+   "recall@5": 0.82,
+   "recall@10": 0.9,
+   "mrr@10": 0.7375793650793651,
+   "median_ms": 15.636687498044921,
+   "p95_ms": 33.51596440115821
+  },
+  "hybrid + rerank": {
+   "recall@1": 0.48,
+   "recall@5": 0.78,
+   "recall@10": 0.9,
+   "mrr@10": 0.6400555555555556,
+   "median_ms": 536.2410835004994,
+   "p95_ms": 802.2188275992448
+  }
+ },
+ "by_source": {
+  "keyword (BM25)": {
+   "mom": 1.0,
+   "mof": 0.75,
+   "pmo": 0.875,
+   "moh": 0.75,
+   "ura": 1.0,
+   "datagovsg": 0.7
+  },
+  "vector": {
+   "mom": 0.875,
+   "mof": 0.625,
+   "pmo": 0.75,
+   "moh": 0.75,
+   "ura": 1.0,
+   "datagovsg": 0.7
+  },
+  "hybrid (RRF)": {
+   "mom": 0.875,
+   "mof": 0.75,
+   "pmo": 0.75,
+   "moh": 0.875,
+   "ura": 0.875,
+   "datagovsg": 0.8
+  },
+  "hybrid + rerank": {
+   "mom": 1.0,
+   "mof": 0.75,
+   "pmo": 0.75,
+   "moh": 0.75,
+   "ura": 0.75,
+   "datagovsg": 0.7
+  }
+ }
+}

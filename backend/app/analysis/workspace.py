@@ -106,6 +106,17 @@ def profile(loaded: LoadedDataset, source_id: str) -> dict:
             "warning": loaded.provenance.warning, "caveats": dataset.notes}
 
 
+def curated_titles() -> str:
+    """One short line per curated dataset, for the coordinator: enough to know what data exists."""
+    lines = []
+    for key, dataset in CURATED.items():
+        meta_path = SNAPSHOT_DIR / f"{key}.json"
+        coverage = json.loads(meta_path.read_text())["quality"]["coverage"] if meta_path.is_file() else None
+        span = f", {coverage[0]} to {coverage[1]}" if coverage else ""
+        lines.append(f"- {dataset.title} ({dataset.agency}{span})")
+    return "\n".join(lines)
+
+
 def curated_catalogue() -> str:
     """One line per curated dataset, for the Extraction agent's prompt (coverage read from the snapshots)."""
     lines = []
