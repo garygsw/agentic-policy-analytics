@@ -256,6 +256,20 @@ def test_a_second_extraction_keeps_what_the_first_loaded():
     assert [(d["source_id"], d["dataset_id"]) for d in third["datasets"]] == [("S1", "employment"), ("S2", "gdp")]
 
 
+def test_a_second_analysis_keeps_the_first_facts_and_charts():
+    model = ScriptedChatModel(script=[
+        reply(tool_calls=[{"name": "compute_trend", "args": {"series": ICT, "reason": "main trend"}}]),
+        reply("Computed the trend."),
+        reply("Nothing more to compute."),  # the reviewer's follow-up adds nothing
+    ])
+    workers = AgentWorkers(factory(model), store=FakeStore())
+    extraction = {"datasets": [{"dataset_id": "employment"}], "sources": []}
+    first = workers.analyse("trend", "q", extraction)
+    second = workers.analyse("more", "q", extraction, first)
+    assert second["facts"] == first["facts"] and len(first["facts"]) > 3
+    assert f"facts F1-F{len(first['facts'])}" in model.requests[2][1].content
+
+
 def test_analysis_without_data_computes_nothing():
     workers = AgentWorkers(factory(ScriptedChatModel(script=[])), store=FakeStore())
     assert workers.analyse("x", "q", {"datasets": []})["facts"] == []

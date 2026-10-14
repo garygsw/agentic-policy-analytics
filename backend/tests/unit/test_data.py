@@ -45,7 +45,18 @@ def test_tidy_reports_every_dropped_row():
         ["2020", "ICT", "employed", 100.0, "persons"], ["2021", "ICT", "employed", 110.0, "persons"]]
     assert (report.total_rows_removed, report.invalid_periods, report.duplicates_removed) == (1, 1, 1)
     assert report.missing_values == {"employed": 1} and report.coverage == ("2020", "2021")
-    assert "2 clean rows from 6" in report.summary()
+    assert "2 values (one per measure per row) from 6 source rows" in report.summary()
+
+
+def test_labels_differing_only_in_case_are_one_series():
+    # HDB's town names changed case in 2019; without merging, every town's series stops at 2019.
+    raw = pd.DataFrame({"quarter": ["2018-Q4", "2019-Q1", "2019-Q2", "2019-Q3", "2019-Q2"],
+                        "town": ["Ang Mo Kio", "Ang Mo Kio", "ANG MO KIO", "ANG MO KIO", "BEDOK"],
+                        "price": ["400000", "405000", "410000", "420000", "380000"]})
+    frame, report = tidy(raw, "t", period="quarter", frequency="quarterly", dims=["town"], measures={"price": "S$"})
+    assert sorted(frame["town"].unique()) == ["ANG MO KIO", "BEDOK"]  # a tie goes to the first in sort order
+    assert frame.groupby("town").size().max() == 4  # one series of four quarters
+    assert "1 town labels differing only in letter case were merged" in report.summary()
 
 
 # -- curated cleaners --------------------------------------------------------------------------------------------

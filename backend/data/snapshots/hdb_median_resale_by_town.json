@@ -17,7 +17,9 @@
    "2007-Q2",
    "2026-Q2"
   ],
-  "notes": []
+  "notes": [
+   "25 town labels differing only in letter case were merged"
+  ]
  },
  "provenance": {
   "origin": "snapshot",
@@ -27,7 +29,7 @@
    "https://data.gov.sg/datasets/d_b51323a474ba789fb4cc3db58a3116d4/view"
   ],
   "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
-  "retrieved_at": "2026-10-14T05:45:35.684451+00:00",
+  "retrieved_at": "2026-10-14T08:20:41.920443+00:00",
   "warning": null
  }
 }

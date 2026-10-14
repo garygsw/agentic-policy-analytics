@@ -16,7 +16,8 @@ from app.graph.state import AgentState
 class Workers(Protocol):
     def extract(self, instructions: str, question: str, previous: dict[str, Any] | None = None) -> dict[str, Any]:
         ...
-    def analyse(self, instructions: str, question: str, extraction: dict[str, Any]) -> dict[str, Any]: ...
+    def analyse(self, instructions: str, question: str, extraction: dict[str, Any],
+                previous: dict[str, Any] | None = None) -> dict[str, Any]: ...
 
 
 class StubWorkers:
@@ -26,7 +27,8 @@ class StubWorkers:
         return {"summary": "Data extraction is not implemented yet; no datasets loaded.", "datasets": [],
                 "sources": []}
 
-    def analyse(self, instructions: str, question: str, extraction: dict[str, Any]) -> dict[str, Any]:
+    def analyse(self, instructions: str, question: str, extraction: dict[str, Any],
+                previous: dict[str, Any] | None = None) -> dict[str, Any]:
         return {"summary": "Analytics is not implemented yet; no facts computed.", "facts": [], "charts": []}
 
 
@@ -46,8 +48,9 @@ def make_analytics(workers: Workers) -> Callable:
     @guarded("analytics")
     def analytics(state: AgentState) -> dict:
         findings = state.get("findings") or {}
+        # A second analysis step (e.g. after the reviewer's feedback) keeps the facts the first one computed.
         result = workers.analyse(state["coordinator_steps"][-1].instructions, state["question"],
-                                 findings.get("extraction", {}))
+                                 findings.get("extraction", {}), findings.get("analytics"))
         emit("analytics", "observation", result.get("summary", ""))
         return {"findings": {**findings, "analytics": result}}
     return analytics

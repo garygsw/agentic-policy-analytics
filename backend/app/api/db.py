@@ -38,7 +38,8 @@ class Run(Base):
     thread_id: Mapped[str] = mapped_column(ForeignKey("threads.id"), index=True)
     question: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20))   # running | awaiting_input | completed | failed | cancelled
-    outcome: Mapped[str | None] = mapped_column(String(20))  # answered | partial | off_topic | declined | fallback | .
+    # answered | partial | off_topic | declined | fallback | cancelled
+    outcome: Mapped[str | None] = mapped_column(String(20))
     options: Mapped[dict] = mapped_column(JSON, default=dict)
     pending: Mapped[dict | None] = mapped_column(JSON)       # the question the agents are waiting on
     answer: Mapped[str | None] = mapped_column(Text)

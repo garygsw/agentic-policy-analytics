@@ -37,13 +37,22 @@ class AgentWorkers:
         kept = [d for d in previous.get("datasets", []) if d["dataset_id"] not in {n["dataset_id"] for n in new}]
         return {"summary": summary, "datasets": kept + new, "sources": ws.sources, "passages": len(ws.passages())}
 
-    def analyse(self, instructions: str, question: str, extraction: dict) -> dict:
-        ws = Workspace(self.store, sources=extraction.get("sources"))
+    def analyse(self, instructions: str, question: str, extraction: dict, previous: dict | None = None) -> dict:
+        """`previous`: an earlier analysis in this turn (e.g. before the reviewer asked for more). Its facts and
+        charts are kept and new ones continue the numbering, so F1 keeps meaning the same number."""
+        previous = previous or {}
+        sources = list(extraction.get("sources") or [])
+        sources += [s for s in previous.get("sources", []) if s["id"] not in {k["id"] for k in sources}]
+        ws = Workspace(self.store, sources=sources, facts=previous.get("facts"), charts=previous.get("charts"))
         profiles = extraction.get("datasets") or []
         if not profiles:
-            return {"summary": "No datasets were loaded, so nothing was computed.", "facts": [], "charts": [],
-                    "sources": ws.sources}
+            return {"summary": "No datasets were loaded, so nothing new was computed.", "facts": ws.facts,
+                    "charts": ws.charts, "sources": ws.sources}
+        task = f"Question: {question}\n\nTask from the coordinator: {instructions}"
+        if ws.facts or ws.charts:
+            task += (f"\n\nAlready computed and still valid (cite them; do not recompute): facts F1-F{len(ws.facts)}"
+                     + "".join(f"; {c['id']} {c['title']}" for c in ws.charts))
         summary = run_tool_loop(self.llm, node="analytics", tools=enabled(analytics_tools(ws)), max_steps=12,
                                 system=prompts.ANALYTICS.format(datasets=json.dumps(profiles, ensure_ascii=False)),
-                                task=f"Question: {question}\n\nTask from the coordinator: {instructions}")
+                                task=task)
         return {"summary": summary, "facts": ws.facts, "charts": ws.charts, "sources": ws.sources}

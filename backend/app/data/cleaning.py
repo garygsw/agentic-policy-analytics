@@ -33,7 +33,8 @@ class QualityReport(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
     def summary(self) -> str:
-        parts = [f"{self.rows_out:,} clean rows from {self.rows_in:,}"]
+        # Tidy data holds one row per value, so a table with three measures gives three rows per source row.
+        parts = [f"{self.rows_out:,} values (one per measure per row) from {self.rows_in:,} source rows"]
         if self.coverage:
             parts.append(f"covering {self.coverage[0]} to {self.coverage[1]}")
         for label, value in [("invalid periods", self.invalid_periods),
@@ -89,6 +90,19 @@ def normalise_period(value, frequency: Frequency) -> str | None:
     return None
 
 
+def unify_case(labels: pd.Series) -> tuple[pd.Series, int]:
+    """Labels that differ only in letter case name the same thing (HDB switched from "Ang Mo Kio" to
+    "ANG MO KIO" in 2019, splitting every town's series in two). Each is replaced by its most common spelling.
+    Returns the labels and how many spellings were merged."""
+    counts = labels.value_counts()
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))  # most common first, then by name
+    canonical: dict[str, str] = {}
+    for label, _ in ranked:
+        canonical.setdefault(label.lower(), label)
+    renames = {label: canonical[label.lower()] for label, _ in ranked if canonical[label.lower()] != label}
+    return (labels.replace(renames) if renames else labels), len(renames)
+
+
 def tidy(df: pd.DataFrame, dataset_id: str, *, period: str | None, frequency: Frequency, dims: list[str],
          measures: dict[str, str], total_labels: tuple[str, ...] = (),
          zero_markers: tuple[str, ...] = ()) -> tuple[pd.DataFrame, QualityReport]:
@@ -101,6 +115,9 @@ def tidy(df: pd.DataFrame, dataset_id: str, *, period: str | None, frequency: Fr
     frame = df.copy()
     for dim in dims:
         frame[dim] = frame[dim].astype("string").str.strip()
+        frame[dim], merged = unify_case(frame[dim])
+        if merged:
+            report.notes.append(f"{merged} {dim} labels differing only in letter case were merged")
     if total_labels:
         is_total = pd.Series(False, index=frame.index)
         for dim in dims:

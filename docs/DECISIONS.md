@@ -276,3 +276,24 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Hide reports the reviewer rejects: this loses grounded findings.
   - List every passage read: this is complete but noisy, and the run's full source list remains available from the API.
 
+## D-028 · 2026-10-14 · Frontend: one Next.js page modelled on a coding agent's desktop app
+- **Decision:**
+  - **Stack.** One client-rendered Next.js 16 page in TypeScript. Plain CSS with light and dark themes. `react-markdown` for chat text, and no UI component library. Dependencies are pinned to releases at least two weeks old.
+  - **Live view.** A WebSocket per running run feeds a pure reducer (`lib/runState.ts`). The reducer derives everything shown: the step list filtered by verbosity (brief/standard/full), the one-line status, elapsed working time (pauses for the user are excluded), token and cost counters summed across paused and resumed parts, the streamed draft with its check stage, and each agent's latest context window. The same events, live or replayed from history, give the same view.
+  - **Controls.** The per-request options (model, reasoning effort, optional tools, triage method, web scope, plan approval) and the verbosity are kept in the browser's local storage.
+  - **Reports.** The HTML report is the API's own page, served with its CSP, in a sandboxed iframe (scripts on, no same-origin access). It posts only its height, so the frame fits it. Exports are the HTML page and the Markdown file.
+  - **Inspector.** A side panel shows each agent's context window (tokens by category: system prompt, task, own messages, tool results, retrieved passages, tool definitions; plus the messages sent) and the LLM call log, with input split into uncached, cache read and cache write.
+- **API changes for the UI:**
+  - Draft events carry readable snapshots of the report so far, parsed from the streamed JSON on the server.
+  - The user's replies to clarifying questions and plan approvals are recorded as events.
+  - Cancelling a paused run records an end event.
+- **Found by driving the UI against live runs, and fixed:**
+  - A second analysis step (after reviewer feedback) replaced the first one's facts and charts, leaving a report with no figures. Later steps now build on earlier ones and continue the F#/C# numbering.
+  - HDB changed its town names from "Ang Mo Kio" to "ANG MO KIO" in 2019, which split every town's price series in two. Labels that differ only in letter case are now merged during cleaning, and the merge is recorded in the quality report.
+  - The quality summary said "722,376 clean rows from 242,634". That is one row per measure in the tidy format, but an agent read it as data duplication. It now says "values (one per measure per row)".
+- **Alternatives:**
+  - Server-rendered pages: a live trace needs client state anyway.
+  - Tailwind or a component library: more to explain for little gain on one page.
+  - Rendering the report in React from structured JSON: it would duplicate the HTML template the API already serves and exports.
+- **Testing:** Unit tests cover the reducer and formatting (vitest). The page was checked end to end in headless Chrome against the live API: history, the inspector, a personal-data refusal, two live questions, a clarification then a resume then a stop, phone width and dark mode.
+

@@ -12,6 +12,7 @@ import time
 import uuid
 
 from langchain_core.messages import HumanMessage
+from langchain_core.utils.json import parse_partial_json
 from langgraph.types import Command
 from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
@@ -21,11 +22,25 @@ from app.graph.events import LEVELS
 from app.llm.ledger import Ledger
 
 TERMINAL = {"completed", "failed", "cancelled"}
-DRAFT_FLUSH_CHARS = 120  # report drafts are stored in pieces of about this size, not token by token
+DRAFT_FLUSH_CHARS = 120  # a draft snapshot is stored after about this many new characters, not every token
 
 
 def new_id() -> str:
     return uuid.uuid4().hex[:12]
+
+
+def draft_view(raw: str) -> dict:
+    """The report writer streams its structured report as JSON. Turn what has arrived so far into readable text,
+    so any client can show the draft without parsing incomplete JSON itself."""
+    try:
+        parsed = parse_partial_json(raw) if raw else None
+    except ValueError:
+        parsed = None
+    parsed = parsed if isinstance(parsed, dict) else {}
+    title, summary = str(parsed.get("title") or ""), str(parsed.get("summary") or "")
+    findings = [str(f["text"]) for f in parsed.get("findings") or [] if isinstance(f, dict) and f.get("text")]
+    lines = ([f"# {title}", ""] if title else []) + ([summary, ""] if summary else []) + [f"- {t}" for t in findings]
+    return {"title": title, "summary": summary, "findings": findings, "content": "\n".join(lines).strip()}
 
 
 class RunManager:
@@ -54,6 +69,16 @@ class RunManager:
     def cancel(self, run_id: str) -> None:
         self.cancelled.add(run_id)
 
+    def append(self, run_id: str, event: dict) -> None:
+        """Store one event with the run's next sequence number, then wake any WebSocket following the run."""
+        with self._lock, self.sessions() as db:
+            seq = db.scalar(select(func.coalesce(func.max(RunEvent.seq), 0)).where(RunEvent.run_id == run_id)) + 1
+            db.add(RunEvent(run_id=run_id, seq=seq, kind=event["kind"],
+                            level=event.get("level", LEVELS.get(event["kind"], 2)), node=event.get("node", ""),
+                            payload=event, ts=event.get("ts", time.time())))
+            db.commit()
+        self._notify(run_id)
+
     # -- waiting for events (used by WebSockets) --------------------------------------------------------------
     def signal(self, run_id: str) -> asyncio.Event:
         return self._signals.setdefault(run_id, asyncio.Event())
@@ -64,24 +89,17 @@ class RunManager:
 
     # -- the worker thread ---------------------------------------------------------------------------------------
     def _execute(self, run_id: str, thread_id: str, payload, options: dict) -> None:
-        with self.sessions() as db:
-            seq = db.scalar(select(func.coalesce(func.max(RunEvent.seq), 0)).where(RunEvent.run_id == run_id))
-        state = {"seq": seq, "draft": "", "draft_id": None}
+        draft = {"id": None, "raw": "", "saved": 0}  # the report draft streaming in, and how much of it is stored
 
         def save(event: dict) -> None:
-            with self._lock, self.sessions() as db:
-                state["seq"] += 1
-                db.add(RunEvent(run_id=run_id, seq=state["seq"], kind=event["kind"],
-                                level=event.get("level", LEVELS.get(event["kind"], 2)), node=event.get("node", ""),
-                                payload=event, ts=event.get("ts", time.time())))
-                db.commit()
-            self._notify(run_id)
+            self.append(run_id, event)
 
         def flush_draft(final: bool = False) -> None:
-            if state["draft"] and (final or len(state["draft"]) >= DRAFT_FLUSH_CHARS):
-                save({"node": "report_writer", "kind": "draft", "level": 1, "content": state["draft"],
-                      "draft_id": state["draft_id"], "ts": time.time()})
-                state["draft"] = ""
+            new = len(draft["raw"]) - draft["saved"]
+            if new > 0 and (final or new >= DRAFT_FLUSH_CHARS):
+                save({"node": "report_writer", "kind": "draft", "level": 1, "draft_id": draft["id"],
+                      **draft_view(draft["raw"]), "ts": time.time()})
+                draft["saved"] = len(draft["raw"])
 
         def record_call(kind: str, record: dict) -> None:
             if kind != "llm_call":
@@ -113,11 +131,11 @@ class RunManager:
                 message, metadata = chunk
                 if metadata.get("langgraph_node") != "report_writer":
                     continue
-                if message.id != state["draft_id"]:  # a new draft (first one, or a revision after the check)
+                if message.id != draft["id"]:  # a new draft (first one, or a revision after the check)
                     flush_draft(final=True)
-                    state["draft_id"] = message.id
+                    draft.update(id=message.id, raw="", saved=0)
                 content = message.content
-                state["draft"] += content if isinstance(content, str) else "".join(
+                draft["raw"] += content if isinstance(content, str) else "".join(
                     b.get("text", "") for b in content if isinstance(b, dict))
                 flush_draft()
             flush_draft(final=True)

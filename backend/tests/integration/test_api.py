@@ -7,6 +7,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from app.api.db import make_session_factory
 from app.api.main import create_app
+from app.api.runs import draft_view
 from app.graph.build import Deps, build_graph
 from app.graph.checkpoint import serializer
 from app.graph.nodes.intake import llm_decider
@@ -141,18 +142,26 @@ def test_clarification_pauses_then_resumes(tmp_path):
         assert client.post(f"/api/runs/{run_id}/resume", json={"answer": "employment in tech"}).status_code == 202
         done = wait(client, run_id)
         assert (done["status"], done["outcome"]) == ("completed", "answered")
-        ends = [e for e in client.get(f"/api/runs/{run_id}/events").json() if e["kind"] == "end"]
-        assert [e["status"] for e in ends] == ["awaiting_input", "completed"]
+        events = client.get(f"/api/runs/{run_id}/events").json()
+        assert [e["status"] for e in events if e["kind"] == "end"] == ["awaiting_input", "completed"]
+        assert [e["content"] for e in events if e["kind"] == "reply"] == ["employment in tech"]  # replays show it
 
 
-def test_a_paused_run_can_be_cancelled(tmp_path):
-    replies = {"TriageDecision": [TriageDecision(category="vague", reason="no topic")], "text": ["Which area?"]}
+def test_a_paused_run_can_be_cancelled_and_the_conversation_goes_on(tmp_path):
+    replies = {"TriageDecision": [TriageDecision(category="vague", reason="no topic"), *ANSWERED["TriageDecision"]],
+               "text": ["Which area?"], "StandaloneQuestion": [StandaloneQuestion(question=QUESTION)],
+               **{k: v for k, v in ANSWERED.items() if k != "TriageDecision"}}
     with client_for(replies, tmp_path) as client:
         thread = client.post("/api/threads").json()["id"]
         run_id = client.post(f"/api/threads/{thread}/messages", json={"text": "Tell me something"}).json()["run_id"]
         wait(client, run_id)
         assert client.post(f"/api/runs/{run_id}/cancel").json()["status"] == "cancelled"
         assert client.post(f"/api/runs/{run_id}/resume", json={"answer": "x"}).status_code == 409
+        last = client.get(f"/api/runs/{run_id}/events").json()[-1]
+        assert (last["kind"], last["status"]) == ("end", "cancelled")  # a replay shows the cancellation
+        # The next message starts afresh, not inside the abandoned clarification.
+        next_run = client.post(f"/api/threads/{thread}/messages", json={"text": QUESTION}).json()["run_id"]
+        assert wait(client, next_run)["outcome"] == "answered"
 
 
 def test_unknown_things_and_invalid_options(tmp_path):
@@ -171,3 +180,13 @@ def test_search_and_dataset_endpoints(tmp_path):
         assert client.get("/api/search", params={"q": "x", "mode": "magic"}).status_code == 422
         datasets = client.get("/api/datasets").json()
         assert len(datasets) == 19 and next(d for d in datasets if d["key"] == "coe_bidding_results")["coverage"]
+
+
+def test_streamed_report_json_becomes_readable_text():
+    raw = ('{"title": "Tech jobs grew", "summary": "ICT employment rose 26.2%.", "findings": '
+           '[{"text": "From 102,800 to 129,700.", "citations": ["F1"]}, {"text": "Fas')
+    view = draft_view(raw)
+    assert view["findings"] == ["From 102,800 to 129,700.", "Fas"]
+    assert view["content"] == "# Tech jobs grew\n\nICT employment rose 26.2%.\n\n- From 102,800 to 129,700.\n- Fas"
+    assert draft_view('{"ti')["content"] == "" and draft_view("")["content"] == ""
+

@@ -13,6 +13,11 @@ observation 2   what a tool returned (a preview; the full text is in `detail`)
 thinking   3    the model's own thinking, when the provider returns it
 context    3    what filled an agent's context window for one LLM call
 
+Added by the API (app/api/runs.py), not by graph nodes:
+draft      1    the report being written so far, as readable text (a snapshot: the latest one wins)
+reply      1    the user's answer to a clarifying question or a plan approval
+end        1    the run finished or paused: `status`, plus `outcome` or `pending`
+
 Clients choose a verbosity (1 brief, 2 standard, 3 full) and show events up to that level. Everything is
 always emitted, so the level can be changed while a run is in progress or when replaying it.
 """
@@ -24,7 +29,7 @@ from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp
 
 LEVELS = {"status": 1, "action": 1, "error": 1, "usage": 1, "reasoning": 2, "observation": 2, "thinking": 3,
-          "context": 3}
+          "context": 3, "draft": 1, "reply": 1, "end": 1}
 
 # The status line shown when each step starts.
 STATUS = {

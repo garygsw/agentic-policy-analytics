@@ -35,8 +35,9 @@ class FakeWorkers:
         self.previous = previous
         return {"summary": "Loaded employment by industry", "datasets": ["employment"], "sources": SOURCES}
 
-    def analyse(self, instructions, question, extraction):
+    def analyse(self, instructions, question, extraction, previous=None):
         self.calls.append("analyse")
+        self.previous_analysis = previous
         return {"summary": "Computed ICT employment 2020-2024", "facts": FACTS, "charts": []}
 
 
@@ -134,6 +135,7 @@ def test_reviewer_sends_wrong_analysis_back_to_the_coordinator():
         "Report": [GOOD, GOOD], "Review": [Review(verdict="wrong_analysis", reason="use residents only"), PASS]})
     state = ask(graph, QUESTION).values
     assert state["outcome"] == "answered" and workers.calls == ["extract", "analyse", "analyse"]
+    assert workers.previous_analysis["facts"] == FACTS  # the second analysis builds on the first
     coordinator_prompt = [m for key, m in llm.calls if key == "CoordinatorStep"][3][0].content
     assert "Reviewer sent the analysis back: use residents only" in coordinator_prompt
 

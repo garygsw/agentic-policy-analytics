@@ -7,6 +7,7 @@ calls are in the application database, so any request (or any API process) can c
 """
 import asyncio
 import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -198,6 +199,10 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
             session.commit()
             thread_id = run.thread_id
         manager: RunManager = app.state.manager
+        # The user's reply is part of the run's record, so a replay shows the question and its answer.
+        reply = body.answer if kind == "clarification" else (
+            "Plan approved" if body.approved else f"Plan rejected{': ' + body.feedback if body.feedback else ''}")
+        manager.append(run_id, {"node": "user", "kind": "reply", "level": 1, "content": reply, "ts": time.time()})
         manager.start(run_id, thread_id, manager.resume_payload(value), body.options.model_dump())
         return {"run_id": run_id, "thread_id": thread_id}
 
@@ -208,6 +213,8 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
             if run.status == "awaiting_input":  # nothing is executing: close the run directly
                 run.status, run.finished_at = "cancelled", utcnow()
                 session.commit()
+                app.state.manager.append(run_id, {"node": "run", "kind": "end", "level": 1, "status": "cancelled",
+                                                  "content": "Cancelled by the user", "ts": time.time()})
                 return {"run_id": run_id, "status": "cancelled"}
             if run.status != "running":
                 raise HTTPException(409, f"run is already {run.status}")

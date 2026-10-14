@@ -24,11 +24,14 @@ def round_value(value: float, unit: str) -> float | int:
 
 
 class Workspace:
-    def __init__(self, store: DataStore, sources: list[dict] | None = None):
+    def __init__(self, store: DataStore, sources: list[dict] | None = None, facts: list[dict] | None = None,
+                 charts: list[dict] | None = None):
+        """Earlier sources, facts and charts (from previous steps of the same turn) keep their IDs; new ones
+        continue the numbering."""
         self.store = store
         self.sources: list[dict] = [dict(s) for s in sources or []]
-        self.facts: list[dict] = []
-        self.charts: list[dict] = []
+        self.facts: list[dict] = [dict(f) for f in facts or []]
+        self.charts: list[dict] = [dict(c) for c in charts or []]
         self._loaded: dict[str, LoadedDataset] = {}
 
     def dataset(self, dataset_id: str) -> tuple[LoadedDataset, str]:
