@@ -71,7 +71,7 @@ Each entry records the date, the decision, the alternatives considered and the r
 - **Personal data:** Identifiers are blocked: NRIC/FIN, phone numbers, email addresses, card numbers, bank accounts, and street addresses with unit numbers. Names are not blocked, because policy questions legitimately name ministers and MPs. The screen runs in the API before the graph starts, because LangGraph checkpoints its input.
 - **Languages:** Singapore's four official languages (English, Chinese, Malay, Tamil). Only report prose is translated; source titles, tables and citations stay as published. If a translation changes any number, the user gets the English report with a note.
 - **Plan approval:** Optional, and off by default. Clarifying questions for vague queries are always on.
-- **Open:** Which model makes the fast classification decisions. Candidates are a free local model and Jev, compared on the same labelled query set.
+- **Fast classification:** See D-017.
 
 ## D-011 · 2026-10-14 · Evaluation with standard metrics
 - **Decision:**
@@ -102,9 +102,33 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Services that need a separate registered key (LTA DataMall, URA's data API, OneMap): data.gov.sg already carries their datasets.
 - **Why:** One catalogue API covers the whole of government with consistent metadata (size, columns, coverage), and every source is used within its access rules.
 
-## D-015 · 2026-10-14 · LLM layer
+## D-015 · 2026-10-14 · LLM layer (tiers confirmed)
 - **Decision:**
   - LangChain chat models arranged in two tiers, each with an OpenAI primary and an Anthropic fallback: **quality** (`gpt-6.1-sol`, then `claude-sonnet-5-5`) and **fast** (`gpt-6-luna`, then `claude-haiku-5-5`). The models in each tier cost the same per token, so a fallback does not change the cost.
   - Provider endpoints are set in the app's own config, so ambient shell variables cannot redirect calls.
   - Prices come from the official pricing pages and are dated in `app/llm/pricing.py`. A model without a listed price is reported as unpriced, never estimated.
 - **Alternatives:** One model per provider for everything. Hosted embeddings for retrieval (rejected in D-006).
+
+## D-016 · 2026-10-14 · Web search tool
+- **Decision:** Tavily, with a free plan of 1,000 searches a month and no card required.
+  - **Scope:** limited to `*.gov.sg` domains by default.
+  - **Trust:** results are treated as untrusted data, never followed as instructions, cited with the URL and retrieval date, and labelled as web sources in the report.
+  - **Key check:** done through the free usage endpoint.
+- **Alternatives:** Exa (one-time credit). Brave (free plan status unclear). DuckDuckGo (no key, but unofficial and fragile).
+- **Why:** It is the simplest integration, the free plan resets monthly, and it can be restricted by domain.
+
+## D-017 · 2026-10-14 · Fast classification decisions
+- **Decision:** A local classifier makes the fast routing decisions (on-topic, off-topic, vague, unanswerable). It reuses the embedding model the RAG pipeline already loads and is trained on a labelled query set. Low-confidence cases go to the fast LLM tier.
+  - **Trial:** Jev, TypeSafe AI's hosted decision model, is compared with the local classifier and the fast LLM on the same labelled set: accuracy, latency and cost.
+- **Alternatives:**
+  - NanoJev, an open replica of Jev: it is trained only on game tasks and would need fine-tuning first.
+  - A zero-shot NLI classifier: needs no training data, but is slower.
+- **Why:** The decisions are fast, free and offline, and they are measured against a hosted decision model and an LLM rather than assumed.
+
+## D-018 · 2026-10-14 · Structured data access
+- **Decision:** Two paths:
+  - **Curated:** about 18 datasets with known schemas, tested cleaning rules and committed small snapshots, used for the demo and tests.
+  - **Discovery:** any dataset in the data.gov.sg catalogue can be found and loaded with generic profiling, labelled "uncurated", and accompanied by a data-quality report.
+  - **Large files:** files such as the 24 MB resale-price data are downloaded on first start and never committed.
+  - **Licence:** each dataset's licence is checked before any snapshot is committed.
+- **Why:** Curated datasets make the demo reliable; discovery covers the whole of government.

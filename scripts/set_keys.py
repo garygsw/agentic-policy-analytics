@@ -3,7 +3,7 @@
 
 Usage:
   python3 scripts/set_keys.py                   prompt for every key
-  python3 scripts/set_keys.py OPENAI_API_KEY    prompt for one key
+  python3 scripts/set_keys.py TAVILY_API_KEY    prompt for one key
   python3 scripts/set_keys.py --verify          check the saved keys with each provider
 
 Input is hidden and keys are never printed (only their last 4 characters).
@@ -26,6 +26,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Each check is a free metadata request (list models / show usage), never a billed call.
 # The verification URLs are fixed here, so a *_BASE_URL variable in the shell cannot redirect a key.
 PROVIDERS = {
     "OPENAI_API_KEY": {
@@ -39,6 +40,20 @@ PROVIDERS = {
         "prefix": "sk-ant-",
         "url": "https://api.anthropic.com/v1/models",
         "headers": lambda key: {"x-api-key": key, "anthropic-version": "2023-06-01"},
+    },
+    "TAVILY_API_KEY": {
+        "label": "Tavily (web search tool, optional)",
+        "prefix": "tvly-",
+        "url": "https://api.tavily.com/usage",
+        "headers": lambda key: {"Authorization": f"Bearer {key}"},
+        "optional": True,
+    },
+    "TYPESAFE_API_KEY": {
+        "label": "TypeSafe Jev (classifier trial, optional)",
+        "prefix": "",
+        "url": "https://api.typesafe.ai/v1/models",
+        "headers": lambda key: {"Authorization": f"Bearer {key}"},
+        "optional": True,
     },
 }
 
@@ -125,9 +140,9 @@ def tls_context() -> ssl.SSLContext:
 
 def verify(name: str, value: str, opener=urllib.request.urlopen) -> tuple[bool, str]:
     """List models with the key: proves it is accepted, costs no tokens."""
-    if not value:
-        return False, "not set"
     provider = PROVIDERS[name]
+    if not value:
+        return (True, "not set (optional)") if provider.get("optional") else (False, "not set")
     headers = {"User-Agent": "set-keys-check/1.0", **provider["headers"](value)}
     try:
         request = urllib.request.Request(provider["url"], headers=headers)
