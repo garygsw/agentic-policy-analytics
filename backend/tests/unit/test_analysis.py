@@ -237,6 +237,23 @@ def test_agents_extract_then_analyse_with_shared_source_ids():
     assert analytics["facts"][0]["sources"] == ["S1"] and len(analytics["sources"]) == 1
 
 
+def test_a_second_extraction_keeps_what_the_first_loaded():
+    model = ScriptedChatModel(script=[
+        reply(tool_calls=[{"name": "load_dataset", "args": {"dataset_id": "employment", "reason": "needed"}}]),
+        reply("Loaded employment (S1)."),
+        reply("Found nothing else."),  # the retry loads nothing new
+        reply(tool_calls=[{"name": "load_dataset", "args": {"dataset_id": "gdp", "reason": "more"}}]),
+        reply("Loaded GDP (S2)."),
+    ])
+    workers = AgentWorkers(factory(model), store=FakeStore())
+    first = workers.extract("load employment", "q")
+    retry = workers.extract("find more", "q", first)
+    assert [d["source_id"] for d in retry["datasets"]] == ["S1"] and retry["sources"] == first["sources"]
+    assert "Already loaded (no need to load again): S1" in model.requests[2][1].content
+    third = workers.extract("add GDP", "q", retry)
+    assert [(d["source_id"], d["dataset_id"]) for d in third["datasets"]] == [("S1", "employment"), ("S2", "gdp")]
+
+
 def test_analysis_without_data_computes_nothing():
     workers = AgentWorkers(factory(ScriptedChatModel(script=[])), store=FakeStore())
     assert workers.analyse("x", "q", {"datasets": []})["facts"] == []

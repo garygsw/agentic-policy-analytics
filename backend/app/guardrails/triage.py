@@ -32,7 +32,8 @@ CRITERIA = {
                 "health, population, education, digital economy) and specific enough to look up data",
     "vague": "On-topic but too unclear to act on: no identifiable topic, measure or question",
     "off_topic": "Not about Singapore public policy or statistics: general knowledge, coding, entertainment, "
-                 "personal advice, other countries, or questions about private individuals",
+                 "personal advice or eligibility, private individuals, or only other countries (comparisons "
+                 "with Singapore are in scope)",
 }
 
 

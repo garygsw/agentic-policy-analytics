@@ -5,6 +5,7 @@ instructions. Tavily's domain filter needs exact domains (wildcards such as *.go
 government scope is an explicit list.
 """
 import re
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import httpx
 
@@ -20,9 +21,17 @@ class WebSearchUnavailable(RuntimeError):
     pass
 
 
+# Query parameters that do not change the page: page versions (government sites) and campaign tracking.
+NON_CONTENT_PARAMS = re.compile(r"^(pageversion|utm_\w+)$", re.I)
+
+
 def normalise_url(url: str) -> str:
-    """The same page is often returned as http/https and with/without www."""
-    return re.sub(r"^https?://(www\.)?", "", url).rstrip("/").lower()
+    """One key per page: the same page is often returned as http/https, with/without www, in different letter
+    case, or with a page-version or tracking parameter."""
+    parts = urlsplit(url)
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if not NON_CONTENT_PARAMS.match(k)])
+    key = re.sub(r"^www\.", "", parts.netloc) + parts.path.rstrip("/") + (f"?{query}" if query else "")
+    return key.lower()
 
 
 class TavilySearch:
@@ -47,6 +56,7 @@ class TavilySearch:
             key = normalise_url(item.get("url", ""))
             if key and key not in seen:
                 seen.add(key)
-                results.append({"title": item.get("title", ""), "url": item["url"], "agency": key.split("/")[0],
+                results.append({"title": item.get("title", ""), "url": item["url"], "key": key,
+                                "agency": key.split("/")[0],
                                 "published": item.get("published_date") or "", "text": item.get("content", "")})
         return results[:max_results]

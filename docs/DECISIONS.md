@@ -223,6 +223,43 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Jev was not chosen as the default. It classified the demo question itself ("Analyse employment trends in the technology sector") as off topic, with confidence 0.58, the same result as an earlier probe. It also sent two vague questions to off-topic with confidence above 0.7.
 - **Caveats:** The test set has only 80 questions, so the accuracy figures carry wide margins (several percentage points). The labels were drafted with AI help and need human review. "Am I eligible for an HDB loan?" fooled every classifier, which suggests its label (off topic) is debatable.
 
+- **Re-run after relabelling (2026-10-14).** HDB loan questions stay off topic. Questions only about other countries are off topic, but comparing them with Singapore is in scope. With these labels and examples there are 168 questions (75 in scope, 45 vague, 48 off topic), and 84 are held out:
+
+  | Classifier | Accuracy | Macro F1 | Median latency | Cost per 1,000 |
+  |---|---|---|---|---|
+  | Local | 92% | 0.91 | 2 ms | $0 |
+  | Jev | 93% | 0.93 | 266 ms | $0.018 |
+  | Fast LLM | 100% | 1.00 | 2.2 s | $0.058 |
+  | Local, below 0.6 to the LLM (default) | 99% | 0.99 | 3 ms (p95 2.4 s) | $0.015 |
+  | Jev, below 0.6 to the LLM | 94% | 0.94 | 267 ms | $0.020 |
+
+  At the 0.6 threshold, 27% of questions go to the LLM. The default still holds. The one remaining mistake is "Where does the Minister for Manpower live?", which the local classifier called in scope with confidence 0.64. Jev again called the demo question off topic, this time with confidence 0.73.
+
 ## D-025 · 2026-10-14 · MAS not crawled; crawl depth raised to 500 per agency
 - **MAS:** For non-browser clients, its site returns the same "service unavailable, try another browser" page for every URL, including its sitemap and any feed path. Getting around that would mean evading the site's access controls, so MAS is not crawled. MAS pages remain reachable through the web search tool (`mas.gov.sg` is in its domain list).
 - **Crawl depth:** The default is the 500 most recent pages per agency (changed since 2024). The first crawl took 150 per agency: 749 documents, no failures, plus the 4,655-dataset catalogue, giving 7,592 passages in a 35 MB index.
+
+## D-026 · 2026-10-14 · API: background runs, numbered events, replayable stream
+- **Decision:**
+  - **Background runs.** FastAPI starts each user message as a background run in a worker thread, because the graph and its LLM calls are synchronous. The API returns at once with a run ID (HTTP 202).
+  - **Stored events.** Every trace event is saved with a per-run sequence number. A WebSocket (`/api/runs/{id}/stream?after=N`) replays the saved events, then follows the run live, so a late viewer or a reconnecting browser sees the whole run. Report drafts are stored in chunks of about 120 characters rather than token by token.
+  - **Storage.** A second SQLite database (`var/app.sqlite`, SQLAlchemy) lists threads and runs and holds events and the LLM call log. The conversation itself stays in the LangGraph checkpointer (D-002).
+  - **Rules.** A thread runs one request at a time; a second message gets HTTP 409. A message or answer containing personal identifiers is rejected with HTTP 400 in the user's language, before it is stored or sent anywhere.
+  - **Report security.** HTML reports are served with a Content-Security-Policy. Scripts may only be inline or from cdnjs (Plotly, pinned with SRI), and the page may make no network connections. Plotly charts render under this policy, checked in headless Chrome.
+- **Alternatives:**
+  - Server-sent events: simpler but one-way, and the scope asked for WebSockets.
+  - A Celery or Redis job queue: more infrastructure than one machine needs.
+  - Events kept only in memory: no replay after a restart, and no audit trail.
+- **Agent fixes found by live API runs:**
+  - **Search budget.** Each extraction task may run at most 3 document searches and 2 web searches, enforced in code.
+  - **Prompt rule.** Curated datasets are official statistics: the agents do not search to verify them. A curated dataset whose coverage differs slightly from the request (e.g. residents only) is used, and the difference is stated as a caveat.
+  - **Retries keep earlier work.** A retried extraction keeps what the first attempt loaded. It was replacing it, which left analytics with no data.
+  - **Duplicate web results.** Web results that differ only by a page-version or tracking parameter count as one page.
+- **Measured** (the demo comparison question, low effort, through the API):
+
+  | | Time | LLM calls | Cost | Result |
+  |---|---|---|---|---|
+  | Before | 210 s | 25 | $0.23 | Answered, after redundant searches |
+  | With the budget only | 121 s | 23 | $0.11 | Unanswered: the retry lost the loaded data |
+  | All four fixes | 89 s | 14 | $0.13 | Answered: grounded, reviewer passed, chart rendered |
+

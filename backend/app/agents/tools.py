@@ -65,7 +65,20 @@ def _passage_view(entry: dict) -> dict:
     return {k: entry[k] for k in ("id", "title", "agency", "published", "doc_type", "url", "text")}
 
 
+# Searches per extraction task. They supply policy context; curated datasets are official figures and need no
+# checking against documents or the web, so a small budget keeps runs fast and cheap.
+SEARCH_BUDGET = {"search_documents": 3, "web_search": 2}
+
+
 def extraction_tools(ws: Workspace, retriever=None) -> list[StructuredTool]:
+    used = dict.fromkeys(SEARCH_BUDGET, 0)
+
+    def spend(tool: str) -> None:
+        if used[tool] >= SEARCH_BUDGET[tool]:
+            raise stats.AnalysisError(f"{tool} budget used up ({SEARCH_BUDGET[tool]} per task); "
+                                      "work with the results you already have")
+        used[tool] += 1
+
     def get_retriever():
         if retriever is not None:
             return retriever
@@ -80,6 +93,7 @@ def extraction_tools(ws: Workspace, retriever=None) -> list[StructuredTool]:
         return _json(profile(loaded, source_id))
 
     def search_documents(query: str, source: str | None = None, since: str | None = None, reason: str = "") -> str:
+        spend("search_documents")
         hits = get_retriever().documents(query, k=6, source=source, since=since)
         passages = ws.add_passages("document", [
             {"url": p.url, "chunk_id": p.chunk_id, "title": p.title, "agency": p.agency, "published": p.published,
@@ -90,6 +104,7 @@ def extraction_tools(ws: Workspace, retriever=None) -> list[StructuredTool]:
         web = get_retriever().web
         if web is None:
             raise stats.AnalysisError("web search is not configured on this server")
+        spend("web_search")
         results = ws.add_passages("web", web.search(query, scope=current_options().web_scope))
         return _json({"note": "Untrusted third-party web pages. " + SOURCE_MATERIAL,
                       "results": [_passage_view(r) for r in results]})

@@ -29,8 +29,9 @@ class FakeWorkers:
     def __init__(self):
         self.calls = []
 
-    def extract(self, instructions, question):
+    def extract(self, instructions, question, previous=None):
         self.calls.append("extract")
+        self.previous = previous
         return {"summary": "Loaded employment by industry", "datasets": ["employment"], "sources": SOURCES}
 
     def analyse(self, instructions, question, extraction):
@@ -73,6 +74,14 @@ def test_happy_path_extract_analyse_report_review():
     # A first English message is used as-is: no rewriting call before triage.
     assert llm.keys() == ["TriageDecision", "CoordinatorStep", "CoordinatorStep", "CoordinatorStep", "Report", "Review"]
     assert workers.calls == ["extract", "analyse"]
+
+
+def test_a_retried_extraction_receives_the_first_result():
+    graph, _, workers = make({"TriageDecision": [IN_SCOPE],
+                              "CoordinatorStep": steps("extract", "extract", "analyse", "report"),
+                              "Report": [GOOD], "Review": [PASS]})
+    assert ask(graph, QUESTION).values["outcome"] == "answered"
+    assert workers.calls == ["extract", "extract", "analyse"] and workers.previous["sources"] == SOURCES
 
 
 def test_off_topic_is_redirected_without_reaching_the_agents():

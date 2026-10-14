@@ -8,7 +8,7 @@ import re
 import httpx
 import pytest
 
-from app.agents.tools import extraction_tools
+from app.agents.tools import SEARCH_BUDGET, extraction_tools
 from app.analysis.workspace import Workspace
 from app.graph.nodes import reporting
 from app.graph.state import Claim, Report
@@ -241,6 +241,22 @@ def test_search_tools_register_citable_passages(corpus):
     assert next(s for s in ws.sources if s["id"] == "W1")["untrusted"] is True
 
 
+def test_searches_stop_when_the_task_budget_is_used_up(corpus):
+    def fresh():
+        return {t.name: t for t in extraction_tools(Workspace(FakeStore()),
+                                                     Retriever(corpus, HashEmbedder(), OverlapReranker(), FakeWeb()))}
+    tools = fresh()
+    for _ in range(SEARCH_BUDGET["search_documents"]):
+        tools["search_documents"].invoke({"query": "tech employment", "reason": "context"})
+    for _ in range(SEARCH_BUDGET["web_search"]):
+        tools["web_search"].invoke({"query": "budget skills", "reason": "recent"})
+    with pytest.raises(Exception, match="budget used up"):
+        tools["search_documents"].invoke({"query": "tech employment", "reason": "one more"})
+    with pytest.raises(Exception, match="budget used up"):
+        tools["web_search"].invoke({"query": "budget skills", "reason": "one more"})
+    fresh()["search_documents"].invoke({"query": "tech employment", "reason": "a new task has a new budget"})
+
+
 def test_web_search_without_a_key_is_a_clear_error(corpus):
     tools = {t.name: t for t in extraction_tools(Workspace(FakeStore()), Retriever(corpus, HashEmbedder(), None))}
     with pytest.raises(Exception, match="not configured"):
@@ -265,12 +281,16 @@ def test_tavily_results_are_deduplicated_and_scoped(monkeypatch):
     def post(url, headers, json, timeout):
         sent.update(json)
         results = [{"title": "A", "url": u, "content": "c"} for u in
-                   ("https://www.mom.gov.sg/a", "http://mom.gov.sg/a/", "https://www.mom.gov.sg/b")]
+                   ("https://www.mom.gov.sg/a", "http://mom.gov.sg/a/", "https://www.mom.gov.sg/b",
+                    "https://mom.gov.sg/Pages/A?PageVersion=12", "https://mom.gov.sg/pages/a?pageversion=",
+                    "https://mom.gov.sg/b?utm_source=x", "https://mom.gov.sg/b?id=2")]
         return httpx.Response(200, json={"results": results}, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(httpx, "post", post)
     results = TavilySearch(api_key="test").search("q")
-    assert [r["url"] for r in results] == ["https://www.mom.gov.sg/a", "https://www.mom.gov.sg/b"]
+    assert [r["url"] for r in results] == ["https://www.mom.gov.sg/a", "https://www.mom.gov.sg/b",
+                                           "https://mom.gov.sg/Pages/A?PageVersion=12", "https://mom.gov.sg/b?id=2"]
+    assert results[2]["key"] == "mom.gov.sg/pages/a"  # page versions and tracking tags are the same page
     assert results[0]["agency"] == "mom.gov.sg"  # web results are labelled with their site
     assert "mom.gov.sg" in sent["include_domains"]
     sent.clear()

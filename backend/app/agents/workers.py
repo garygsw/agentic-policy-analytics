@@ -21,14 +21,21 @@ class AgentWorkers:
         self.store = store or DataStore()
         self.retriever = retriever  # None: the shared document index, opened on first search
 
-    def extract(self, instructions: str, question: str) -> dict:
-        ws = Workspace(self.store)
-        tools = enabled(extraction_tools(ws, self.retriever))
-        summary = run_tool_loop(self.llm, node="extraction", tools=tools, max_steps=6,
-                                system=prompts.EXTRACTION.format(catalogue=curated_catalogue()),
-                                task=f"Question: {question}\n\nTask from the coordinator: {instructions}")
-        return {"summary": summary, "datasets": ws.profiles(), "sources": ws.sources,
-                "passages": len(ws.passages())}
+    def extract(self, instructions: str, question: str, previous: dict | None = None) -> dict:
+        """`previous`: what earlier extraction steps of this turn loaded. Their datasets stay available and new
+        sources continue the numbering, so S1 keeps meaning the same dataset."""
+        previous = previous or {}
+        ws = Workspace(self.store, sources=previous.get("sources"))
+        task = f"Question: {question}\n\nTask from the coordinator: {instructions}"
+        if previous.get("datasets"):
+            task += "\n\nAlready loaded (no need to load again): " + "; ".join(
+                f"{d['source_id']} {d['title']}" for d in previous["datasets"])
+        summary = run_tool_loop(self.llm, node="extraction", tools=enabled(extraction_tools(ws, self.retriever)),
+                                max_steps=6, system=prompts.EXTRACTION.format(catalogue=curated_catalogue()),
+                                task=task)
+        new = ws.profiles()
+        kept = [d for d in previous.get("datasets", []) if d["dataset_id"] not in {n["dataset_id"] for n in new}]
+        return {"summary": summary, "datasets": kept + new, "sources": ws.sources, "passages": len(ws.passages())}
 
     def analyse(self, instructions: str, question: str, extraction: dict) -> dict:
         ws = Workspace(self.store, sources=extraction.get("sources"))

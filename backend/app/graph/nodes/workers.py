@@ -14,14 +14,15 @@ from app.graph.state import AgentState
 
 
 class Workers(Protocol):
-    def extract(self, instructions: str, question: str) -> dict[str, Any]: ...
+    def extract(self, instructions: str, question: str, previous: dict[str, Any] | None = None) -> dict[str, Any]:
+        ...
     def analyse(self, instructions: str, question: str, extraction: dict[str, Any]) -> dict[str, Any]: ...
 
 
 class StubWorkers:
     """Placeholder until the data and analytics agents are built: reports that no data was loaded."""
 
-    def extract(self, instructions: str, question: str) -> dict[str, Any]:
+    def extract(self, instructions: str, question: str, previous: dict[str, Any] | None = None) -> dict[str, Any]:
         return {"summary": "Data extraction is not implemented yet; no datasets loaded.", "datasets": [],
                 "sources": []}
 
@@ -32,9 +33,12 @@ class StubWorkers:
 def make_extraction(workers: Workers) -> Callable:
     @guarded("extraction")
     def extraction(state: AgentState) -> dict:
-        result = workers.extract(state["coordinator_steps"][-1].instructions, state["question"])
+        findings = state.get("findings") or {}
+        # A second extraction step (a retry, or more data the reviewer asked for) builds on the first.
+        result = workers.extract(state["coordinator_steps"][-1].instructions, state["question"],
+                                 findings.get("extraction"))
         emit("extraction", "observation", result.get("summary", ""))
-        return {"findings": {**(state.get("findings") or {}), "extraction": result}}
+        return {"findings": {**findings, "extraction": result}}
     return extraction
 
 

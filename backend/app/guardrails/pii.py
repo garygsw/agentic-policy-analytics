@@ -49,8 +49,20 @@ def screen(text: str) -> list[Finding]:
     return sorted(findings, key=lambda f: f.start)
 
 
-def rejection_message(findings: list[Finding]) -> str:
+REJECTION = {  # {kinds} is filled with the kinds found, in English
+    "en": "Your message was not sent because it appears to contain personal information ({kinds}). Please remove it "
+          "and ask again. Questions about policies, statistics and public figures are fine.",
+    "zh": "您的信息未被发送，因为其中似乎包含个人信息（{kinds}）。请删除后再提问。"
+          "有关政策、统计数据和公众人物的问题均可提出。",
+    "ms": "Mesej anda tidak dihantar kerana ia nampaknya mengandungi maklumat peribadi ({kinds}). Sila buang maklumat "
+          "itu dan tanya semula. Soalan tentang dasar, statistik dan tokoh awam dibenarkan.",
+    "ta": "உங்கள் செய்தியில் தனிப்பட்ட தகவல்கள் ({kinds}) இருப்பதாகத் தெரிவதால் அது அனுப்பப்படவில்லை. அவற்றை நீக்கிவிட்டு "
+          "மீண்டும் கேளுங்கள். கொள்கைகள், புள்ளிவிவரங்கள், பொது நபர்கள் பற்றிய கேள்விகளைக் கேட்கலாம்.",
+}
+
+
+def rejection_message(findings: list[Finding], language: str = "en") -> str:
+    """Names the kinds of identifier found, never the values, in the user's language."""
     kinds = list(dict.fromkeys(f.kind for f in findings))
     listed = kinds[0] if len(kinds) == 1 else ", ".join(kinds[:-1]) + " and " + kinds[-1]
-    return (f"Your message was not sent because it appears to contain personal information ({listed}). "
-            "Please remove it and ask again. Questions about policies, statistics and public figures are fine.")
+    return REJECTION.get(language, REJECTION["en"]).format(kinds=listed)

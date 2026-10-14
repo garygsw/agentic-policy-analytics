@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Demo switch: treat every live data source as down, so cached data and snapshots are used.
     force_source_fail: bool = False
 
+    # Browser origins allowed to call the API (the web UI in development and in Docker Compose).
+    api_cors_origins: list[str] = ["http://localhost:3000"]
+
     # Document ingestion: when the ingest service runs (cron syntax, Singapore time) and how far back it looks.
     ingest_cron: str = "0 3 * * *"
     ingest_since: str = "2024-01-01"

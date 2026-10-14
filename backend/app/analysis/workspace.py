@@ -59,7 +59,7 @@ class Workspace:
         """Register document passages (D#) or web results (W#) as citable sources; repeats keep their ID."""
         registered = []
         for p in passages:
-            key = f"{p['url']}#{p.get('chunk_id', '')}"
+            key = p.get("key") or f"{p['url']}#{p.get('chunk_id', '')}"  # web results bring a normalised key
             existing = next((s for s in self.sources if s.get("key") == key), None)
             if existing is None:
                 existing = {"id": self._next_id(kind), "kind": kind, "key": key, "title": p["title"],

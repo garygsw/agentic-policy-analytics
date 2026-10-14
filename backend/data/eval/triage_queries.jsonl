@@ -158,3 +158,11 @@
 {"query": "Write a Python script to scrape websites", "label": "off_topic"}
 {"query": "Who is the Prime Minister dating?", "label": "off_topic"}
 {"query": "What is Japan's GDP growth this year?", "label": "off_topic"}
+{"query": "Compare Singapore's unemployment rate with the US", "label": "in_scope"}
+{"query": "How does Singapore's GDP growth compare with Japan's?", "label": "in_scope"}
+{"query": "Is Singapore's tech workforce growing faster than Malaysia's?", "label": "in_scope"}
+{"query": "Compare HDB resale prices with Hong Kong housing prices", "label": "in_scope"}
+{"query": "How does Singapore's life expectancy compare with other developed countries?", "label": "in_scope"}
+{"query": "What is the population of Australia?", "label": "off_topic"}
+{"query": "How many people work in tech in the United Kingdom?", "label": "off_topic"}
+{"query": "Can I withdraw my CPF savings early?", "label": "off_topic"}
