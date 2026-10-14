@@ -1,0 +1,33 @@
+{
+ "quality": {
+  "dataset_id": "employment_by_industry",
+  "rows_in": 5760,
+  "rows_out": 5760,
+  "invalid_periods": 0,
+  "missing_values": {
+   "employed": 0
+  },
+  "unparseable_values": {
+   "employed": 0
+  },
+  "duplicates_removed": 0,
+  "total_rows_removed": 0,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "2010",
+   "2025"
+  ],
+  "notes": []
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "data.gov.sg",
+  "agency": "Ministry of Manpower",
+  "urls": [
+   "https://data.gov.sg/datasets/d_a7ece9330c024a90b258776e69c2ae00/view"
+  ],
+  "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
+  "retrieved_at": "2026-10-14T05:45:09.477296+00:00",
+  "warning": null
+ }
+}

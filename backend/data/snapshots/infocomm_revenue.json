@@ -1,0 +1,35 @@
+{
+ "quality": {
+  "dataset_id": "infocomm_revenue",
+  "rows_in": 85,
+  "rows_out": 85,
+  "invalid_periods": 0,
+  "missing_values": {
+   "infocomm_industry_revenue": 0
+  },
+  "unparseable_values": {
+   "infocomm_industry_revenue": 0
+  },
+  "duplicates_removed": 0,
+  "total_rows_removed": 0,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "2001",
+   "2017"
+  ],
+  "notes": [
+   "fixed source typo 'telecommuncation' in segment names"
+  ]
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "data.gov.sg",
+  "agency": "Info-communications Media Development Authority",
+  "urls": [
+   "https://data.gov.sg/datasets/d_c819e013e5cea669f71872b6cb5fddfe/view"
+  ],
+  "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
+  "retrieved_at": "2026-10-14T05:45:25.130556+00:00",
+  "warning": null
+ }
+}

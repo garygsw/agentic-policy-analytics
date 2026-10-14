@@ -1,0 +1,39 @@
+{
+ "quality": {
+  "dataset_id": "coe_bidding_results",
+  "rows_in": 1985,
+  "rows_out": 7940,
+  "invalid_periods": 0,
+  "missing_values": {
+   "premium": 0,
+   "quota": 0,
+   "bids_received": 0,
+   "bids_success": 0
+  },
+  "unparseable_values": {
+   "premium": 0,
+   "quota": 0,
+   "bids_received": 0,
+   "bids_success": 0
+  },
+  "duplicates_removed": 0,
+  "total_rows_removed": 0,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "2010-01",
+   "2026-10"
+  ],
+  "notes": []
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "data.gov.sg",
+  "agency": "Land Transport Authority",
+  "urls": [
+   "https://data.gov.sg/datasets/d_69b3380ad7e51aff3a7dcc84eba52b8a/view"
+  ],
+  "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
+  "retrieved_at": "2026-10-14T05:45:56.705497+00:00",
+  "warning": null
+ }
+}

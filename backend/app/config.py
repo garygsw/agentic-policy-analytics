@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # Demo switch: make every primary call fail so the fallback is visible.
     force_primary_fail: bool = False
 
+    # Data sources: cleaned data younger than this is reused without fetching again.
+    data_max_age_hours: float = 24.0
+    # Demo switch: treat every live data source as down, so cached data and snapshots are used.
+    force_source_fail: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

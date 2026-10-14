@@ -1,0 +1,39 @@
+{
+ "quality": {
+  "dataset_id": "hdb_resale_transactions",
+  "rows_in": 242634,
+  "rows_out": 40083,
+  "invalid_periods": 0,
+  "missing_values": {
+   "median_resale_price": 0,
+   "median_price_per_sqm": 0,
+   "transactions": 0
+  },
+  "unparseable_values": {
+   "median_resale_price": 0,
+   "median_price_per_sqm": 0,
+   "transactions": 0
+  },
+  "duplicates_removed": 0,
+  "total_rows_removed": 0,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "2017-01",
+   "2026-10"
+  ],
+  "notes": [
+   "aggregated from 242,634 individual resale transactions"
+  ]
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "data.gov.sg",
+  "agency": "Housing & Development Board",
+  "urls": [
+   "https://data.gov.sg/datasets/d_8b84c4ee58e3cfc0ece0d773c8ca6abc/view"
+  ],
+  "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
+  "retrieved_at": "2026-10-14T05:46:34.789893+00:00",
+  "warning": null
+ }
+}

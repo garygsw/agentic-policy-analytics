@@ -1,0 +1,37 @@
+{
+ "quality": {
+  "dataset_id": "internal_tech_programmes",
+  "rows_in": 105,
+  "rows_out": 286,
+  "invalid_periods": 0,
+  "missing_values": {
+   "participants": 0,
+   "placed_within_6_months": 1,
+   "median_starting_salary_sgd": 0
+  },
+  "unparseable_values": {
+   "participants": 0,
+   "placed_within_6_months": 0,
+   "median_starting_salary_sgd": 1
+  },
+  "duplicates_removed": 1,
+  "total_rows_removed": 8,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "2018",
+   "2025"
+  ],
+  "notes": []
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "Internal (mock)",
+  "agency": "Internal agency system (mock)",
+  "urls": [
+   "internal://tech_talent_programmes.xlsx"
+  ],
+  "licence": "Synthetic data for demonstration; not an official statistic",
+  "retrieved_at": "2026-10-14T05:50:47.360562+00:00",
+  "warning": null
+ }
+}

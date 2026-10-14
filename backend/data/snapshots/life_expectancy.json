@@ -1,0 +1,33 @@
+{
+ "quality": {
+  "dataset_id": "life_expectancy",
+  "rows_in": 64,
+  "rows_out": 64,
+  "invalid_periods": 0,
+  "missing_values": {
+   "LE_total_population_GBD": 0
+  },
+  "unparseable_values": {
+   "LE_total_population_GBD": 0
+  },
+  "duplicates_removed": 0,
+  "total_rows_removed": 0,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "1990",
+   "2021"
+  ],
+  "notes": []
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "data.gov.sg",
+  "agency": "Ministry of Health",
+  "urls": [
+   "https://data.gov.sg/datasets/d_e8e0db9cbd76e12eaa2bf071cc9ce964/view"
+  ],
+  "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
+  "retrieved_at": "2026-10-14T05:46:18.084466+00:00",
+  "warning": null
+ }
+}

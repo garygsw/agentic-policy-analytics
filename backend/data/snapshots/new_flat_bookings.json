@@ -1,0 +1,33 @@
+{
+ "quality": {
+  "dataset_id": "new_flat_bookings",
+  "rows_in": 17,
+  "rows_out": 17,
+  "invalid_periods": 0,
+  "missing_values": {
+   "no_of_units": 0
+  },
+  "unparseable_values": {
+   "no_of_units": 0
+  },
+  "duplicates_removed": 0,
+  "total_rows_removed": 0,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "FY2008",
+   "FY2024"
+  ],
+  "notes": []
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "data.gov.sg",
+  "agency": "Housing & Development Board",
+  "urls": [
+   "https://data.gov.sg/datasets/d_e6079cb5bf0c2450372b1054f37e6e79/view"
+  ],
+  "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
+  "retrieved_at": "2026-10-14T05:45:46.172445+00:00",
+  "warning": null
+ }
+}

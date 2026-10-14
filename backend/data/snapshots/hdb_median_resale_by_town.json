@@ -1,0 +1,33 @@
+{
+ "quality": {
+  "dataset_id": "hdb_median_resale_by_town",
+  "rows_in": 12012,
+  "rows_out": 5546,
+  "invalid_periods": 0,
+  "missing_values": {
+   "price": 6466
+  },
+  "unparseable_values": {
+   "price": 0
+  },
+  "duplicates_removed": 0,
+  "total_rows_removed": 0,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "2007-Q2",
+   "2026-Q2"
+  ],
+  "notes": []
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "data.gov.sg",
+  "agency": "Housing & Development Board",
+  "urls": [
+   "https://data.gov.sg/datasets/d_b51323a474ba789fb4cc3db58a3116d4/view"
+  ],
+  "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
+  "retrieved_at": "2026-10-14T05:45:35.684451+00:00",
+  "warning": null
+ }
+}

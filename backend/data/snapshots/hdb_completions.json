@@ -1,0 +1,37 @@
+{
+ "quality": {
+  "dataset_id": "hdb_completions",
+  "rows_in": 10817,
+  "rows_out": 1450,
+  "invalid_periods": 0,
+  "missing_values": {
+   "blocks": 0,
+   "dwelling_units": 0
+  },
+  "unparseable_values": {
+   "blocks": 0,
+   "dwelling_units": 0
+  },
+  "duplicates_removed": 0,
+  "total_rows_removed": 0,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "1937",
+   "2026"
+  ],
+  "notes": [
+   "aggregated from 10,817 existing residential blocks"
+  ]
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "data.gov.sg",
+  "agency": "Housing & Development Board",
+  "urls": [
+   "https://data.gov.sg/datasets/d_17f5382f26140b1fdae0ba2ef6239d2f/view"
+  ],
+  "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
+  "retrieved_at": "2026-10-14T05:45:51.493120+00:00",
+  "warning": null
+ }
+}
