@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     openai_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None
+    tavily_api_key: SecretStr | None = None      # web search tool (optional)
+    typesafe_api_key: SecretStr | None = None    # Jev classifier trial (optional)
     # Provider endpoints are set here on purpose. The SDKs would otherwise honour ambient
     # OPENAI_BASE_URL / ANTHROPIC_BASE_URL shell variables and could silently send traffic elsewhere.
     llm_openai_base_url: str = "https://api.openai.com/v1"
@@ -38,6 +40,11 @@ class Settings(BaseSettings):
     data_max_age_hours: float = 24.0
     # Demo switch: treat every live data source as down, so cached data and snapshots are used.
     force_source_fail: bool = False
+
+    # Document ingestion: when the ingest service runs (cron syntax, Singapore time) and how far back it looks.
+    ingest_cron: str = "0 3 * * *"
+    ingest_since: str = "2024-01-01"
+    ingest_limit_per_source: int = 150
 
 
 @lru_cache

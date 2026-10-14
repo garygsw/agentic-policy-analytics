@@ -10,6 +10,9 @@ from app.analysis.stats import dimensions
 from app.data.registry import CURATED
 from app.data.store import SNAPSHOT_DIR, DataStore, LoadedDataset
 
+PREFIX = {"dataset": "S", "document": "D", "web": "W"}
+MAX_PASSAGE_CHARS = 1500
+
 
 def round_value(value: float, unit: str) -> float | int:
     """The precision a report should quote, decided once here so the report and the check agree."""
@@ -37,15 +40,35 @@ class Workspace:
 
     def _source_id(self, loaded: LoadedDataset) -> str:
         for source in self.sources:
-            if source["dataset_id"] == loaded.dataset.key:
+            if source.get("dataset_id") == loaded.dataset.key:
                 return source["id"]
         p = loaded.provenance
-        source = {"id": f"S{len(self.sources) + 1}", "dataset_id": loaded.dataset.key, "title": loaded.dataset.title,
+        source = {"id": self._next_id("dataset"), "kind": "dataset", "dataset_id": loaded.dataset.key,
+                  "title": loaded.dataset.title,
                   "agency": loaded.dataset.agency, "publisher": p.source, "url": p.urls[0], "licence": p.licence,
                   "origin": p.origin, "retrieved_at": p.retrieved_at[:10], "warning": p.warning,
                   "quality": loaded.quality.summary(), "notes": loaded.dataset.notes}
         self.sources.append(source)
         return source["id"]
+
+    def _next_id(self, kind: str) -> str:
+        count = sum(1 for s in self.sources if s.get("kind", "dataset") == kind)
+        return f"{PREFIX[kind]}{count + 1}"
+
+    def add_passages(self, kind: str, passages: list[dict]) -> list[dict]:
+        """Register document passages (D#) or web results (W#) as citable sources; repeats keep their ID."""
+        registered = []
+        for p in passages:
+            key = f"{p['url']}#{p.get('chunk_id', '')}"
+            existing = next((s for s in self.sources if s.get("key") == key), None)
+            if existing is None:
+                existing = {"id": self._next_id(kind), "kind": kind, "key": key, "title": p["title"],
+                            "agency": p.get("agency", ""), "url": p["url"], "published": p.get("published", ""),
+                            "doc_type": p.get("doc_type", kind), "text": p["text"][:MAX_PASSAGE_CHARS],
+                            "untrusted": kind == "web"}
+                self.sources.append(existing)
+            registered.append(existing)
+        return registered
 
     def add_fact(self, label: str, value: float, unit: str, sources: list[str], method: str = "") -> str:
         if value is None or (isinstance(value, float) and math.isnan(value)):
@@ -59,6 +82,9 @@ class Workspace:
         chart = {"id": f"C{len(self.charts) + 1}", "title": title, "spec": spec, "table": table, "sources": sources}
         self.charts.append(chart)
         return chart["id"]
+
+    def passages(self) -> list[dict]:
+        return [s for s in self.sources if s.get("kind") in ("document", "web")]
 
     def profiles(self) -> list[dict]:
         return [profile(loaded, self._source_id(loaded)) for loaded in self._loaded.values()]

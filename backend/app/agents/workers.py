@@ -16,16 +16,19 @@ def enabled(tools: list) -> list:
 
 
 class AgentWorkers:
-    def __init__(self, llm, store: DataStore | None = None):
+    def __init__(self, llm, store: DataStore | None = None, retriever=None):
         self.llm = llm
         self.store = store or DataStore()
+        self.retriever = retriever  # None: the shared document index, opened on first search
 
     def extract(self, instructions: str, question: str) -> dict:
         ws = Workspace(self.store)
-        summary = run_tool_loop(self.llm, node="extraction", tools=enabled(extraction_tools(ws)), max_steps=6,
+        tools = enabled(extraction_tools(ws, self.retriever))
+        summary = run_tool_loop(self.llm, node="extraction", tools=tools, max_steps=6,
                                 system=prompts.EXTRACTION.format(catalogue=curated_catalogue()),
                                 task=f"Question: {question}\n\nTask from the coordinator: {instructions}")
-        return {"summary": summary, "datasets": ws.profiles(), "sources": ws.sources}
+        return {"summary": summary, "datasets": ws.profiles(), "sources": ws.sources,
+                "passages": len(ws.passages())}
 
     def analyse(self, instructions: str, question: str, extraction: dict) -> dict:
         ws = Workspace(self.store, sources=extraction.get("sources"))

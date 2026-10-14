@@ -10,6 +10,7 @@ The main model and the reasoning effort (low/medium/high) can be chosen per requ
 They apply to the quality tier; the fast tier always uses its configured models at low effort. Choosing a
 Claude model as the main model makes the OpenAI model at the same price its fallback, and vice versa.
 """
+import warnings
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -25,6 +26,10 @@ from app.config import Settings, get_settings
 from app.graph.options import FALLBACK_FOR, Effort, current_options
 
 Tier = Literal["quality", "fast"]
+
+# The OpenAI SDK types the `parsed` field of structured-output responses loosely, so pydantic warns whenever
+# LangChain serialises one. The parsed result itself is correct; only this exact warning is silenced.
+warnings.filterwarnings("ignore", message="Pydantic serializer warnings", category=UserWarning)
 
 
 def provider_of(model: str) -> str:

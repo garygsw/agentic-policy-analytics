@@ -36,7 +36,7 @@ Each entry records the date, the decision, the alternatives considered and the r
 - **Alternatives:** LanceDB or a Qdrant service for storage. Hosted embeddings, which would have no fallback because only one of the two providers offers embeddings. An LLM as reranker, which is slower and costs tokens.
 - **Why:** A single local stack works offline and at no cost, and it keeps working when an LLM provider is down.
 - **Copyright:** Fetched documents are cached locally and never committed, because some agencies' terms forbid republication without permission. The repo holds only source manifests and synthetic test fixtures.
-- **Open:** Which sources come first.
+- **Resolved in D-023.**
 
 ## D-007 · 2026-10-14 · HTML reports rendered from a validated structure
 - **Decision:** The LLM writes a structured report: sections, claims with citation IDs, and chart IDs. It is validated by pydantic and checked for grounding and citations, then a template renders it as self-contained HTML in a clean, minimal reading style. Charts come from a chart tool that takes column references, never numbers.
@@ -180,3 +180,21 @@ Each entry records the date, the decision, the alternatives considered and the r
   - **Safety.** All model-written text is escaped, and chart titles are kept plain. Fixed page labels in four languages live in `app/report/labels.json` for translators to review.
 - **Alternatives:** Showing the report only after the check: nothing unchecked is visible, but the text appears about 10 to 15 seconds later. Letting the LLM write HTML directly (rejected in D-007).
 - **Why:** The user sees progress at once, and verification stays visible instead of hidden.
+
+## D-023 · 2026-10-14 · Document search (RAG)
+- **Decision:**
+  - **Sources.** Five agency newsrooms, crawled through their XML sitemaps: MOM, MOF, PMO, MOH and URA. The first crawl takes recent pages (changed since 2024, at most 150 per agency). Later runs fetch only new or changed pages, using the sitemap's lastmod. The data.gov.sg dataset catalogue is indexed in the same store.
+  - **Crawling.** robots.txt is honoured, including its Crawl-delay. Page text is extracted with trafilatura. Raw HTML is not kept, and the index stays on the machine that built it. It is never committed, because agency terms do not allow republication.
+  - **Chunking by document type.** Paragraphs are packed into passages of about 350 tokens, overlapping by one paragraph, and long paragraphs are split at sentence ends. Every passage carries a header: the title, plus the question for parliamentary replies.
+  - **Storage.** One SQLite file holds three things: FTS5 for BM25 keyword search, sqlite-vec for vectors, and the documents table with each run's log. WAL mode lets the ingest service write while the API reads.
+  - **Models.** Embeddings use bge-small-en-v1.5 (local, MIT licence, 384 dimensions). The index records the model's name and refuses to run with a different one. Reranking uses a local cross-encoder, ms-marco-MiniLM-L-6-v2 (Apache-2.0).
+  - **Search.** Keyword, vector and hybrid modes. Hybrid merges the keyword and vector rank lists by reciprocal rank fusion (k = 60), then reranks the top 30, with at most two passages per document.
+  - **Agent tools:**
+    - `search_documents` returns passages D1, D2, …
+    - `web_search` uses Tavily with an explicit list of gov.sg domains (Tavily's domain filter ignores wildcards). The whole web is available only if the request asks for it. Results are W1, W2, …, are de-duplicated, and are marked untrusted.
+    - `search_datasets` now uses hybrid search over the catalogue.
+  - **Grounding.** A number in the report must match a computed fact, or appear in a passage that the same finding cites.
+  - **Scheduling.** The ingest service runs as its own process on a cron schedule (APScheduler, INGEST_CRON, default 03:00 Singapore time).
+- **Alternatives:** Hosted embeddings, which would have no fallback provider. A separate vector database service. LLM reranking.
+- **Why:** Everything runs locally with no extra service or key, keyword and semantic search complement each other, and every passage is citable and checkable.
+- **Measured:** On "AI skills training", keyword search and vector search returned different top documents, and hybrid search with reranking combined both.

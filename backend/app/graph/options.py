@@ -15,6 +15,8 @@ Effort = Literal["low", "medium", "high"]
 # statistics are always on, because nothing can be answered without them.
 OPTIONAL_TOOLS: dict[str, str] = {
     "search_datasets": "Search all 4,655 data.gov.sg datasets beyond the curated set",
+    "search_documents": "Search agency press releases, speeches and parliamentary replies",
+    "web_search": "Search the web (government sites only, unless widened)",
     "compute_correlation": "Correlate two series, across datasets",
     "list_records": "List and count records in tables that are not time series",
     "create_chart": "Draw charts for the report",
@@ -35,6 +37,7 @@ class RunOptions(BaseModel):
     model: str | None = None              # main model for the coordinator, agents, writer and reviewer
     reasoning_effort: Effort | None = None
     tools: list[str] | None = None        # enabled optional tools; None means all
+    web_scope: Literal["gov", "any"] = "gov"  # web search: Singapore government sites only, or the whole web
 
     @field_validator("model")
     @classmethod

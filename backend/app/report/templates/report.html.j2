@@ -114,11 +114,18 @@
     <ol class="sources">
       {% for s in sources %}
       <li id="{{ s.id }}">
+        {% if s.kind in ("document", "web") %}
+        <strong>[{{ s.id }}] {{ s.title }}</strong>{% if s.agency %} · {{ s.agency }}{% endif %}<br>
+        <a href="{{ s.url }}" rel="noopener">{{ s.url }}</a><br>
+        <span class="muted small">{{ L.kinds[s.kind] }}{% if s.published %} · {{ s.published[:10] }}{% endif %}</span>
+        {% if s.untrusted %}<div class="warning">{{ L.untrusted }}</div>{% endif %}
+        {% else %}
         <strong>[{{ s.id }}] {{ s.title }}</strong> · {{ s.agency }}<br>
         <a href="{{ s.url }}" rel="noopener">{{ s.url }}</a><br>
-        <span class="muted small">{{ L.retrieved }} {{ s.retrieved_at }} · {{ L.origin.get(s.origin, s.origin) }} · {{ s.licence }}</span>
+        <span class="muted small">{{ L.kinds.dataset }} · {{ L.retrieved }} {{ s.retrieved_at }} · {{ L.origin.get(s.origin, s.origin) }} · {{ s.licence }}</span>
         {% if s.quality %}<div class="muted small">{{ L.quality }}: {{ s.quality }}</div>{% endif %}
         {% if s.warning %}<div class="warning">{{ s.warning }}</div>{% endif %}
+        {% endif %}
       </li>
       {% endfor %}
     </ol>

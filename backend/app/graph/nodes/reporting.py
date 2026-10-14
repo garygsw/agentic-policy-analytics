@@ -29,6 +29,11 @@ def charts_of(state: AgentState) -> list[dict]:
     return ((state.get("findings") or {}).get("analytics") or {}).get("charts", [])
 
 
+def _show(number: float) -> str:
+    """How an unmatched number is quoted back to the writer: 3000000000.0 -> '3,000,000,000', 31.5 -> '31.5'."""
+    return f"{int(number):,}" if float(number).is_integer() else f"{number:,.6g}"
+
+
 def make_report_writer(llm) -> Callable:
     @guarded("report_writer")
     def report_writer(state: AgentState) -> dict:
@@ -49,17 +54,25 @@ def make_report_writer(llm) -> Callable:
 
 
 def validate(state: AgentState) -> dict:
-    """Deterministic checks: every number must match a computed fact (or the question), and every finding
-    must cite known facts or sources."""
+    """Deterministic checks: every number must match a computed fact (or the question), or appear in a document
+    passage the same finding cites; and every finding must cite known facts or sources."""
     emit("validate", "status", STATUS["validate"])
     report: Report = state["report"]
     facts = facts_of(state)
     allowed = [f["value"] for f in facts if isinstance(f.get("value"), int | float)]
     allowed += numbers_in(" ".join(str(f.get("label", "")) for f in facts)) + numbers_in(state["question"])
     known_ids = {f["id"] for f in facts} | {s["id"] for s in sources_of(state)}
-    issues = [f"summary: {n:g} does not match any computed fact" for n in ungrounded(report.summary, allowed)]
+    passages = {s["id"]: s.get("text", "") for s in sources_of(state) if s.get("kind") in ("document", "web")}
+
+    def quoted(citations: list[str]) -> list[float]:
+        return numbers_in(" ".join(passages[c] for c in citations if c in passages))
+
+    cited_anywhere = [c for claim in report.findings for c in claim.citations]
+    issues = [f"summary: {_show(n)} does not match any computed fact or cited passage"
+              for n in ungrounded(report.summary, allowed + quoted(cited_anywhere))]
     for i, claim in enumerate(report.findings, 1):
-        issues += [f"finding {i}: {n:g} does not match any computed fact" for n in ungrounded(claim.text, allowed)]
+        issues += [f"finding {i}: {_show(n)} does not match any computed fact or a passage this finding cites"
+                   for n in ungrounded(claim.text, allowed + quoted(claim.citations))]
         unknown = [c for c in claim.citations if c not in known_ids]
         if unknown:
             issues.append(f"finding {i}: cites unknown IDs {unknown}")
