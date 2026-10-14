@@ -1,0 +1,315 @@
+{
+ "train": 81,
+ "test": 79,
+ "threshold": 0.6,
+ "results": [
+  {
+   "classifier": "local",
+   "accuracy": 0.873,
+   "macro_f1": 0.86,
+   "recall": {
+    "in_scope": 0.971,
+    "off_topic": 0.773,
+    "vague": 0.818
+   },
+   "latency_ms_median": 3.6,
+   "latency_ms_p95": 7.9,
+   "cost_per_1000_usd": 0.0,
+   "escalated": 0,
+   "errors": 0,
+   "confusion": [
+    [
+     34,
+     1,
+     0
+    ],
+    [
+     3,
+     17,
+     2
+    ],
+    [
+     1,
+     3,
+     18
+    ]
+   ]
+  },
+  {
+   "classifier": "jev",
+   "accuracy": 0.937,
+   "macro_f1": 0.934,
+   "recall": {
+    "in_scope": 0.943,
+    "off_topic": 0.955,
+    "vague": 0.909
+   },
+   "latency_ms_median": 260.5,
+   "latency_ms_p95": 302.7,
+   "cost_per_1000_usd": 0.0174,
+   "escalated": 0,
+   "errors": 0,
+   "confusion": [
+    [
+     33,
+     2,
+     0
+    ],
+    [
+     1,
+     21,
+     0
+    ],
+    [
+     0,
+     2,
+     20
+    ]
+   ]
+  },
+  {
+   "classifier": "llm (gpt-6-luna)",
+   "accuracy": 0.987,
+   "macro_f1": 0.988,
+   "recall": {
+    "in_scope": 1.0,
+    "off_topic": 0.955,
+    "vague": 1.0
+   },
+   "latency_ms_median": 1770.8,
+   "latency_ms_p95": 2387.7,
+   "cost_per_1000_usd": 0.057,
+   "escalated": 0,
+   "errors": 0,
+   "confusion": [
+    [
+     35,
+     0,
+     0
+    ],
+    [
+     1,
+     21,
+     0
+    ],
+    [
+     0,
+     0,
+     22
+    ]
+   ]
+  },
+  {
+   "classifier": "local + llm (below 0.6)",
+   "accuracy": 0.975,
+   "macro_f1": 0.972,
+   "recall": {
+    "in_scope": 1.0,
+    "off_topic": 0.909,
+    "vague": 1.0
+   },
+   "latency_ms_median": 4.9,
+   "latency_ms_p95": 2051.6,
+   "cost_per_1000_usd": 0.0185,
+   "escalated": 24,
+   "errors": 0,
+   "confusion": [
+    [
+     35,
+     0,
+     0
+    ],
+    [
+     1,
+     20,
+     1
+    ],
+    [
+     0,
+     0,
+     22
+    ]
+   ]
+  },
+  {
+   "classifier": "jev + llm (below 0.6)",
+   "accuracy": 0.962,
+   "macro_f1": 0.957,
+   "recall": {
+    "in_scope": 1.0,
+    "off_topic": 0.955,
+    "vague": 0.909
+   },
+   "latency_ms_median": 262.7,
+   "latency_ms_p95": 2242.9,
+   "cost_per_1000_usd": 0.0237,
+   "escalated": 7,
+   "errors": 0,
+   "confusion": [
+    [
+     35,
+     0,
+     0
+    ],
+    [
+     1,
+     21,
+     0
+    ],
+    [
+     0,
+     2,
+     20
+    ]
+   ]
+  }
+ ],
+ "threshold_sweep": [
+  {
+   "threshold": 0.4,
+   "accuracy": 0.873,
+   "macro_f1": 0.86,
+   "escalated_share": 0.013,
+   "cost_per_1000_usd": 0.0007
+  },
+  {
+   "threshold": 0.5,
+   "accuracy": 0.924,
+   "macro_f1": 0.919,
+   "escalated_share": 0.114,
+   "cost_per_1000_usd": 0.0068
+  },
+  {
+   "threshold": 0.6,
+   "accuracy": 0.975,
+   "macro_f1": 0.972,
+   "escalated_share": 0.304,
+   "cost_per_1000_usd": 0.0185
+  },
+  {
+   "threshold": 0.7,
+   "accuracy": 0.987,
+   "macro_f1": 0.988,
+   "escalated_share": 0.43,
+   "cost_per_1000_usd": 0.0256
+  },
+  {
+   "threshold": 0.8,
+   "accuracy": 0.987,
+   "macro_f1": 0.988,
+   "escalated_share": 0.684,
+   "cost_per_1000_usd": 0.0388
+  },
+  {
+   "threshold": 0.9,
+   "accuracy": 0.987,
+   "macro_f1": 0.988,
+   "escalated_share": 0.949,
+   "cost_per_1000_usd": 0.0534
+  }
+ ],
+ "mistakes": {
+  "local": [
+   {
+    "query": "How do resale prices compare between Bishan and Ang Mo Kio for 5-room flats?",
+    "label": "in_scope",
+    "predicted": "off_topic",
+    "confidence": 0.59
+   },
+   {
+    "query": "What's the meaning of life?",
+    "label": "off_topic",
+    "predicted": "vague",
+    "confidence": 0.63
+   },
+   {
+    "query": "What is my neighbour's salary?",
+    "label": "off_topic",
+    "predicted": "in_scope",
+    "confidence": 0.47
+   },
+   {
+    "query": "What is the US unemployment rate?",
+    "label": "off_topic",
+    "predicted": "in_scope",
+    "confidence": 0.53
+   },
+   {
+    "query": "Am I eligible for an HDB loan?",
+    "label": "off_topic",
+    "predicted": "in_scope",
+    "confidence": 0.55
+   },
+   {
+    "query": "Review my resume",
+    "label": "off_topic",
+    "predicted": "vague",
+    "confidence": 0.46
+   },
+   {
+    "query": "Transport stuff",
+    "label": "vague",
+    "predicted": "off_topic",
+    "confidence": 0.51
+   },
+   {
+    "query": "Policy insights",
+    "label": "vague",
+    "predicted": "in_scope",
+    "confidence": 0.56
+   },
+   {
+    "query": "Break it down for me",
+    "label": "vague",
+    "predicted": "off_topic",
+    "confidence": 0.48
+   },
+   {
+    "query": "Tell me about policies",
+    "label": "vague",
+    "predicted": "off_topic",
+    "confidence": 0.41
+   }
+  ],
+  "jev": [
+   {
+    "query": "Analyse employment trends in the technology sector from 2020-2024",
+    "label": "in_scope",
+    "predicted": "off_topic",
+    "confidence": 0.58
+   },
+   {
+    "query": "How have retrenchment numbers changed after 2020 across industries?",
+    "label": "in_scope",
+    "predicted": "off_topic",
+    "confidence": 0.33
+   },
+   {
+    "query": "Am I eligible for an HDB loan?",
+    "label": "off_topic",
+    "predicted": "in_scope",
+    "confidence": 0.37
+   },
+   {
+    "query": "Tell me something interesting",
+    "label": "vague",
+    "predicted": "off_topic",
+    "confidence": 0.76
+   },
+   {
+    "query": "How are things?",
+    "label": "vague",
+    "predicted": "off_topic",
+    "confidence": 0.72
+   }
+  ],
+  "llm": [
+   {
+    "query": "Am I eligible for an HDB loan?",
+    "label": "off_topic",
+    "predicted": "in_scope",
+    "confidence": 0.97
+   }
+  ]
+ }
+}

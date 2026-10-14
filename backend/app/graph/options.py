@@ -38,6 +38,7 @@ class RunOptions(BaseModel):
     reasoning_effort: Effort | None = None
     tools: list[str] | None = None        # enabled optional tools; None means all
     web_scope: Literal["gov", "any"] = "gov"  # web search: Singapore government sites only, or the whole web
+    triage: Literal["local", "jev", "llm"] = "local"  # who makes the fast in-scope/off-topic/vague decision
 
     @field_validator("model")
     @classmethod

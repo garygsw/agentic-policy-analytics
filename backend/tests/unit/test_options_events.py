@@ -10,6 +10,7 @@ from app.agents.workers import enabled
 from app.cli import Display
 from app.config import Settings
 from app.graph.build import Deps, build_graph
+from app.graph.nodes.intake import llm_decider
 from app.graph.options import RunOptions, available_models, available_tools, current_options
 from app.llm.fake import ScriptedChatModel, structured
 from app.llm.ledger import Ledger
@@ -84,7 +85,8 @@ def test_run_emits_status_usage_and_context_events():
                                   provider="openai")
         return chat(tier, schema=schema, models=(model, model))
 
-    graph = build_graph(Deps(llm=factory, workers=FakeWorkers()), checkpointer=InMemorySaver())
+    graph = build_graph(Deps(llm=factory, workers=FakeWorkers(), decide=llm_decider(factory)),
+                        checkpointer=InMemorySaver())
     config = {"configurable": {"thread_id": "e"}, "callbacks": [Ledger()]}
     events = list(graph.stream({"messages": [HumanMessage(QUESTION)]}, config, stream_mode="custom"))
     kinds = {e["kind"] for e in events}

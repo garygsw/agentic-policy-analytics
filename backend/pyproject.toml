@@ -21,6 +21,7 @@ dependencies = [
     "sqlite-vec>=0.1.9",
     "trafilatura>=2.3",
     "apscheduler>=3.10,<4",
+    "scikit-learn>=1.5",
 ]
 
 [build-system]

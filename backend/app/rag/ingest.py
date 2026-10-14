@@ -31,7 +31,7 @@ from app.rag.sources import DOCUMENT_SOURCES, DocumentSource, doc_type
 
 MIN_CHARS = 200          # pages with less text are navigation or error pages
 DEFAULT_SINCE = "2023-01-01"
-DEFAULT_LIMIT = 300      # newest pages per source on each run
+DEFAULT_LIMIT = 500      # newest pages per source on each run
 ROBOTS_AGENT = "policy-analytics"
 
 

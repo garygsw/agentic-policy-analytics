@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # Document ingestion: when the ingest service runs (cron syntax, Singapore time) and how far back it looks.
     ingest_cron: str = "0 3 * * *"
     ingest_since: str = "2024-01-01"
-    ingest_limit_per_source: int = 150
+    ingest_limit_per_source: int = 500
 
 
 @lru_cache

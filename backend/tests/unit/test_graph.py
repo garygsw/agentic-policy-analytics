@@ -6,6 +6,7 @@ from langgraph.types import Command
 from app.graph import prompts
 from app.graph.build import Deps, build_graph
 from app.graph.checkpoint import serializer, sqlite_checkpointer
+from app.graph.nodes.intake import llm_decider
 from app.graph.state import Claim, CoordinatorStep, Report, ReportTexts, Review, StandaloneQuestion, TriageDecision
 from app.llm.fake import FakeLLMs
 
@@ -43,6 +44,7 @@ def steps(*actions):
 
 def make(replies, **deps):
     llm, workers = FakeLLMs(replies), FakeWorkers()
+    deps.setdefault("decide", llm_decider(llm))  # scripted triage; the real default loads the local model
     graph = build_graph(Deps(llm=llm, workers=workers, **deps), checkpointer=InMemorySaver(serde=serializer()))
     return graph, llm, workers
 
@@ -212,7 +214,8 @@ def test_ledger_attributes_each_llm_call_to_its_agent():
         return chat(tier, schema=schema, models=(primary, fallback))
 
     ledger = Ledger()
-    graph = build_graph(Deps(llm=factory, workers=FakeWorkers()), checkpointer=InMemorySaver())
+    graph = build_graph(Deps(llm=factory, workers=FakeWorkers(), decide=llm_decider(factory)),
+                        checkpointer=InMemorySaver())
     graph.invoke({"messages": [HumanMessage(QUESTION)]}, {"configurable": {"thread_id": "x"}, "callbacks": [ledger]})
     ok = [(c.agent, c.provider) for c in ledger.calls if c.ok]
     assert ok == [("triage", "anthropic"), *[("coordinator", "anthropic")] * 3, ("report_writer", "anthropic"),
@@ -227,8 +230,10 @@ def test_paused_conversation_survives_a_restart(tmp_path):
                "StandaloneQuestion": [StandaloneQuestion(question=QUESTION)],
                "CoordinatorStep": steps("extract", "analyse", "report"), "Report": [GOOD], "Review": [PASS]}
     llm = FakeLLMs(replies)
-    first = build_graph(Deps(llm=llm, workers=FakeWorkers()), checkpointer=sqlite_checkpointer(tmp_path / "c.db"))
+    first = build_graph(Deps(llm=llm, workers=FakeWorkers(), decide=llm_decider(llm)),
+                        checkpointer=sqlite_checkpointer(tmp_path / "c.db"))
     assert ask(first, "Tell me something").next == ("ask_user",)
-    second = build_graph(Deps(llm=llm, workers=FakeWorkers()), checkpointer=sqlite_checkpointer(tmp_path / "c.db"))
+    second = build_graph(Deps(llm=llm, workers=FakeWorkers(), decide=llm_decider(llm)),
+                         checkpointer=sqlite_checkpointer(tmp_path / "c.db"))
     state = resume(second, "employment").values
     assert state["outcome"] == "answered" and state["coordinator_steps"][0].action == "extract"

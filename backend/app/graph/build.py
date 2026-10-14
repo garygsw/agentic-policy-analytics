@@ -23,6 +23,7 @@ from app.graph.nodes import coordinator as coord
 from app.graph.nodes import intake, reporting
 from app.graph.nodes import workers as work
 from app.graph.state import AgentState
+from app.guardrails.triage import make_triage_decider
 from app.llm.providers import chat
 
 
@@ -94,7 +95,7 @@ def build_graph(deps: Deps | None = None, checkpointer=None):
     g = StateGraph(AgentState)
     g.add_node("detect_language", intake.detect_language_node)
     g.add_node("understand", intake.make_understand(deps.llm))
-    g.add_node("triage", intake.make_triage(deps.decide or intake.llm_decider(deps.llm)))
+    g.add_node("triage", intake.make_triage(deps.decide or make_triage_decider(deps.llm)))
     g.add_node("clarify", intake.make_clarify(deps.llm))
     g.add_node("ask_user", intake.ask_user)
     g.add_node("redirect", intake.redirect)

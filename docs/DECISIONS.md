@@ -198,3 +198,31 @@ Each entry records the date, the decision, the alternatives considered and the r
 - **Alternatives:** Hosted embeddings, which would have no fallback provider. A separate vector database service. LLM reranking.
 - **Why:** Everything runs locally with no extra service or key, keyword and semantic search complement each other, and every passage is citable and checkable.
 - **Measured:** On "AI skills training", keyword search and vector search returned different top documents, and hybrid search with reranking combined both.
+
+## D-024 · 2026-10-14 · Triage classifier: measured, then chosen
+- **Trial.** 160 labelled questions (70 in scope, 45 vague, 45 off topic), split in half by category. The local classifier trained on one half, and every option was scored on the other 80 (`scripts/triage_trial.py`, results in `backend/data/eval/triage_results.json`):
+
+  | Classifier | Accuracy | Macro F1 | Median latency | Cost per 1,000 |
+  |---|---|---|---|---|
+  | Local (embeddings + logistic regression) | 87% | 0.86 | 2 ms | $0 |
+  | Jev (TypeSafe AI) | 94% | 0.93 | 263 ms | $0.017 (vendor-listed price) |
+  | Fast LLM (gpt-6-luna) | 99% | 0.99 | 1.7 s | $0.057 |
+  | Local, below 0.6 confidence to the LLM | 98% | 0.97 | 3 ms (p95 2.1 s) | $0.019 |
+  | Jev, below 0.6 confidence to the LLM | 96% | 0.96 | 263 ms | $0.023 |
+
+- **Threshold sweep** (local, uncertain cases to the LLM):
+
+  | Threshold | Accuracy | Questions sent to the LLM |
+  |---|---|---|
+  | 0.5 | 92% | 11% |
+  | 0.6 | 98% | 30% |
+  | 0.7 | 99% | 43% |
+
+- **Decision:** The default is the local classifier at a 0.6 threshold, with uncertain cases going to the LLM. It is trained on all 160 questions in production. Users can choose local, Jev or the LLM for each request.
+- **Why:** It has close to the LLM's accuracy at a third of the cost, and a typical decision takes milliseconds offline. Every local mistake had confidence below 0.63, which is why the threshold catches them.
+  - Jev was not chosen as the default. It classified the demo question itself ("Analyse employment trends in the technology sector") as off topic, with confidence 0.58, the same result as an earlier probe. It also sent two vague questions to off-topic with confidence above 0.7.
+- **Caveats:** The test set has only 80 questions, so the accuracy figures carry wide margins (several percentage points). The labels were drafted with AI help and need human review. "Am I eligible for an HDB loan?" fooled every classifier, which suggests its label (off topic) is debatable.
+
+## D-025 · 2026-10-14 · MAS not crawled; crawl depth raised to 500 per agency
+- **MAS:** For non-browser clients, its site returns the same "service unavailable, try another browser" page for every URL, including its sitemap and any feed path. Getting around that would mean evading the site's access controls, so MAS is not crawled. MAS pages remain reachable through the web search tool (`mas.gov.sg` is in its domain list).
+- **Crawl depth:** The default is the 500 most recent pages per agency (changed since 2024). The first crawl took 150 per agency: 749 documents, no failures, plus the 4,655-dataset catalogue, giving 7,592 passages in a 35 MB index.
