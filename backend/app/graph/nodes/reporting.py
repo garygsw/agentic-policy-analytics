@@ -18,7 +18,13 @@ def facts_of(state: AgentState) -> list[dict]:
 
 
 def sources_of(state: AgentState) -> list[dict]:
-    return ((state.get("findings") or {}).get("extraction") or {}).get("sources", [])
+    """Analytics may load more datasets than extraction did, so its source list is the complete one."""
+    findings = state.get("findings") or {}
+    return (findings.get("analytics") or {}).get("sources") or (findings.get("extraction") or {}).get("sources", [])
+
+
+def charts_of(state: AgentState) -> list[dict]:
+    return ((state.get("findings") or {}).get("analytics") or {}).get("charts", [])
 
 
 def make_report_writer(llm) -> Callable:
@@ -30,7 +36,9 @@ def make_report_writer(llm) -> Callable:
             feedback = "Fix these problems in your previous draft:\n- " + "\n- ".join(state["grounding_issues"])
         elif state.get("review") and state["review"].verdict == "poor_report":
             feedback = f"Reviewer feedback on your previous draft: {state['review'].reason}"
+        charts = [{"id": c["id"], "title": c["title"]} for c in charts_of(state)]
         content = (f"Question: {state['question']}\n\nFacts:\n{json.dumps(facts_of(state), ensure_ascii=False)}\n\n"
+                   f"Charts:\n{json.dumps(charts, ensure_ascii=False)}\n\n"
                    f"Sources:\n{json.dumps(sources_of(state), ensure_ascii=False)}\n\n{feedback}").strip()
         report = llm("quality", schema=Report).invoke([SystemMessage(prompts.REPORT), HumanMessage(content)])
         emit("report_writer", "action", f"{'Revised' if revising else 'Wrote'} report: {report.title}")
@@ -54,6 +62,9 @@ def validate(state: AgentState) -> dict:
             issues.append(f"finding {i}: cites unknown IDs {unknown}")
         if not claim.citations:
             issues.append(f"finding {i}: has no citation")
+    unknown_charts = [c for c in report.charts if c not in {chart["id"] for chart in charts_of(state)}]
+    if unknown_charts:
+        issues.append(f"charts: unknown IDs {unknown_charts}")
     emit("validate", "observation", "Grounded: every number matches a computed fact" if not issues
          else f"{len(issues)} problem(s): " + "; ".join(issues))
     return {"grounding_issues": issues}
@@ -81,9 +92,12 @@ def render(state: AgentState) -> dict:
         caveats.append(f"Reviewer note: {review.reason}")
     if caveats:
         lines += ["", "## Caveats", *[f"- {c}" for c in caveats]]
+    charts = {c["id"]: c for c in charts_of(state)}
+    if report.charts:
+        lines += ["", "## Charts", *[f"- [{cid}] {charts[cid]['title']}" for cid in report.charts if cid in charts]]
     if sources_of(state):
-        lines += ["", "## Sources", *[f"- [{s['id']}] {s.get('title', '')} {s.get('url', '')}".rstrip()
-                                      for s in sources_of(state)]]
+        lines += ["", "## Sources", *[f"- [{s['id']}] {s.get('title', '')} ({s.get('agency', '')}) {s.get('url', '')}"
+                                      .rstrip() for s in sources_of(state)]]
     return {"answer": "\n".join(lines), "outcome": "answered"}
 
 

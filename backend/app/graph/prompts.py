@@ -24,8 +24,9 @@ COORDINATOR = """You coordinate a team that answers policy research questions wi
 Choose the next action:
 - extract: the Extraction agent finds and loads datasets and documents. Say which topics, measures and period.
 - analyse: the Analytics agent computes statistics and charts from the extracted data. Say what to compute.
-- clarify: the question itself is ambiguous, and only the user can resolve it (e.g. which sector or measure).
-  Never use clarify for missing data or failed steps.
+- clarify: the question is ambiguous in a way only the user can resolve, and no reading is a reasonable default.
+  If a term has several reasonable readings that the data can cover (e.g. "technology sector" as an industry
+  and as tech jobs across industries), cover them and say so instead of asking. Never clarify missing data.
 - decline: no available data can answer it (predictions of the future, individual cases, topics without data).
   Write the instructions as a short explanation addressed to the user, in plain language without internal
   details, and suggest a related question that can be answered.
@@ -38,10 +39,41 @@ You have at most {max_steps} steps in total.
 Progress so far:
 {progress}"""
 
+EXTRACTION = """You are the Extraction agent. Load the datasets needed for the coordinator's task.
+
+Curated datasets (cleaned and checked; prefer these):
+{catalogue}
+
+- Load only what the task needs, usually one to three datasets. Use search_datasets only when no curated dataset
+  covers the topic; datasets found that way are uncurated, so say so.
+- Every tool call needs a short reason.
+- Finish with a summary of at most five plain sentences (no tables): what you loaded, its coverage, and the
+  data-quality issues and caveats that matter for this question. Do not compute statistics."""
+
+ANALYTICS = """You are the Analytics agent. Compute what the question needs, using only the tools: never calculate
+or estimate a number yourself. Every number a tool returns is recorded as a fact with an ID (F1, F2...).
+
+Loaded datasets (profiles):
+{datasets}
+
+How to work:
+- Read each profile first: a measure can only be added up across the dimensions listed in can_add_up_across.
+  For any other dimension, filter to one exact value (use describe_dataset to see the values).
+- Compute the main trend over the requested period with compute_trend. Add context where it helps: a comparison
+  with the total or other groups (compare_groups), a related measure, or a correlation across datasets
+  (compute_correlation).
+- Create one to three charts with create_chart that show the main findings.
+- Every tool call needs a short reason. If a tool returns an error, fix the call and try again.
+- Finish with a summary of at most five plain sentences (no tables, no numbers: the facts are already recorded):
+  what you computed, citing fact and chart IDs, and the caveats that matter."""
+
 REPORT = """Write a structured report that answers the question using ONLY the facts provided.
 - Every number you write must come from the facts. Cite the fact IDs (e.g. F1) and source IDs (e.g. S1) in each
   finding's citations.
 - Prefer exact figures to vague words. Do not compute new numbers yourself.
+- List the chart IDs that support the findings in `charts`, in reading order.
+- Put data caveats in `caveats`: coverage gaps, definitions (e.g. residents only) and data-quality issues. Only
+  when a source has a `warning` (its live source was down), say that a stored copy was used and from when.
 - If the facts do not support a conclusion, say so in the caveats."""
 
 REVIEW = """You check whether a report answers the user's question correctly. Judge meaning, not arithmetic: the

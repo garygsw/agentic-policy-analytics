@@ -6,7 +6,7 @@ Notes are shown to the agents, so they reflect what was found by reading the act
 import io
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -28,6 +28,9 @@ class CuratedDataset:
     frequency: Frequency
     clean: Cleaner
     notes: str = ""
+    # Which measures may be added up, and over which dimensions. Anything not listed (medians, prices, indices,
+    # rates, nested or overlapping categories) can only be read one combination at a time.
+    summable: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _csv(raw: Raw, source_id: str) -> pd.DataFrame:
@@ -181,6 +184,7 @@ def clean_hdb_completions(raw: Raw):
 
 # -- transport -----------------------------------------------------------------------------------------------
 COE = "d_69b3380ad7e51aff3a7dcc84eba52b8a"
+COE_DIMS = ("vehicle_class", "bidding_exercise")
 RAIL_PLAN = "d_6f5107a8cf6c9a32439cffbfa9013423"
 MRT_EXITS = "d_b39d3a0871985372d7e1637193335da5"
 
@@ -258,7 +262,8 @@ CURATED: dict[str, CuratedDataset] = {d.key: d for d in [
                    "employment", "Annual employed residents by industry (incl. information and communications), "
                    "sector, sex and age group", "datagovsg", (EMPLOYED,), "annual", clean_employment,
                    "Residents only (citizens and PRs); counts rounded to the nearest hundred. Add up across sex and "
-                   "age to get an industry total. 'information and communications' is the tech sector."),
+                   "age to get an industry total. 'information and communications' is the tech sector.",
+                   summable={"employed": ("sector", "industry", "sex", "age")}),
     CuratedDataset("retrenchment_by_industry", "Retrenched Employees by Industry, Quarterly", "Ministry of Manpower",
                    "employment", "Quarterly number of employees retrenched, by industry", "datagovsg", (RETRENCHED,),
                    "quarterly", clean_retrenchment,
@@ -277,17 +282,20 @@ CURATED: dict[str, CuratedDataset] = {d.key: d for d in [
     CuratedDataset("infocomm_revenue", "Revenue of Infocomm Industry by Market Segment",
                    "Info-communications Media Development Authority", "digital economy",
                    "Annual infocomm industry revenue by segment (software, IT services, telecommunications...)",
-                   "datagovsg", (INFOCOMM_REVENUE,), "annual", clean_infocomm_revenue, "Ends in 2017."),
+                   "datagovsg", (INFOCOMM_REVENUE,), "annual", clean_infocomm_revenue, "Ends in 2017.",
+                   summable={"infocomm_industry_revenue": ("segment",)}),
     CuratedDataset("internal_tech_programmes", "Tech Talent Programme Placements (internal, synthetic)",
                    "Internal agency system (mock)", "employment",
                    "Annual participants, placements within 6 months and median starting salary for tech-talent "
                    "programmes by track", "internal", ("tech_talent_programmes.xlsx",), "annual",
-                   clean_internal_programmes, "SYNTHETIC demonstration data, not an official statistic."),
+                   clean_internal_programmes, "SYNTHETIC demonstration data, not an official statistic.",
+                   summable={"participants": ("programme", "track"), "placed_within_6_months": ("programme", "track")}),
     CuratedDataset("hdb_resale_transactions", "HDB Resale Flat Prices (monthly medians from transactions)",
                    "Housing & Development Board", "housing",
                    "Monthly median resale price, price per square metre and number of transactions by town and "
                    "flat type, from January 2017", "datagovsg", (RESALE,), "monthly", clean_resale,
-                   "Medians of transactions registered in each month; small town/flat-type groups are volatile."),
+                   "Medians of transactions registered in each month; small town/flat-type groups are volatile.",
+                   summable={"transactions": ("town", "flat_type")}),
     CuratedDataset("hdb_resale_price_index", "HDB Resale Price Index (1Q2009 = 100)", "Housing & Development Board",
                    "housing", "Quarterly index of HDB resale prices", "datagovsg", (RESALE_INDEX,), "quarterly",
                    clean_resale_index),
@@ -302,11 +310,13 @@ CURATED: dict[str, CuratedDataset] = {d.key: d for d in [
                    "transaction type and location (HDB town or postal district)", "datagovsg", (CEA,), "monthly",
                    clean_cea,
                    "Counts are salesperson records, not transactions: a deal with agents on both sides appears "
-                   "twice. Salesperson names and registration numbers are removed on load."),
+                   "twice. Salesperson names and registration numbers are removed on load.",
+                   summable={"records": ("property_type", "transaction_type", "represented", "location")}),
     CuratedDataset("private_residential_transactions", "Private Residential Property Transactions, Quarterly",
                    "Urban Redevelopment Authority", "housing",
                    "Quarterly private residential units transacted, by type of sale (new sale, resale, sub sale)",
-                   "datagovsg", (PRIVATE_TXN,), "quarterly", clean_private_transactions),
+                   "datagovsg", (PRIVATE_TXN,), "quarterly", clean_private_transactions,
+                   summable={"units": ("type_of_sale", "sale_status")}),
     CuratedDataset("new_flat_bookings", "Bookings for New HDB Flats", "Housing & Development Board", "housing",
                    "Number of new HDB flats booked per financial year", "datagovsg", (NEW_FLAT_BOOKINGS,),
                    "financial_year", clean_new_flat_bookings),
@@ -314,18 +324,21 @@ CURATED: dict[str, CuratedDataset] = {d.key: d for d in [
                    "Housing & Development Board", "housing",
                    "Residential HDB blocks and dwelling units by completion year and town, showing where new "
                    "housing estates are built", "datagovsg", (HDB_PROPERTY,), "annual", clean_hdb_completions,
-                   "Built from existing blocks: demolished blocks are missing, so older years are undercounted."),
+                   "Built from existing blocks: demolished blocks are missing, so older years are undercounted.",
+                   summable={"blocks": ("town",), "dwelling_units": ("town",)}),
     CuratedDataset("coe_bidding_results", "COE Bidding Results", "Land Transport Authority", "transport",
                    "Certificate of Entitlement premiums, quotas and bids by vehicle category, two exercises a month",
                    "datagovsg", (COE,), "monthly", clean_coe,
                    "Category A: cars up to 1,600cc; B: larger cars; C: goods vehicles and buses; D: motorcycles; "
-                   "E: open category."),
+                   "E: open category.",
+                   summable=dict.fromkeys(("quota", "bids_received", "bids_success"), COE_DIMS)),
     CuratedDataset("rail_stations", "MRT and LRT Stations: Master Plan 2025 and Open Stations",
                    "Urban Redevelopment Authority; Land Transport Authority", "transport",
                    "Rail stations in the Master Plan 2025, marked open or planned by whether LTA lists exits",
                    "datagovsg", (RAIL_PLAN, MRT_EXITS), "none", clean_rail_stations,
                    "'Planned' means no exits in LTA's layer yet, usually a future station; the Sentosa Express "
-                   "stations (Beach, Imbiah, Resorts World) are not in that layer either. Not a time series."),
+                   "stations (Beach, Imbiah, Resorts World) are not in that layer either. Not a time series.",
+                   summable={"exits": ("station", "rail_type", "level", "status")}),
     CuratedDataset("hospital_admissions", "Hospital Admissions and Public Sector Outpatient Attendances",
                    "Ministry of Health", "health", "Annual admissions to acute, psychiatric and community hospitals "
                    "and outpatient attendances", "datagovsg", (ADMISSIONS,), "annual", clean_admissions,

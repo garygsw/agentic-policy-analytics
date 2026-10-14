@@ -61,6 +61,7 @@ def build_models(tier: Tier, settings: Settings | None = None) -> tuple[BaseChat
             max_retries=s.llm_max_retries,
             max_tokens=s.llm_max_output_tokens,
             stream_usage=True,
+            reasoning_effort=s.llm_quality_reasoning_effort if tier == "quality" else None,
         )
     fallback = ChatAnthropic(
         model=fallback_name,

@@ -42,6 +42,7 @@ class Report(BaseModel):
     title: str
     summary: str
     findings: list[Claim]
+    charts: list[str] = Field(default_factory=list, description="IDs of charts to show, in reading order.")
     caveats: list[str] = Field(default_factory=list)
 
 

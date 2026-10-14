@@ -132,3 +132,16 @@ Each entry records the date, the decision, the alternatives considered and the r
   - **Large files:** files such as the 24 MB resale-price data are downloaded on first start and never committed.
   - **Licence:** each dataset's licence is checked before any snapshot is committed.
 - **Why:** Curated datasets make the demo reliable; discovery covers the whole of government.
+
+## D-019 · 2026-10-14 · Analytics: computed facts, with aggregation rules enforced in code
+- **Decision:**
+  - **No LLM arithmetic.** The agents never calculate numbers. They choose what to compute, and pandas tools compute it.
+  - **Numbered, cited results.** Every result is recorded as a numbered fact (`F1`, `F2`, …) linked to its source dataset (`S1`, `S2`, …). Charts (`C1`, …) are drawn from the data by reference, never from numbers an LLM wrote.
+  - **Aggregation rules in code.** Each curated dataset declares which measures may be added up, and across which dimensions. The tools refuse anything else: medians, prices, indices, nested GDP series and overlapping industry labels. The error tells the agent which value to filter by instead.
+  - **Correlations report two numbers.** One is for the levels and one for the period-to-period changes, so a shared upward trend is not mistaken for a relationship.
+  - **Visible reasoning.** Every tool call carries a `reason`, which is shown in the live trace.
+  - **Agent loop.** The Extraction and Analytics agents run a ReAct tool loop with a step limit inside their graph nodes. Tool errors are fed back to the agent as observations.
+- **Alternatives:**
+  - The LLM writes SQL or pandas code. This is more flexible, but it needs a sandbox and makes every number harder to check.
+  - Rules about adding up stated only in the prompt. This proved unreliable in public prior art.
+- **Why:** Numbers are correct by construction and traceable to their source, and every step can be explained.

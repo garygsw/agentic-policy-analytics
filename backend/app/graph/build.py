@@ -13,10 +13,11 @@
                                                                         render / fallback_report -> localize
 Any failing step routes to fallback_report.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from langgraph.graph import END, START, StateGraph
 
+from app.agents.workers import AgentWorkers
 from app.graph.nodes import coordinator as coord
 from app.graph.nodes import intake, reporting
 from app.graph.nodes import workers as work
@@ -28,7 +29,7 @@ from app.llm.providers import chat
 class Deps:
     llm: object = chat                      # factory: llm(tier, tools=..., schema=...) -> Runnable
     decide: intake.Decider | None = None    # triage decision; defaults to the fast LLM
-    workers: work.Workers = field(default_factory=work.StubWorkers)
+    workers: work.Workers | None = None    # defaults to the tool-using Extraction and Analytics agents
 
 
 def _failed(state: AgentState) -> bool:
@@ -88,6 +89,7 @@ def route_review(state: AgentState) -> str:
 
 def build_graph(deps: Deps | None = None, checkpointer=None):
     deps = deps or Deps()
+    workers = deps.workers or AgentWorkers(deps.llm)
     g = StateGraph(AgentState)
     g.add_node("detect_language", intake.detect_language_node)
     g.add_node("understand", intake.make_understand(deps.llm))
@@ -98,8 +100,8 @@ def build_graph(deps: Deps | None = None, checkpointer=None):
     g.add_node("coordinator", coord.make_coordinator(deps.llm))
     g.add_node("approve_plan", coord.approve_plan)
     g.add_node("decline", coord.decline)
-    g.add_node("extraction", work.make_extraction(deps.workers))
-    g.add_node("analytics", work.make_analytics(deps.workers))
+    g.add_node("extraction", work.make_extraction(workers))
+    g.add_node("analytics", work.make_analytics(workers))
     g.add_node("report_writer", reporting.make_report_writer(deps.llm))
     g.add_node("validate", reporting.validate)
     g.add_node("reviewer", reporting.make_reviewer(deps.llm))

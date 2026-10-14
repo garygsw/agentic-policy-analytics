@@ -64,6 +64,25 @@ def run_turn(graph, config: dict, payload) -> dict | None:
             return None
 
 
+def print_calls(ledger: Ledger) -> None:
+    """The LLM call log: one line per call, with an estimate of what filled the context window."""
+    header = ("agent", "model", "ok", "secs", "in", "cached", "out", "cost $")
+    print("\n{:16s} {:28s} {:3s} {:>5s} {:>7s} {:>7s} {:>6s} {:>8s}  tools".format(*header))
+    for c in ledger.calls:
+        model = f"{c.provider}:{c.model}"
+        cost = f"{c.cost_usd:.4f}" if c.cost_usd is not None else "-"
+        tools = ",".join(c.tool_calls)
+        print(f"{(c.agent or '-')[:16]:16s} {model[:28]:28s} {'yes' if c.ok else 'NO':3s} {c.latency_ms / 1000:5.1f} "
+              f"{c.usage.input_total:7d} {c.usage.cache_read:7d} {c.usage.output:6d} {cost:>8s}  {tools}")
+    if ledger.tools:
+        slow = sorted(ledger.tools, key=lambda t: -t.latency_ms)[:3]
+        print("slowest tools: " + ", ".join(f"{t.name} {t.latency_ms / 1000:.1f}s" for t in slow))
+    last = next((c for c in reversed(ledger.calls) if c.ok and c.agent == "analytics"), None)
+    if last:
+        print("context of the last analytics call (estimated tokens): "
+              + ", ".join(f"{k} {v}" for k, v in last.context_estimate.items() if v))
+
+
 def print_result(values: dict, ledger: Ledger) -> None:
     totals = ledger.totals()
     tokens_in = totals["input_uncached"] + totals["cache_read"] + totals["cache_write"]
@@ -78,6 +97,7 @@ def main() -> None:
     parser.add_argument("question", nargs="?", help="ask one question and exit (default: interactive)")
     parser.add_argument("--thread", help="conversation ID to continue")
     parser.add_argument("--plan-approval", action="store_true", help="pause for approval before fetching data")
+    parser.add_argument("--calls", action="store_true", help="print the LLM call log after each answer")
     args = parser.parse_args()
 
     graph = build_graph(checkpointer=sqlite_checkpointer(CHECKPOINTS))
@@ -103,6 +123,8 @@ def main() -> None:
         if values is None:
             return
         print_result(values, ledger)
+        if args.calls:
+            print_calls(ledger)
         if args.question:
             return
 
