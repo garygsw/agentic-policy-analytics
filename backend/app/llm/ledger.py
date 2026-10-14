@@ -17,11 +17,14 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.outputs import LLMResult
 
-from app.llm.pricing import TokenUsage, cost_usd
+from app.graph.events import emit
+from app.llm.pricing import CONTEXT_WINDOWS, TokenUsage, cost_usd
 
 # Tool results from these tools count as "retrieved" context rather than plain tool output.
 RETRIEVAL_TOOLS = {"search_documents", "web_search"}
 CONTEXT_CATEGORIES = ("system", "user", "assistant", "tool_results", "retrieved", "tool_schemas")
+
+MAX_CONTEXT_CHARS = 4000  # per message, in the context snapshots sent to the UI
 
 # One tokenizer for every provider: the breakdown is an estimate, the provider's own count is authoritative.
 _ENCODING = tiktoken.get_encoding("o200k_base")
@@ -38,19 +41,32 @@ def _text(message: BaseMessage) -> str:
     return "\n".join(parts)
 
 
+def _category(message: BaseMessage) -> str:
+    if isinstance(message, SystemMessage):
+        return "system"
+    if isinstance(message, HumanMessage):
+        return "user"
+    if isinstance(message, ToolMessage):
+        return "retrieved" if message.name in RETRIEVAL_TOOLS else "tool_results"
+    return "assistant"
+
+
+def context_snapshot(messages: list[BaseMessage]) -> list[dict]:
+    """What the model was given, message by message, for the context view in the UI."""
+    snapshot = []
+    for message in messages:
+        text = _text(message)
+        snapshot.append({"category": _category(message), "name": getattr(message, "name", None),
+                         "tokens": count_tokens(text), "content": text[:MAX_CONTEXT_CHARS],
+                         "truncated": max(len(text) - MAX_CONTEXT_CHARS, 0)})
+    return snapshot
+
+
 def context_breakdown(messages: list[BaseMessage], tools: list[Any] | None = None) -> dict[str, int]:
     """Estimated tokens per category of what is sent to the model."""
     counts = dict.fromkeys(CONTEXT_CATEGORIES, 0)
     for message in messages:
-        if isinstance(message, SystemMessage):
-            category = "system"
-        elif isinstance(message, HumanMessage):
-            category = "user"
-        elif isinstance(message, ToolMessage):
-            category = "retrieved" if message.name in RETRIEVAL_TOOLS else "tool_results"
-        else:
-            category = "assistant"
-        counts[category] += count_tokens(_text(message))
+        counts[_category(message)] += count_tokens(_text(message))
     if tools:
         counts["tool_schemas"] = count_tokens(json.dumps(tools, default=str))
     return counts
@@ -67,7 +83,10 @@ class LLMCall:
     usage: TokenUsage = field(default_factory=TokenUsage)
     cost_usd: float | None = None
     tool_calls: list[str] = field(default_factory=list)
+    effort: str | None = None
     context_estimate: dict[str, int] = field(default_factory=dict)
+    context_window: int | None = None
+    context_messages: list[dict] = field(default_factory=list, repr=False)
 
 
 @dataclass
@@ -93,11 +112,16 @@ class Ledger(BaseCallbackHandler):
     def on_chat_model_start(self, serialized, messages, *, run_id, metadata=None, **kwargs):
         metadata = metadata or {}
         params = kwargs.get("invocation_params") or {}
+        sent = messages[0] if messages else []
+        model = metadata.get("ls_model_name") or params.get("model") or params.get("model_name") or "unknown"
         call = LLMCall(
             agent=metadata.get("langgraph_node") or metadata.get("agent"),
             provider=metadata.get("ls_provider") or "unknown",
-            model=metadata.get("ls_model_name") or params.get("model") or params.get("model_name") or "unknown",
-            context_estimate=context_breakdown(messages[0] if messages else [], params.get("tools")),
+            model=model,
+            effort=params.get("reasoning_effort"),
+            context_estimate=context_breakdown(sent, params.get("tools")),
+            context_window=CONTEXT_WINDOWS.get(model),
+            context_messages=context_snapshot(sent),
         )
         self._open[run_id] = (time.perf_counter(), call)
 
@@ -142,8 +166,21 @@ class Ledger(BaseCallbackHandler):
     def _close(self, started: float, record, records: list, kind: str) -> None:
         record.latency_ms = int((time.perf_counter() - started) * 1000)
         records.append(record)
+        if kind == "llm_call":
+            self._emit_llm_call(record)
         if self._on_record:
             self._on_record(kind, asdict(record))
+
+    def _emit_llm_call(self, call: LLMCall) -> None:
+        """Live events for the UI: the agent's context for this call, then the run's running totals."""
+        agent = call.agent or "llm"
+        tokens = call.usage.input_total or sum(call.context_estimate.values())
+        share = f" ({tokens / call.context_window:.2%} of the window)" if call.context_window else ""
+        emit(agent, "context", f"{agent}: {tokens:,} input tokens{share}", model=f"{call.provider}:{call.model}",
+             effort=call.effort, input_tokens=tokens, window=call.context_window, breakdown=call.context_estimate,
+             messages=call.context_messages, ok=call.ok)
+        totals = self.totals()
+        emit(agent, "usage", f"{totals['llm_calls']} calls, ${totals['cost_usd']:.4f}", **totals)
 
     # -- summary -----------------------------------------------------------
     def totals(self) -> dict[str, Any]:
@@ -157,6 +194,7 @@ class Ledger(BaseCallbackHandler):
             "cache_read": sum(c.usage.cache_read for c in ok),
             "cache_write": sum(c.usage.cache_write for c in ok),
             "output": sum(c.usage.output for c in ok),
+            "input_total": sum(c.usage.input_total for c in ok),
             "cost_usd": round(sum(priced), 6),
             "unpriced_calls": len(ok) - len(priced),
             "models": sorted({f"{c.provider}:{c.model}" for c in ok}),

@@ -36,6 +36,7 @@ def make_coordinator(llm) -> Callable:
             system = prompts.COORDINATOR.format(max_steps=MAX_STEPS, progress=describe_progress(state))
             step = llm("quality", schema=CoordinatorStep).invoke([SystemMessage(system),
                                                                   HumanMessage(state["question"])])
+        emit("coordinator", "status", step.headline or f"Next: {step.action}")
         emit("coordinator", "reasoning", step.thought)
         emit("coordinator", "action", f"{step.action}: {step.instructions}")
         return {"coordinator_steps": [*steps, step]}

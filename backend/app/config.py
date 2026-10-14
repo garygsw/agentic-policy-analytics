@@ -1,6 +1,7 @@
 """Application settings, read from environment variables and the repo-root .env file."""
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,8 +25,8 @@ class Settings(BaseSettings):
     llm_quality_fallback: str = "claude-sonnet-5-5"
     llm_fast_primary: str = "gpt-6-luna"
     llm_fast_fallback: str = "claude-haiku-5-5"
-    # OpenAI reasoning effort for the quality tier (None: the model's default). Lower is faster.
-    llm_quality_reasoning_effort: str | None = None
+    # How hard the quality tier reasons. Users can override it per request; lower is faster and cheaper.
+    llm_reasoning_effort: Literal["low", "medium", "high"] = "low"
     llm_timeout_s: float = 60.0
     llm_max_retries: int = 1  # per provider, before falling back
     llm_max_output_tokens: int = 4096

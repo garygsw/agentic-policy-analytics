@@ -65,3 +65,11 @@ def cost_usd(model: str, usage: TokenUsage) -> float | None:
         return None
     return (usage.input_uncached * price.input + usage.cache_read * price.cache_read
             + usage.cache_write * price.cache_write + usage.output * price.output) / 1_000_000
+
+
+# Context window sizes in tokens, from the model pages and Anthropic's models API on 2026-10-14
+# (https://developers.openai.com/api/docs/models/<model>; GET https://api.anthropic.com/v1/models/<model>).
+CONTEXT_WINDOWS: dict[str, int] = {
+    "gpt-6.1-sol": 1_050_000, "gpt-6-luna": 1_050_000,
+    "claude-sonnet-5-5": 1_000_000, "claude-haiku-5-5": 1_000_000,
+}

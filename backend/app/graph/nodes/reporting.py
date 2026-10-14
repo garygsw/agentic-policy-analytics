@@ -5,7 +5,7 @@ from collections.abc import Callable
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.graph import prompts
-from app.graph.events import emit, guarded
+from app.graph.events import STATUS, emit, guarded
 from app.graph.state import AgentState, Report, Review
 from app.guardrails.language import LANGUAGE_NAMES
 from app.quality.grounding import numbers_in, numbers_preserved, ungrounded
@@ -49,6 +49,7 @@ def make_report_writer(llm) -> Callable:
 def validate(state: AgentState) -> dict:
     """Deterministic checks: every number must match a computed fact (or the question), and every finding
     must cite known facts or sources."""
+    emit("validate", "status", STATUS["validate"])
     report: Report = state["report"]
     facts = facts_of(state)
     allowed = [f["value"] for f in facts if isinstance(f.get("value"), int | float)]
@@ -127,6 +128,7 @@ def make_localize(llm) -> Callable:
         """Translate the English answer into the user's language, unless a number changed on the way."""
         if state["language"] == "en":
             return {}
+        emit("localize", "status", STATUS["localize"])
         answer = state["answer"]
         try:
             system = prompts.TRANSLATE.format(language=LANGUAGE_NAMES[state["language"]])

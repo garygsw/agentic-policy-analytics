@@ -145,3 +145,25 @@ Each entry records the date, the decision, the alternatives considered and the r
   - The LLM writes SQL or pandas code. This is more flexible, but it needs a sandbox and makes every number harder to check.
   - Rules about adding up stated only in the prompt. This proved unreliable in public prior art.
 - **Why:** Numbers are correct by construction and traceable to their source, and every step can be explained.
+
+## D-020 · 2026-10-14 · User-controlled run options and live trace
+- **Decision:**
+  - **Per-request options.** Each request can set three things:
+    - the main model: any priced model. Choosing a Claude model makes the OpenAI model at the same price its fallback, and the other way round.
+    - the reasoning effort: low, medium or high, default low. It applies to both providers; triage and translation always run at low.
+    - the enabled optional tools: catalogue search, correlation, record listing and charts. Data loading and the core statistics are always on.
+  - **Where the options live.** They travel in the run's config, not in checkpointed state.
+  - **One event format for the live trace,** with three levels shown according to the user's verbosity setting:
+    - 1, brief: status one-liners, actions and errors
+    - 2, standard: adds reasoning and tool results
+    - 3, full: adds model thinking and context snapshots
+  - **Two events after every LLM call:**
+    - a running usage total (calls, tokens, cached tokens, cost), from which a client builds the elapsed-time, token and cost counters
+    - a context snapshot for that agent: the token breakdown by category, the share of the model's context window, and the messages themselves.
+- **Thinking display:** The agents' own reasoning is always shown: the coordinator's thought, the reason on each tool call, and the triage and reviewer explanations. Provider-native thinking is shown when a provider returns it. In tests, OpenAI reasoning summaries and Claude thinking blocks were often empty during tool calls, so they cannot be the main display.
+- **Why:** The user can see and control what the agents do, how hard they think, what it costs, and what each agent was given.
+- **Measured:** On the demo question, effort low took 83 s and $0.07. The model default took 140 s and $0.14.
+
+## D-021 · 2026-10-14 · Occupation-based tech workforce data
+- **Decision:** IMDA's *Employed Tech and Media Professionals* series (published through SingStat; 2017 to 2025) is curated, alongside MOM's industry-based employment. The agents report both readings of "technology sector" (the industry, and tech jobs across all industries) as separate series, never combined.
+- **Why:** The two measures answer different questions, and the demo question is ambiguous between them.

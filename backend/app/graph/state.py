@@ -27,6 +27,8 @@ class TriageResult(TriageDecision):
 
 class CoordinatorStep(BaseModel):
     """One ReAct step of the coordinator: reason about progress, then choose the next action."""
+    headline: str = Field(default="", description="Five to eight words for a live status line, e.g. "
+                                                  "'Loading tech employment and GDP data'.")
     thought: str = Field(description="Reasoning about what is known so far and what is missing.")
     action: Literal["extract", "analyse", "clarify", "decline", "report"]
     instructions: str = Field(description="Task for the chosen agent. For clarify: what is unclear. For decline: "

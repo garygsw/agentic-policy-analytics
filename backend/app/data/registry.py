@@ -41,6 +41,7 @@ def _csv(raw: Raw, source_id: str) -> pd.DataFrame:
 EMPLOYED = "d_a7ece9330c024a90b258776e69c2ae00"
 RETRENCHED = "d_61d92d31ca400be135190614277da825"
 ICT_MANPOWER = "d_77fa870aa3afb10a1d133b20e9651b6e"
+TECH_PROFESSIONALS = "d_52c4d067d88a359917e5f6d9cd60766e"
 INFOCOMM_REVENUE = "d_c819e013e5cea669f71872b6cb5fddfe"
 GDP_TABLE = "M015731"
 
@@ -71,6 +72,16 @@ def clean_gdp(raw: Raw):
 def clean_ict_manpower(raw: Raw):
     return tidy(_csv(raw, ICT_MANPOWER), "ict_manpower", period="year", frequency="annual", dims=[],
                 measures={"manpower": "persons", "growth": "%"})
+
+
+def clean_tech_professionals(raw: Raw):
+    """A wide statistical table (one row per series, one column per year), as SingStat publishes them."""
+    df = _csv(raw, TECH_PROFESSIONALS)
+    years = [c for c in df.columns if c.isdigit()]
+    df = df.melt(id_vars=["DataSeries"], value_vars=years, var_name="year", value_name="employed")
+    df["group"] = df["DataSeries"].str.replace("Employed ", "", regex=False).str.lower()
+    return tidy(df, "tech_professionals", period="year", frequency="annual", dims=["group"],
+                measures={"employed": "persons"})
 
 
 def clean_infocomm_revenue(raw: Raw):
@@ -279,6 +290,15 @@ CURATED: dict[str, CuratedDataset] = {d.key: d for d in [
                    "digital economy", "Annual employed ICT manpower across all industries, with growth rate",
                    "datagovsg", (ICT_MANPOWER,), "annual", clean_ict_manpower,
                    "Ends in 2018. Counts ICT jobs in every industry, unlike the industry-based employment data."),
+    CuratedDataset("tech_professionals", "Employed Tech and Media Professionals, Annual",
+                   "Info-communications Media Development Authority (via SingStat)", "digital economy",
+                   "Annual number of employed tech professionals and media professionals across all industries, "
+                   "the occupation-based view of the tech workforce", "datagovsg", (TECH_PROFESSIONALS,), "annual",
+                   clean_tech_professionals,
+                   "Counts tech jobs in every industry, unlike employment in the information and communications "
+                   "industry. 'tech and media professionals' is the sum of the other two groups: never add them. "
+                   "The metadata does not say whether non-residents are included. Rounded, so groups may not add "
+                   "up exactly."),
     CuratedDataset("infocomm_revenue", "Revenue of Infocomm Industry by Market Segment",
                    "Info-communications Media Development Authority", "digital economy",
                    "Annual infocomm industry revenue by segment (software, IT services, telecommunications...)",

@@ -44,8 +44,8 @@ EXTRACTION = """You are the Extraction agent. Load the datasets needed for the c
 Curated datasets (cleaned and checked; prefer these):
 {catalogue}
 
-- Load only what the task needs, usually one to three datasets. Use search_datasets only when no curated dataset
-  covers the topic; datasets found that way are uncurated, so say so.
+- Load only what the task needs, usually one to three datasets. If a dataset search tool is available, use it
+  only when no curated dataset covers the topic; datasets found that way are uncurated, so say so.
 - Every tool call needs a short reason.
 - Finish with a summary of at most five plain sentences (no tables): what you loaded, its coverage, and the
   data-quality issues and caveats that matter for this question. Do not compute statistics."""
@@ -60,9 +60,9 @@ How to work:
 - Read each profile first: a measure can only be added up across the dimensions listed in can_add_up_across.
   For any other dimension, filter to one exact value (use describe_dataset to see the values).
 - Compute the main trend over the requested period with compute_trend. Add context where it helps: a comparison
-  with the total or other groups (compare_groups), a related measure, or a correlation across datasets
-  (compute_correlation).
-- Create one to three charts with create_chart that show the main findings.
+  with the total or other groups (compare_groups), a related measure, or a correlation across datasets.
+- If a chart tool is available, create one to three charts that show the main findings.
+- Use only the tools you have been given; some may be switched off for this request.
 - Every tool call needs a short reason. If a tool returns an error, fix the call and try again.
 - Finish with a summary of at most five plain sentences (no tables, no numbers: the facts are already recorded):
   what you computed, citing fact and chart IDs, and the caveats that matter."""

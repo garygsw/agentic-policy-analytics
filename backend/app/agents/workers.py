@@ -6,6 +6,13 @@ from app.agents.tools import analytics_tools, extraction_tools
 from app.analysis.workspace import Workspace, curated_catalogue
 from app.data.store import DataStore
 from app.graph import prompts
+from app.graph.options import current_options
+
+
+def enabled(tools: list) -> list:
+    """The tools this request allows (users can switch optional tools off)."""
+    options = current_options()
+    return [tool for tool in tools if options.tool_enabled(tool.name)]
 
 
 class AgentWorkers:
@@ -15,7 +22,7 @@ class AgentWorkers:
 
     def extract(self, instructions: str, question: str) -> dict:
         ws = Workspace(self.store)
-        summary = run_tool_loop(self.llm, node="extraction", tools=extraction_tools(ws), max_steps=6,
+        summary = run_tool_loop(self.llm, node="extraction", tools=enabled(extraction_tools(ws)), max_steps=6,
                                 system=prompts.EXTRACTION.format(catalogue=curated_catalogue()),
                                 task=f"Question: {question}\n\nTask from the coordinator: {instructions}")
         return {"summary": summary, "datasets": ws.profiles(), "sources": ws.sources}
@@ -26,7 +33,7 @@ class AgentWorkers:
         if not profiles:
             return {"summary": "No datasets were loaded, so nothing was computed.", "facts": [], "charts": [],
                     "sources": ws.sources}
-        summary = run_tool_loop(self.llm, node="analytics", tools=analytics_tools(ws), max_steps=12,
+        summary = run_tool_loop(self.llm, node="analytics", tools=enabled(analytics_tools(ws)), max_steps=12,
                                 system=prompts.ANALYTICS.format(datasets=json.dumps(profiles, ensure_ascii=False)),
                                 task=f"Question: {question}\n\nTask from the coordinator: {instructions}")
         return {"summary": summary, "facts": ws.facts, "charts": ws.charts, "sources": ws.sources}
