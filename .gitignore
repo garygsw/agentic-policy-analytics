@@ -1,0 +1,35 @@
+# Secrets: keys live only in .env (see .env.example and scripts/set_keys.py)
+.env
+.env.*
+!.env.example
+
+# Local assistant instructions and tool config: never committed
+CLAUDE.md
+CLAUDE.local.md
+AGENT.md
+AGENTS.md
+.claude/
+.mcp.json
+
+# The challenge brief stays out of the repo
+/*.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
