@@ -6,6 +6,7 @@ from langgraph.types import Command
 from app.graph import prompts
 from app.graph.build import Deps, build_graph
 from app.graph.checkpoint import serializer, sqlite_checkpointer
+from app.graph.nodes import reporting
 from app.graph.nodes.intake import llm_decider
 from app.graph.state import Claim, CoordinatorStep, Report, ReportTexts, Review, StandaloneQuestion, TriageDecision
 from app.llm.fake import FakeLLMs
@@ -135,6 +136,23 @@ def test_reviewer_sends_wrong_analysis_back_to_the_coordinator():
     assert state["outcome"] == "answered" and workers.calls == ["extract", "analyse", "analyse"]
     coordinator_prompt = [m for key, m in llm.calls if key == "CoordinatorStep"][3][0].content
     assert "Reviewer sent the analysis back: use residents only" in coordinator_prompt
+
+
+def test_a_report_the_reviewer_still_rejects_is_partial():
+    poor = Review(verdict="poor_report", reason="does not compare with overall employment")
+    graph, _, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
+                        "Report": [GOOD, GOOD, GOOD], "Review": [poor, poor, poor]})
+    state = ask(graph, QUESTION).values
+    assert state["outcome"] == "partial" and state["revisions"] == 2
+    assert "Reviewer note: does not compare with overall employment" in state["answer"]
+
+
+def test_only_cited_passages_are_listed_as_sources():
+    sources = [{"id": "S1", "kind": "dataset"}, {"id": "D1", "kind": "document"}, {"id": "D2", "kind": "document"},
+               {"id": "W1", "kind": "web"}]
+    report = Report(title="t", summary="s", findings=[Claim(text="x", citations=["F1", "D2"])])
+    assert [s["id"] for s in reporting.shown_sources(sources, report)] == ["S1", "D2"]
+    assert [s["id"] for s in reporting.shown_sources(sources, None)] == ["S1"]
 
 
 def test_llm_failure_routes_to_deterministic_fallback():

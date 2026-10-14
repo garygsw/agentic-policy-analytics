@@ -263,3 +263,16 @@ Each entry records the date, the decision, the alternatives considered and the r
   | With the budget only | 121 s | 23 | $0.11 | Unanswered: the retry lost the loaded data |
   | All four fixes | 89 s | 14 | $0.13 | Answered: grounded, reviewer passed, chart rendered |
 
+## D-027 · 2026-10-14 · "Partial" outcome; cited passages only; yearly changes per trend
+- **Decision:**
+  - **"Partial" outcome.** A run ends as `partial` when the reviewer's last check still finds the report does not fully answer the question. This happens once revisions run out. The report is still shown, since every number in it is grounded, and it states the reviewer's objection.
+  - **Sources list.** Document and web passages appear in a report's source list only when a finding cites them. Datasets are always listed, because facts and charts cite them.
+  - **Yearly changes.** For series short enough to list every period, `compute_trend` also returns the year-on-year change for each period.
+- **Why:**
+  - Calling such a run `answered` misled anyone looking only at the status.
+  - The agents read more passages than a report uses, and listing them all made reports noisy.
+  - Without the yearly changes, the analytics agent called the tool once per pair of years: ten extra calls in one live run.
+- **Alternatives:**
+  - Hide reports the reviewer rejects: this loses grounded findings.
+  - List every passage read: this is complete but noisy, and the run's full source list remains available from the API.
+

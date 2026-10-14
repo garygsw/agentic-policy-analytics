@@ -150,6 +150,7 @@ def render(state: AgentState) -> dict:
     review: Review | None = state.get("review")
     review_note = review.reason if review and review.verdict != "pass" else None
     charts = _charts_for_display(state)
+    sources = shown_sources(sources_of(state), report)
     lines = [f"# {report.title}", "", report.summary, "", "## Findings"]
     lines += [f"- {c.text} [{', '.join(c.citations)}]" for c in report.findings]
     caveats = list(report.caveats) + ([f"Reviewer note: {review_note}"] if review_note else [])
@@ -158,12 +159,20 @@ def render(state: AgentState) -> dict:
     by_id = {c["id"]: c for c in charts}
     if report.charts:
         lines += ["", "## Charts", *[f"- [{cid}] {by_id[cid]['title']}" for cid in report.charts if cid in by_id]]
-    if sources_of(state):
+    if sources:
         lines += ["", "## Sources", *[f"- [{s['id']}] {s.get('title', '')} ({s.get('agency', '')}) {s.get('url', '')}"
-                                      .rstrip() for s in sources_of(state)]]
+                                      .rstrip() for s in sources]]
     html = render_html(question=state["question"], language=state["language"], report=report,
-                       facts=facts_of(state), sources=sources_of(state), charts=charts, review_note=review_note)
-    return {"answer": "\n".join(lines), "report_html": html, "outcome": "answered"}
+                       facts=facts_of(state), sources=sources, charts=charts, review_note=review_note)
+    # "partial": the report is grounded, but the reviewer's last check found it does not fully answer the question.
+    return {"answer": "\n".join(lines), "report_html": html, "outcome": "partial" if review_note else "answered"}
+
+
+def shown_sources(sources: list[dict], report: Report | None) -> list[dict]:
+    """Datasets are always listed (facts and charts cite them); document and web passages only when a finding
+    cites them, since the agents read more passages than the report uses."""
+    cited = {c for finding in (report.findings if report else []) for c in finding.citations}
+    return [s for s in sources if s.get("kind", "dataset") == "dataset" or s["id"] in cited]
 
 
 def fallback_report(state: AgentState) -> dict:
@@ -180,8 +189,9 @@ def fallback_report(state: AgentState) -> dict:
     if state.get("errors"):
         lines += ["", "Details: " + "; ".join(state["errors"])]
     emit("fallback_report", "action", "Using the deterministic template report")
+    sources = shown_sources(sources_of(state), None)
     html = render_html(question=state.get("question", ""), language=state.get("language", "en"), report=None,
-                       facts=facts, sources=sources_of(state), charts=charts_of(state)) if facts else ""
+                       facts=facts, sources=sources, charts=charts_of(state)) if facts else ""
     return {"answer": "\n".join(lines), "report_html": html, "outcome": "fallback"}
 
 

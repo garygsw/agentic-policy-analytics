@@ -146,6 +146,8 @@ def test_compute_trend_records_numbered_facts():
     change = next(f for f in out["facts"] if f["label"] == "ICT, change 2020 to 2024")
     assert change["value"] == 40.0 and change["unit"] == "%" and change["sources"] == ["S1"]
     assert [f["id"] for f in ws.facts] == [f"F{i}" for i in range(1, len(ws.facts) + 1)]
+    # Each year's change is a fact too, so the agent does not need one call per pair of years.
+    assert [lbl for lbl in labels if "year-on-year" in lbl] == [f"ICT, year-on-year change to {y}" for y in YEARS[1:]]
 
 
 def test_compare_groups_labels_say_what_was_filtered():

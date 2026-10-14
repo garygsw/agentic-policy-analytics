@@ -202,9 +202,11 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
                                      [source_id], method))
         if t["peak"][0] != t["end"][0]:
             facts.append(ws.add_fact(f"{spec.label}, peak ({t['peak'][0]})", t["peak"][1], unit, [source_id], method))
-        if t["latest_yoy"]:
-            facts.append(ws.add_fact(f"{spec.label}, year-on-year change to {t['latest_yoy'][0]}", t["latest_yoy"][1],
-                                     "%", [source_id], method))
+        # Year-on-year changes for every period shown (short series), else the latest one only.
+        yoy = stats.year_on_year(values).dropna()
+        for period in (yoy.index if len(periods) == len(values) else yoy.index[-1:]):
+            facts.append(ws.add_fact(f"{spec.label}, year-on-year change to {period}", float(yoy[period]), "%",
+                                     [source_id], method))
         return _json({"facts": [f for f in ws.facts if f["id"] in facts], "periods": len(values), "notes": notes})
 
     def compare_groups(dataset_id: str, measure: str, group_by: str, filters: dict | None = None,
