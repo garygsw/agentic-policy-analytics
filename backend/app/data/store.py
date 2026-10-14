@@ -121,7 +121,8 @@ class DataStore:
     def write(directory: Path, loaded: LoadedDataset) -> None:
         directory.mkdir(parents=True, exist_ok=True)
         key = loaded.dataset.key
-        loaded.frame.to_csv(directory / f"{key}.csv.gz", index=False)
+        # mtime=0 keeps the gzip header fixed, so an unchanged table gives an identical file (no noisy diffs)
+        loaded.frame.to_csv(directory / f"{key}.csv.gz", index=False, compression={"method": "gzip", "mtime": 0})
         meta = {"quality": loaded.quality.model_dump(), "provenance": loaded.provenance.model_dump()}
         (directory / f"{key}.json").write_text(json.dumps(meta, indent=1, ensure_ascii=False))
 
