@@ -383,6 +383,18 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
 - **Report pages.** Served with a Content-Security-Policy: scripts only inline and from cdnjs (Plotly, with SRI),
   and no network connections. In the UI they are also sandboxed.
 - **Containers.** They run as unprivileged users.
+- **Authentication: not built (D-040).** The API has no login. It is meant for one user on their own machine:
+  browsers may call it only from the configured UI origin (CORS), but anything that can reach port 8000 can use
+  it and spend the LLM budget. The production path:
+  - **Sign-in** through the organisation's identity provider (OpenID Connect single sign-on), so no passwords
+    are stored here.
+  - **A session cookie** (HttpOnly, SameSite) rather than a token in a header: the report frame, the download
+    links and the WebSocket are loaded by the browser itself and cannot add headers.
+  - **Ownership and roles.** Conversations gain an owner, and every query filters by it. An analyst role sees
+    its own work; an administrator role restores deleted conversations (today `app.admin`, run on the server).
+    Shared team spaces would be a later step.
+  - **Accountability.** Runs already record every step, model call and cost; adding the user to each run gives
+    an audit trail by person and a per-user cost budget in front of the run manager (section 11).
 
 ## 11. Scaling and production
 

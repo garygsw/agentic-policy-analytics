@@ -472,3 +472,15 @@ Changes from the first round of hands-on testing.
   - Deleted data is never removed. A real deployment needs a retention rule: purge conversations deleted more than N days ago, and erase at once on a data-protection request. That purge would be a further `app.admin` command; it is not built.
   - Search uses SQL `LIKE` over at most a few hundred conversations. At scale it would use the existing FTS5 machinery or the vector index instead.
 - **Alternatives:** restore through an API route (it needs an administrator role, which needs authentication first); search only the loaded titles in the browser (instant, but misses questions and anything past the first 100 conversations).
+
+## D-040 · 2026-10-15 · No authentication in this version; the production design is documented instead
+- **Decision:** the API and UI stay without a login. ARCHITECTURE.md (section 10) describes how sign-in, ownership, roles and auditing would be added, and the README warns against running the stack on a shared network.
+- **Why:**
+  - The brief does not require authentication; it raises security as a question for the innovation essay.
+  - Little time remains before the code freeze. A login layer touches every route, the tests, the load test, the CI smoke test and the demo itself.
+  - A half-built login (a single shared key) would protect little while suggesting more.
+- **Constraint for a later design:** the report frame, the download links and the WebSocket are fetched by the browser itself and cannot carry an `Authorization` header. So a session cookie (HttpOnly, SameSite) fits this app better than bearer tokens.
+- **Alternatives considered:**
+  - **A shared access key** behind a login screen, setting a cookie (2–3 hours). It stops strangers from spending the LLM budget, but there is no notion of users.
+  - **Local accounts** with hashed passwords, per-user conversations and an admin role (about a day). It is real authentication and authorisation, but with passwords stored here rather than single sign-on.
+  - **Single sign-on** through an identity server (Keycloak in Compose, or a cloud directory). This is the production answer, but too heavy for reviewers to run.

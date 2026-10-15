@@ -75,6 +75,7 @@ docker compose up --build
 ```
 
 Open the UI at http://localhost:3000; the API's interactive docs are at http://localhost:8000/docs.
+The API has no login (D-040), so run it on your own machine rather than on a shared network.
 
 Runtime state (document index, caches, models, conversations) lives in a Docker volume, not in a folder shared
 with your machine, because SQLite is not safe across that boundary (D-036). The datasets work at once, from
