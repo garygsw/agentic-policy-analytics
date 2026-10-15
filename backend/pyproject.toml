@@ -25,6 +25,8 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "sqlalchemy>=2.0",
+    "matplotlib==3.11.2",
+    "fpdf2==2.8.9",
 ]
 
 [build-system]

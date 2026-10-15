@@ -8,7 +8,16 @@ from app.graph.build import Deps, build_graph
 from app.graph.checkpoint import serializer, sqlite_checkpointer
 from app.graph.nodes import reporting
 from app.graph.nodes.intake import llm_decider
-from app.graph.state import Claim, CoordinatorStep, Report, ReportTexts, Review, StandaloneQuestion, TriageDecision
+from app.graph.state import (
+    Claim,
+    ClaimProblem,
+    CoordinatorStep,
+    Report,
+    ReportTexts,
+    Review,
+    StandaloneQuestion,
+    TriageDecision,
+)
 from app.llm.fake import FakeLLMs
 
 QUESTION = "Analyse employment trends in the technology sector from 2020-2024"
@@ -203,6 +212,33 @@ def test_a_report_the_reviewer_still_rejects_is_answered_with_its_note():
     assert state["outcome"] == "answered" and state["revisions"] == 2
     assert "Reviewer note: does not compare with overall employment" in state["answer"]
     assert state["flags"] == ["Reviewer note: does not compare with overall employment"]
+
+
+UNSUPPORTED = Review(verdict="pass", reason="answers the question", unsupported=[
+    ClaimProblem(where="finding 1", problem="says employment rose, but F2 is lower than F1")])
+
+
+def test_a_claim_its_citations_do_not_support_is_sent_back_and_fixed():
+    graph, llm, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
+                          "Report": [GOOD, GOOD], "Review": [UNSUPPORTED, PASS]})
+    state = ask(graph, QUESTION).values
+    rewrite_request = [m for key, m in llm.calls if key == "Report"][1][-1].content
+    assert "finding 1: says employment rose, but F2 is lower than F1" in rewrite_request
+    # The reviewer sees each statement with its citations, and the material they cite.
+    review_request = [m for key, m in llm.calls if key == "Review"][0][-1].content
+    assert "finding 1: Employment rose from 100,000 to 125,000 persons. [F1, F2, S1]" in review_request
+    assert '"ICT employment, 2024"' in review_request
+    assert state["outcome"] == "answered" and state["flags"] == [] and state["revisions"] == 1
+
+
+def test_a_claim_still_unsupported_after_two_fixes_is_flagged_not_dropped():
+    graph, _, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
+                        "Report": [GOOD, GOOD, GOOD], "Review": [UNSUPPORTED] * 3})
+    state = ask(graph, QUESTION).values
+    assert state["outcome"] == "answered" and state["revisions"] == 2
+    assert "⚠ Unverified: says employment rose, but F2 is lower than F1" in state["answer"]
+    assert state["flags"] == [
+        "finding 1: says employment rose, but F2 is lower than F1 (not supported by its citations)"]
 
 
 def test_only_cited_passages_are_listed_as_sources():

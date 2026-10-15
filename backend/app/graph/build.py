@@ -83,13 +83,14 @@ def route_validate(state: AgentState) -> str:
 
 def route_review(state: AgentState) -> str:
     review = state.get("review")
-    if _failed(state) or review is None or review.verdict == "pass":
+    if _failed(state) or review is None:
         return "localize_report"  # the report is already grounded; a failed review should not discard it
-    if review.verdict == "wrong_analysis":
-        # One more round of analysis at most; a second objection is shown with the report ("partial").
-        again = state.get("analysis_reworks", 0) <= reporting.MAX_ANALYSIS_REWORKS
-        return "coordinator" if again else "localize_report"
-    return "report_writer" if state.get("revisions", 0) < reporting.MAX_REVISIONS else "localize_report"
+    if review.verdict == "wrong_analysis" and state.get("analysis_reworks", 0) <= reporting.MAX_ANALYSIS_REWORKS:
+        return "coordinator"  # one more round of analysis at most; a second objection becomes a flag
+    rewrite = review.verdict == "poor_report" or review.unsupported  # unclear, or claims their citations don't support
+    if rewrite and state.get("revisions", 0) < reporting.MAX_REVISIONS:
+        return "report_writer"
+    return "localize_report"  # what remains is shown with the report as flags, never dropped
 
 
 def build_graph(deps: Deps | None = None, checkpointer=None):

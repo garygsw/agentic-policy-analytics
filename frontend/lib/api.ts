@@ -59,5 +59,6 @@ export const api = {
 
 export const reportUrl = (runId: string) => `${API_URL}/api/runs/${runId}/report.html`;
 export const markdownUrl = (runId: string) => `${API_URL}/api/runs/${runId}/report.md`;
+export const pdfUrl = (runId: string) => `${API_URL}/api/runs/${runId}/report.pdf`;
 export const streamUrl = (runId: string, after: number) =>
   `${API_URL.replace(/^http/, "ws")}/api/runs/${runId}/stream?after=${after}`;

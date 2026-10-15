@@ -46,6 +46,7 @@
   tr:target, li:target { background: var(--accent-soft); }
   ul.caveats li { margin-bottom: 8px; }
   .flag { display: block; margin-top: 4px; font-size: 13px; color: var(--warn, #9a5b00); }
+  .flash { background: var(--accent-soft); transition: background 0.4s; border-radius: 6px; }
   ol.sources li { margin-bottom: 14px; }
   .muted { color: var(--muted); } .small { font-size: 13px; }
   .warning { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 6px 10px; margin-top: 6px; font-size: 14px; }
@@ -168,14 +169,27 @@
   }
   window.addEventListener("hashchange", revealTarget); revealTarget();
 
-  // When the report is embedded (the app shows it in a frame), tell the page its height so the frame can fit it.
-  // Only the height is sent.
+  // Embedded in the app, the report sits in a frame as tall as the report, so the frame never scrolls; the page
+  // around it does. The report therefore sends its height, and asks the page to scroll to a citation's target.
+  // Only a height and a position are sent.
   if (window.parent !== window) {
+    document.documentElement.style.overflow = "hidden";
     var postHeight = function () {
       window.parent.postMessage({ type: "report-height", height: document.documentElement.scrollHeight }, "*");
     };
-    new ResizeObserver(postHeight).observe(document.documentElement);
+    new ResizeObserver(postHeight).observe(document.body);
     window.addEventListener("load", postHeight);
+    document.addEventListener("click", function (event) {
+      var link = event.target.closest('a[href^="#"]');
+      var target = link && document.getElementById(link.getAttribute("href").slice(1));
+      if (!target) return;
+      event.preventDefault();
+      var box = target.closest("details");
+      if (box && !box.open) box.open = true;  // a fact sits in the collapsed facts table
+      target.classList.add("flash");
+      setTimeout(function () { target.classList.remove("flash"); }, 1800);
+      window.parent.postMessage({ type: "report-scroll", top: target.getBoundingClientRect().top + window.scrollY }, "*");
+    });
   }
 </script>
 {% if charts %}

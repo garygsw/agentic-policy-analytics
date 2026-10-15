@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from app.config import Settings, get_settings
 from app.graph.options import FALLBACK_FOR, Effort, current_options
 
-Tier = Literal["quality", "fast"]
+Tier = Literal["quality", "fast", "check"]  # check: the other provider
 
 # The OpenAI SDK types the `parsed` field of structured-output responses loosely, so pydantic warns whenever
 # LangChain serialises one. The parsed result itself is correct; only this exact warning is silenced.
@@ -71,10 +71,12 @@ def make_model(name: str, effort: Effort, s: Settings) -> BaseChatModel:
 def build_models(tier: Tier, settings: Settings | None = None) -> tuple[BaseChatModel, BaseChatModel]:
     s = settings or get_settings()
     options = current_options()
-    if tier == "quality":
+    if tier in ("quality", "check"):
         primary_name = options.model or s.llm_quality_primary
         fallback_name = FALLBACK_FOR.get(primary_name, s.llm_quality_fallback)
         effort: Effort = options.reasoning_effort or s.llm_reasoning_effort
+        if tier == "check":  # checking is done by the other provider, so a model never checks its own writing
+            primary_name, fallback_name = fallback_name, primary_name
     else:
         primary_name, fallback_name, effort = s.llm_fast_primary, s.llm_fast_fallback, "low"
     if s.force_primary_fail:

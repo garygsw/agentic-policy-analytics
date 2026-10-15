@@ -1,13 +1,16 @@
 # The whole system on one machine:
 #   cp .env.example .env    # then add your keys, or: python3 scripts/set_keys.py
-#   mkdir -p var
 #   docker compose up --build
 # Web UI: http://localhost:3000   API: http://localhost:8000/docs
 #
-# ./var holds the runtime state shared with local development: the document index, dataset caches, embedding
-# models, conversations and reports. A fresh var/ starts with an empty document index; the ingest service fills
-# it at 03:00 Singapore time, or run it at once with:
+# Runtime state lives in the "state" volume (/app/var): the document index, dataset caches, embedding models,
+# conversations and reports. It is a Docker volume, not a folder shared with the host, because SQLite is not
+# safe across that boundary: a host process opening the same database while a container writes it can corrupt
+# it (D-036). A new volume starts with an empty document index. The ingest service fills it at 03:00 Singapore
+# time; to fill it at once:
 #   docker compose run --rm ingest python -m app.rag.scheduler --now
+# To start from a local development var/ instead (stop the stack and every local process using var/ first):
+#   docker compose run --rm --no-deps -v "$PWD/var:/seed:ro" api sh -c "cp -r /seed/rag /seed/models /seed/cache /seed/*.sqlite /app/var/"
 name: policy-analytics
 
 x-backend: &backend
@@ -19,7 +22,7 @@ x-backend: &backend
     - path: .env
       required: false  # without keys the API starts, but questions cannot be answered
   volumes:
-    - ./var:/app/var
+    - state:/app/var
   restart: unless-stopped
 
 services:
@@ -48,3 +51,6 @@ services:
       api:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  state: {}

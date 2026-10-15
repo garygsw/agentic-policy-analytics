@@ -398,3 +398,44 @@ Changes from the first round of hands-on testing.
   - **Searches.** A search before every decline costs one extraction step, roughly $0.02–0.05, on questions that will be declined anyway.
   - **Whole-web results.** They can come from weaker sources. They stay labelled untrusted, and the writer must cite them.
 
+## D-035 · 2026-10-15 · Claim checker, report downloads, conversation titles, simpler controls
+- **Decision:**
+  - **Claim checker.** The reviewer now also checks every statement (summary, findings, caveats) against the facts and sources it cites, and returns the unsupported ones. It covers:
+    - comparisons and rankings ("largest", "alone", "only")
+    - direction (rose or fell, which the number check ignores)
+    - periods and definitions
+    - causes and attribution
+
+    Unsupported statements go back to the writer, sharing the limit of two fixes; any that remain are flagged ⚠ (D-034). The review runs on a new "check" tier: the other provider's model, with the main model as its fallback, so a model never checks its own writing. It is one call, the reviewer's existing one, with the writer's material added.
+  - **Downloads.** When a run finishes, the API builds a Markdown file and a PDF from its final state and stores both with the run.
+    - The Markdown embeds each chart as an image, with its data table.
+    - The PDF is built with fpdf2. Its citations jump to the fact or source, source addresses open in a new tab, and flagged statements keep their warnings.
+    - Chart images are drawn with matplotlib from the same Plotly specs as the HTML report. Both libraries are pure Python.
+    - The PDF uses the DejaVu font that comes with matplotlib, which covers Latin script. Chinese and Tamil reports therefore get an English PDF, which the PDF says.
+    - The new database columns are added to existing databases automatically.
+  - **Report in the chat.** It has no scrollbar of its own, and "Open report" is gone. A citation click scrolls the conversation to the target, opening the facts table when needed. The report asks the page to scroll, because its frame never scrolls.
+  - **Titles.** A conversation gets a 3–6 word title, written by the fast model in the question's language. Until it arrives, or if it fails, the question is shown cut at a word boundary. Existing long titles are renamed once, at start-up.
+  - **Controls.**
+    - Plan approval is a mode, Plan or Auto (the default), beside the + menu.
+    - The + menu holds only tool switches.
+    - Triage is a server setting, with no UI control.
+    - The sidebar can be hidden. It is visible by default, and the choice is remembered in the browser.
+- **Measured:** see TESTING.md.
+- **Alternatives:**
+  - **A separate claim-check node and call:** a little clearer, but an extra call per draft; the reviewer already reads the report.
+  - **Browser print-to-PDF:** exact and multilingual, but not a one-click file.
+  - **HTML-to-PDF with WeasyPrint or headless Chrome:** needs system libraries or a browser in the image.
+
+
+## D-036 · 2026-10-15 · Docker state in a volume; results saved before the end event
+- **What happened:** during QA, `var/app.sqlite` (the history of runs, events and LLM calls) was corrupted. Its first page was overwritten with zeros.
+  - The Compose stack bind-mounted `./var` from the Mac into Colima's Linux VM.
+  - SQLite in WAL mode coordinates processes through a shared-memory file, which cannot be shared across that boundary.
+  - So a process on the Mac (here, `sqlite3`, used for debugging) reading the database while a container wrote it was enough to break it. The column migration then ran on the damaged file.
+- **Recovered:** the checkpoints and the document index were intact. From `app.sqlite`, SQLite's recovery and a rebuild by table restored all 14 conversations, 9 of 12 runs, 1,628 events and 180 LLM calls. The damaged file and a backup are kept outside the repo.
+- **Decision:** Docker keeps its runtime state in a named volume, `state`, inside the VM, so no host process can open its databases. Local development keeps `var/` on the Mac, and the two no longer share data. The Compose file shows how to seed the volume from a local `var/` once, with everything stopped. This replaces the shared `./var` of D-032.
+- **Also fixed:** a run now saves its results (answer, report, downloads) before its "end" event. Previously, a client that fetched the run on "end" could arrive before the report was saved, and showed the answer without it. Building the downloads made that window about a second long. A WebSocket follows a run until it has sent "end" and the run is no longer running, so the reordering is safe for live viewers.
+- **Alternatives:**
+  - Keep sharing `./var` with a rule not to open the files while Docker runs: easy to break by accident, as happened here.
+  - Use SQLite's rollback journal instead of WAL: it relies on file locks across the VM boundary, which are not reliable either.
+

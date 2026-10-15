@@ -72,3 +72,41 @@ def test_fallback_page_shows_facts_without_prose():
 def test_labels_follow_the_language():
     html = page(language="ta")
     assert '<html lang="ta">' in html and "முக்கியக் கண்டறிதல்கள்" in html
+
+
+# -- downloads -----------------------------------------------------------------------------------------------------
+def final_state(language="en", **extra):
+    """A run's final state, as the exports receive it."""
+    return {"question": "Analyse tech employment", "language": language, "report": report(),
+            "findings": {"analytics": {"facts": FACTS, "sources": SOURCES, "charts": CHARTS}}, **extra}
+
+
+def test_markdown_download_embeds_the_charts_and_their_data():
+    from app.report.export import export_markdown
+    md = export_markdown(final_state())
+    assert md.startswith("# Tech employment grew") and "1. Employment reached 139,200. [F1, S1]" in md
+    assert "![ICT jobs](data:image/png;base64," in md  # the chart, as an image
+    assert "| period | ICT (persons) |" in md and "| 2024 | 139200.0 |" in md  # and its data
+    assert "| F1 | ICT employment, 2024 | 139,200 | persons | S1 |" in md  # every cited fact is listed
+    assert "- **[S1]** Employed Residents by Industry (Ministry of Manpower). https://data.gov.sg" in md
+
+
+def test_markdown_download_keeps_flagged_statements_with_their_warning():
+    from app.report.export import export_markdown
+    flags = [{"where": "finding 1", "problem": "139,200 does not match", "message": "x"}]
+    md = export_markdown(final_state(grounding_flags=flags))
+    assert "1. Employment reached 139,200. [F1, S1]\n  > ⚠ Unverified: 139,200 does not match" in md
+
+
+def test_pdf_download_links_citations_to_sources_and_sources_to_the_web():
+    from app.report.export import export_pdf
+    pdf = export_pdf(final_state())
+    assert pdf.startswith(b"%PDF") and b"https://data.gov.sg/datasets/d_x/view" in pdf  # the source opens
+    assert pdf.count(b"/Dest") >= 3  # [F1], [S1] in the finding and [S1] in the caveat jump inside the PDF
+    # A Chinese report gets an English PDF (the bundled font has Latin script only); Malay keeps its language.
+    from app.report.export import pdf_text
+    translated = report(title="科技就业增长")
+    assert pdf_text(final_state("zh", report_display=translated))[0].title == "Tech employment grew"
+    malay = report(title="Pekerjaan teknologi")
+    assert pdf_text(final_state("ms", report_display=malay))[0].title == "Pekerjaan teknologi"
+    assert export_pdf(final_state("zh", report_display=translated)).startswith(b"%PDF")

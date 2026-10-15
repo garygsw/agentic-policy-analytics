@@ -6,7 +6,20 @@ would manage schema changes with Alembic migrations instead.
 """
 import datetime as dt
 
-from sqlalchemy import JSON, Float, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine, event
+from sqlalchemy import (
+    JSON,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+    create_engine,
+    event,
+    inspect,
+    text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from app.config import REPO_ROOT
@@ -44,6 +57,8 @@ class Run(Base):
     pending: Mapped[dict | None] = mapped_column(JSON)       # the question the agents are waiting on
     answer: Mapped[str | None] = mapped_column(Text)
     report_html: Mapped[str | None] = mapped_column(Text)
+    report_markdown: Mapped[str | None] = mapped_column(Text)  # the Markdown download, charts embedded as images
+    report_pdf: Mapped[bytes | None] = mapped_column(LargeBinary)  # the PDF download
     sources: Mapped[list | None] = mapped_column(JSON)
     totals: Mapped[dict | None] = mapped_column(JSON)
     error: Mapped[str | None] = mapped_column(Text)
@@ -98,4 +113,19 @@ def make_session_factory(url: str | None = None) -> sessionmaker:
         connection.execute("pragma foreign_keys = on")
 
     Base.metadata.create_all(engine)
+    add_missing_columns(engine)
     return sessionmaker(engine, expire_on_commit=False)
+
+
+def add_missing_columns(engine) -> None:
+    """create_all makes missing tables, not missing columns. Columns added to a table later (such as the report
+    downloads) are added here to databases created before them. Without data loss; a full migration tool such as
+    Alembic would also handle renames and type changes."""
+    existing = inspect(engine)
+    with engine.begin() as connection:
+        for table in Base.metadata.sorted_tables:
+            present = {c["name"] for c in existing.get_columns(table.name)}
+            for column in table.columns:
+                if column.name not in present:
+                    kind = column.type.compile(dialect=engine.dialect)
+                    connection.execute(text(f'alter table {table.name} add column "{column.name}" {kind}'))

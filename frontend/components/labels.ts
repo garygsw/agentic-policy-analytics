@@ -22,11 +22,6 @@ export const OUTCOMES: Record<string, { label: string; tone: "ok" | "warn" | "mu
   failed: { label: "Failed", tone: "warn" },
 };
 
-export const TRIAGE_LABELS: Record<string, string> = {
-  local: "Local classifier (LLM when unsure)",
-  jev: "Jev (TypeSafe)",
-  llm: "Fast LLM",
-};
 
 export const TOOL_NAMES: Record<string, string> = {
   search_datasets: "Dataset search", search_documents: "Document search", web_search: "Web search",

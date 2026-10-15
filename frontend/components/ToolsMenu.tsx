@@ -1,19 +1,17 @@
 "use client";
 import type { OptionsResponse, RunOptions } from "@/lib/types";
 
-import { TOOL_NAMES, TRIAGE_LABELS } from "./labels";
+import { TOOL_NAMES } from "./labels";
 import { Switch, usePopover } from "./Popover";
 
 interface Props {
   catalog: OptionsResponse;
   value: RunOptions;
   onChange: (value: RunOptions) => void;
-  planApproval: boolean;
-  onPlanApproval: (on: boolean) => void;
 }
 
-/** The + menu: a switch for each optional tool, and the less common settings (plan approval, triage). */
-export function ToolsMenu({ catalog, value, onChange, planApproval, onPlanApproval }: Props) {
+/** The + menu: a switch for each optional tool. */
+export function ToolsMenu({ catalog, value, onChange }: Props) {
   const { open, setOpen, ref } = usePopover();
   const optional = catalog.tools.filter((t) => !t.required);
   const enabled = value.tools ?? optional.map((t) => t.name); // null means every tool
@@ -26,7 +24,7 @@ export function ToolsMenu({ catalog, value, onChange, planApproval, onPlanApprov
 
   return (
     <div className="menu-anchor" ref={ref}>
-      <button type="button" className="plus" aria-label="Tools and settings" aria-haspopup="menu"
+      <button type="button" className="plus" aria-label="Tools" aria-haspopup="menu"
         aria-expanded={open} onClick={() => setOpen(!open)}>
         +{switchedOff > 0 && <span className="off-count">{switchedOff} off</span>}
       </button>
@@ -46,24 +44,6 @@ export function ToolsMenu({ catalog, value, onChange, planApproval, onPlanApprov
           <p className="menu-note">
             Always on: {catalog.tools.filter((t) => t.required).map((t) => TOOL_NAMES[t.name] ?? t.name).join(", ")}.
           </p>
-          <div className="menu-divider" />
-          <p className="menu-heading">Settings</p>
-          <div className="menu-item">
-            <span>
-              <span className="item-title">Approve plan</span>
-              <span className="item-desc">Pause for your approval before any data is fetched</span>
-            </span>
-            <Switch on={planApproval} onChange={onPlanApproval} label="Approve plan" />
-          </div>
-          <label className="menu-item stacked">
-            <span>
-              <span className="item-title">Triage</span>
-              <span className="item-desc">How a question is checked for scope</span>
-            </span>
-            <select value={value.triage} onChange={(e) => onChange({ ...value, triage: e.target.value as RunOptions["triage"] })}>
-              {catalog.triage.map((t) => <option key={t} value={t}>{TRIAGE_LABELS[t] ?? t}</option>)}
-            </select>
-          </label>
         </div>
       )}
     </div>

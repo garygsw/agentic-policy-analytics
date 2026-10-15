@@ -16,9 +16,12 @@ given to read.
 **What it does**
 - **Answers from official data.** 19 curated datasets from MOM, HDB, URA, LTA, MOH, IMDA and SingStat, plus
   search over all 4,655 data.gov.sg datasets, about 3,000 agency documents and the web.
-- **Grounded reports.** Every number must match a computed fact or a cited source, and every finding and caveat
-  is cited. A statement that still fails after two revisions stays in the report, marked ⚠ with what could not
-  be verified. Nothing is dropped.
+- **Grounded reports.**
+  - Every number must match a computed fact or a cited source, and every finding and caveat is cited.
+  - A second model, from the other provider, checks each statement against what it cites.
+  - A statement that still fails after two revisions stays in the report, marked ⚠ with what could not be
+    verified. Nothing is dropped.
+  - Reports download as Markdown, with the charts as images, or as PDF, with clickable citations.
 - **Agents that plan and recover.**
   - A ReAct coordinator directs an extraction agent and an analytics agent.
   - A reviewer checks the result.
@@ -68,13 +71,15 @@ Put your keys in `.env`. Or, to type them hidden and check them with each provid
 and then `python3 scripts/set_keys.py --verify`. Then:
 
 ```bash
-mkdir -p var && docker compose up --build
+docker compose up --build
 ```
 
 Open the UI at http://localhost:3000; the API's interactive docs are at http://localhost:8000/docs.
 
-The datasets work at once, from committed snapshots or live. Document search needs the index built once. This
-crawls up to 500 pages per agency, which takes about 40 minutes; a nightly cron job keeps it fresh:
+Runtime state (document index, caches, models, conversations) lives in a Docker volume, not in a folder shared
+with your machine, because SQLite is not safe across that boundary (D-036). The datasets work at once, from
+committed snapshots or live. Document search needs the index built once. This crawls up to 500 pages per agency,
+which takes about 40 minutes; a nightly cron job keeps it fresh:
 
 ```bash
 docker compose run --rm ingest python -m app.rag.scheduler --now
@@ -142,9 +147,14 @@ Questions that show the error handling:
 | Set `FORCE_PRIMARY_FAIL=true` in `.env` and restart | every call to the primary provider fails, the other provider answers, and the call log shows both |
 | Set `FORCE_SOURCE_FAIL=true` in `.env` and restart | live data sources are skipped; reports say cached or snapshot data was used |
 
-The **+** menu holds a switch for each optional tool, the **Approve plan** switch (pause for your approval before
-any data is fetched) and the triage method. The model menu beside the send button sets the model and its effort.
-**Detail** sets how much of the trace you see: Normal, Thinking or Verbose.
+In the chat bar:
+- The **+** menu has a switch for each optional tool.
+- **Mode** is **Auto** (the default) or **Plan**, which pauses for your approval before any data is fetched.
+- The model menu beside the send button sets the model and its effort.
+
+**Detail** sets how much of the trace you see: Normal, Thinking or Verbose. In a report, clicking a citation
+scrolls to its fact or source, and source links open in a new tab. The sidebar can be hidden with the button at
+its top.
 
 ## Running the tests
 
@@ -187,6 +197,7 @@ method and all results are in [TESTING.md](TESTING.md).
 | **Hybrid search** (BM25 + local embeddings, rank fusion) | Keyword search finds scheme names and figures; vectors find paraphrases. Fusion beat either alone, and beat adding a reranker, on our retrieval evaluation. |
 | **Local triage classifier, LLM when unsure** | 99% accurate on held-out questions in 3 ms, at a quarter of the cost of always asking an LLM. |
 | **Next.js + TypeScript**, one page | A live trace needs client state. A pure reducer turns events into the view, so live and replayed runs look the same. |
+| **Reports: HTML, Markdown and PDF** from one structure | The HTML (Plotly charts) is shown in the chat. The downloads (charts drawn with matplotlib, PDF with fpdf2) are built from the same state, with pure-Python libraries and no system dependencies. |
 | **Docker Compose, GitHub Actions** | Starts with one command. CI tests everything and smoke-tests the images on each push. |
 
 Every decision, with the alternatives considered, is in [docs/DECISIONS.md](docs/DECISIONS.md).

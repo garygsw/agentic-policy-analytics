@@ -8,6 +8,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from app.api.db import make_session_factory
 from app.api.main import create_app
 from app.api.runs import draft_view
+from app.api.titles import Title, short_question, write_title
 from app.graph.build import Deps, build_graph
 from app.graph.checkpoint import serializer
 from app.graph.nodes.intake import llm_decider
@@ -41,8 +42,7 @@ def client_for(replies: dict, tmp_path, llm=None) -> TestClient:
     add(index, "https://mom.gov.sg/a", "Tech workforce", "Information and communications employment grew in 2024.")
     retriever = Retriever(index, HashEmbedder(), OverlapReranker())
     app = create_app(graph=graph, sessions=make_session_factory(f"sqlite:///{tmp_path / 'app.sqlite'}"),
-                     retriever=retriever,
-                     preload_models=False)
+                     retriever=retriever, preload_models=False, llm=llm)
     return TestClient(app)
 
 
@@ -57,7 +57,7 @@ def wait(client: TestClient, run_id: str, timeout: float = 15) -> dict:
 
 
 ANSWERED = {"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
-            "Report": [GOOD], "Review": [PASS]}
+            "Report": [GOOD], "Review": [PASS], "Title": [Title(title="Tech employment trends")]}
 
 
 @pytest.fixture
@@ -84,8 +84,11 @@ def test_message_runs_in_the_background_to_an_answer(answered):
     assert (run["status"], run["outcome"]) == ("completed", "answered")
     assert run["has_report"] and run["totals"]["llm_calls"] == 6
     assert [c["agent"] for c in run["llm_calls"]][:2] == ["triage", "coordinator"]  # the LLM call log is stored
-    detail = client.get(f"/api/threads/{thread}").json()
-    assert detail["title"] == QUESTION and [m["role"] for m in detail["messages"]] == ["user", "assistant"]
+    deadline = time.time() + 5  # the title is written in the background, alongside the run
+    while (detail := client.get(f"/api/threads/{thread}").json())["title"] != "Tech employment trends":
+        assert time.time() < deadline, detail["title"]
+        time.sleep(0.05)  # written by the fast model, not the whole question
+    assert [m["role"] for m in detail["messages"]] == ["user", "assistant"]
 
 
 def test_events_are_numbered_and_end_with_the_outcome(answered):
@@ -111,6 +114,9 @@ def test_reports_are_served_with_a_restrictive_policy(answered):
     html = client.get(f"/api/runs/{run_id}/report.html")
     assert html.status_code == 200 and "Tech employment grew" in html.text
     assert "default-src 'none'" in html.headers["content-security-policy"]
+    pdf = client.get(f"/api/runs/{run_id}/report.pdf")
+    assert pdf.headers["content-type"] == "application/pdf" and pdf.content.startswith(b"%PDF")
+    assert "attachment" in pdf.headers["content-disposition"] and client.get(f"/api/runs/{run_id}").json()["has_pdf"]
     markdown = client.get(f"/api/runs/{run_id}/report.md")
     assert markdown.text.startswith("# Tech employment grew") and "attachment" in markdown.headers[
         "content-disposition"]
@@ -193,4 +199,26 @@ def test_streamed_report_json_becomes_readable_text():
     assert view["findings"] == ["From 102,800 to 129,700.", "Fas"]
     assert view["content"] == "# Tech jobs grew\n\nICT employment rose 26.2%.\n\n- From 102,800 to 129,700.\n- Fas"
     assert draft_view('{"ti')["content"] == "" and draft_view("")["content"] == ""
+
+
+def test_an_older_database_gains_the_new_columns(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.sqlite"
+    with sqlite3.connect(path) as old:  # a runs table from before the report downloads existed
+        old.execute("create table runs (id varchar(32) primary key, thread_id varchar(32), question text, "
+                    "status varchar(20))")
+    make_session_factory(f"sqlite:///{path}")
+    with sqlite3.connect(path) as db:
+        columns = {row[1] for row in db.execute("pragma table_info(runs)")}
+    assert {"report_markdown", "report_pdf", "report_html", "totals"} <= columns
+
+
+def test_titles_fall_back_to_the_question_cut_at_a_word():
+    question = "How has employment in the information and communications sector changed since 2019?"
+    assert short_question(question) == "How has employment in the information and…"
+    assert short_question("COE premiums") == "COE premiums"
+
+    def failing(tier, schema=None):
+        raise RuntimeError("provider down")
+    assert write_title(question, failing) == short_question(question)
 

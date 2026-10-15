@@ -67,7 +67,12 @@ pre { font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-wor
 
 /* Sidebar */
 .sidebar { background: var(--sidebar); border-right: 1px solid var(--border); padding: 1rem 0.75rem; overflow-y: auto; }
-.brand { font-weight: 600; padding: 0.25rem 0.5rem 0.75rem; }
+.brand { display: flex; align-items: center; justify-content: space-between; font-weight: 600; padding: 0.25rem 0.25rem 0.75rem 0.5rem; }
+.hide-sidebar { display: inline-flex; }
+/* Wide screens: the sidebar can be hidden; the top bar's button brings it back. */
+.app.sidebar-hidden { grid-template-columns: 1fr; }
+.app.sidebar-hidden .sidebar { display: none; }
+.app.sidebar-hidden .menu-button { display: inline-flex; }
 .sidebar .new { width: 100%; text-align: left; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
 .sidebar .new:hover { border-color: var(--accent); }
 .section-label { margin: 1.25rem 0.5rem 0.4rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
@@ -176,6 +181,8 @@ select { background: var(--panel); border: 1px solid var(--border); border-radiu
 .popover { position: absolute; bottom: calc(100% + 8px); z-index: 30; width: 330px; max-width: calc(100vw - 2rem); padding: 0.35rem; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); box-shadow: 0 10px 30px rgb(0 0 0 / 14%); }
 .popover.align-left { left: 0; }
 .popover.align-right { right: 0; }
+.popover.narrow { width: 290px; }
+.pill.plan { border-color: var(--accent); color: var(--accent); }
 .submenu-anchor { position: relative; }
 .popover.submenu { bottom: 0; right: calc(100% + 6px); width: 300px; }
 .menu-item { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; width: 100%; padding: 0.5rem 0.6rem; border: 0; border-radius: 8px; background: none; text-align: left; font-size: 0.9rem; }
@@ -233,7 +240,9 @@ button.menu-item:hover, label.menu-item:hover { background: var(--code); }
   .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 15; width: 280px; transform: translateX(-100%); transition: transform 0.2s; }
   .sidebar.open { transform: none; box-shadow: 8px 0 24px rgb(0 0 0 / 15%); }
   .backdrop { position: fixed; inset: 0; z-index: 14; background: rgb(0 0 0 / 30%); }
-  .menu-button { display: inline-block; }
+  .menu-button { display: inline-flex; }
+  .hide-sidebar { display: none; }
+  .app.sidebar-hidden .sidebar { display: block; }  /* narrow screens use the slide-over instead */
   .column { padding: 0 0.9rem; }
   .bubble.user { max-width: 95%; }
   .popover.submenu { right: 0; bottom: calc(100% + 6px); }  /* no room beside the menu: open above it */

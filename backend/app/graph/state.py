@@ -63,9 +63,16 @@ class ReportTexts(BaseModel):
     chart_titles: list[str]
 
 
+class ClaimProblem(BaseModel):
+    where: str = Field(description='The statement: "summary", "finding N" or "caveat N"')
+    problem: str = Field(description="What its cited material does not support, in one sentence")
+
+
 class Review(BaseModel):
     verdict: Literal["pass", "wrong_analysis", "poor_report"]
     reason: str
+    unsupported: list[ClaimProblem] = Field(default_factory=list,
+                                            description="Statements that the material they cite does not support")
 
 
 class AgentState(TypedDict, total=False):

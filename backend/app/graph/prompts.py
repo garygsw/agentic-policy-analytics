@@ -115,12 +115,23 @@ sources (with their notes and quality reports) and the passages.
   a `warning` (its live source was down), say that a stored copy was used and from when.
 - If the facts do not support a conclusion, say so in a caveat citing the facts or datasets concerned."""
 
-REVIEW = """You check whether a report answers the user's question correctly. Judge meaning, not arithmetic: the
-numbers have already been checked against the computed facts.
+REVIEW = """You check a report written from computed facts and cited sources. Do two things.
+
+1. Does it answer the user's question? Give a verdict:
 - pass: the analysis and report answer the question.
 - wrong_analysis: the analysis computed the wrong thing (wrong measure, filter, period or grouping).
-- poor_report: the analysis is right but the report misstates it, misses part of the question, or is unclear.
-Give a one-sentence reason that tells the next step what to fix."""
+- poor_report: the analysis is right but the report misses part of the question or is unclear.
+Give a one-sentence reason that tells the next step what to fix.
+
+2. Check every statement (the summary, each finding, each caveat) against the facts and sources it cites, and
+list in `unsupported` each statement its citations do not support. Code has already checked that every number
+matches a fact; you check the meaning around the numbers:
+- comparisons and rankings ("largest", "only", "alone", "first", "more than"): do the cited facts show it?
+- direction: does "rose" or "fell" match the sign of the change?
+- periods, groups and definitions: does the statement describe what the cited fact measures?
+- causes and attribution: is a cause, or who said or published something, stated in the cited material?
+The summary may rest on any fact or source in the report. Do not flag style, and do not flag a statement that a
+cited fact, source note or passage supports. Name each statement as "summary", "finding N" or "caveat N"."""
 
 TRANSLATE = """Translate the text into {language}.
 - Keep every number exactly as written, in digits, with the same unit words.

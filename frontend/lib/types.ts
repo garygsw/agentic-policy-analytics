@@ -64,7 +64,6 @@ export interface RunOptions {
   model: string | null;
   reasoning_effort: "low" | "medium" | "high" | null;
   tools: string[] | null; // null: every tool
-  triage: "local" | "jev" | "llm";
 }
 
 export interface OptionsResponse {
@@ -119,6 +118,7 @@ export interface LLMCall {
 export interface RunDetail extends RunSummary {
   answer: string | null;
   has_report: boolean;
+  has_pdf: boolean;
   error: string | null;
   llm_calls: LLMCall[];
 }

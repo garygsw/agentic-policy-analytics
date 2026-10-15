@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Markdown from "react-markdown";
 
-import { markdownUrl, reportUrl } from "@/lib/api";
+import { markdownUrl, pdfUrl } from "@/lib/api";
 import { formatCost, formatElapsed, formatTokens } from "@/lib/format";
 import { checkLabel, draftStage, elapsedSeconds, pendingOf, visibleSteps } from "@/lib/runState";
 import type { RunDetail } from "@/lib/types";
@@ -96,8 +96,8 @@ function Answer({ runId, detail, outcome, check, flags }: {
         )}
         {detail.has_report && (
           <span className="actions">
-            <a href={reportUrl(runId)} target="_blank" rel="noopener noreferrer">Open report ↗</a>
             <a href={markdownUrl(runId)}>Download Markdown</a>
+            {detail.has_pdf && <a href={pdfUrl(runId)}>Download PDF</a>}
           </span>
         )}
       </div>

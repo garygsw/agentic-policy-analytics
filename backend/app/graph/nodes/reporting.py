@@ -42,8 +42,15 @@ def make_report_writer(llm) -> Callable:
         feedback = ""
         if state.get("grounding_issues"):
             feedback = "Fix these problems in your previous draft:\n- " + "\n- ".join(state["grounding_issues"])
-        elif state.get("review") and state["review"].verdict == "poor_report":
-            feedback = f"Reviewer feedback on your previous draft: {state['review'].reason}"
+        elif state.get("review") and state["review"].verdict != "wrong_analysis":  # a new analysis starts afresh
+            review: Review = state["review"]
+            notes = [f"Reviewer feedback on your previous draft: {review.reason}"] if review.verdict == "poor_report" \
+                else []
+            if review.unsupported:
+                notes.append("These statements are not supported by what they cite. Correct them to say only what "
+                             "the cited facts and sources show, or cite what supports them:\n- "
+                             + "\n- ".join(f"{p.where}: {p.problem}" for p in review.unsupported))
+            feedback = "\n\n".join(notes)
         charts = [{"id": c["id"], "title": c["title"]} for c in charts_of(state)]
         content = (f"Question: {state['question']}\n\nFacts:\n{json.dumps(facts_of(state), ensure_ascii=False)}\n\n"
                    f"Charts:\n{json.dumps(charts, ensure_ascii=False)}\n\n"
@@ -113,10 +120,21 @@ def make_reviewer(llm) -> Callable:
     @guarded("reviewer")
     def reviewer(state: AgentState) -> dict:
         analytics = (state.get("findings") or {}).get("analytics") or {}
+        report: Report = state["report"]
+        statements = [f"summary: {report.summary}"]
+        statements += [f"finding {i}: {c.text} [{', '.join(c.citations)}]" for i, c in enumerate(report.findings, 1)]
+        statements += [f"caveat {i}: {c.text} [{', '.join(c.citations)}]" for i, c in enumerate(report.caveats, 1)]
+        material = {"facts": facts_of(state),
+                    "sources": [{k: v for k, v in s.items() if k != "key"} for s in sources_of(state)]}
         content = (f"Question: {state['question']}\n\nAnalysis performed: {analytics.get('summary', '')}\n\n"
-                   f"Report:\n{state['report'].model_dump_json()}")
-        review = llm("quality", schema=Review).invoke([SystemMessage(prompts.REVIEW), HumanMessage(content)])
+                   f"Report title: {report.title}\n\nStatements:\n" + "\n".join(statements)
+                   + f"\n\nFacts and sources the writer had:\n{json.dumps(material, ensure_ascii=False)}")
+        # The other provider's model checks, so the writer's model never checks its own work.
+        review = llm("check", schema=Review).invoke([SystemMessage(prompts.REVIEW), HumanMessage(content)])
         emit("reviewer", "reasoning", f"{review.verdict}: {review.reason}")
+        if review.unsupported:
+            emit("reviewer", "observation", f"{len(review.unsupported)} statement(s) not supported by their citations: "
+                 + "; ".join(f"{p.where}: {p.problem}" for p in review.unsupported))
         reworks = state.get("analysis_reworks", 0) + int(review.verdict == "wrong_analysis")
         return {"review": review, "analysis_reworks": reworks}
     return reviewer
@@ -159,7 +177,7 @@ def make_localize_report(llm) -> Callable:
     return localize_report
 
 
-def _charts_for_display(state: AgentState) -> list[dict]:
+def charts_for_display(state: AgentState) -> list[dict]:
     titles = state.get("chart_titles") or {}
     shown = []
     for chart in charts_of(state):
@@ -169,17 +187,27 @@ def _charts_for_display(state: AgentState) -> list[dict]:
     return shown
 
 
+def report_warnings(state: AgentState) -> dict[str, list[str]]:
+    """What could not be verified, by statement ("summary", "finding 2", "caveat 1"). Nothing is dropped: such a
+    statement is shown with a warning (D-034). Used by the HTML report and the Markdown and PDF downloads."""
+    warnings: dict[str, list[str]] = {}
+    for f in state.get("grounding_flags") or []:  # the number check, after the writer's fixes
+        warnings.setdefault(f["where"], []).append(f["problem"])
+    review: Review | None = state.get("review")
+    for p in review.unsupported if review else []:  # the claim check, after the writer's fixes
+        warnings.setdefault(p.where, []).append(p.problem)
+    return warnings
+
+
 def render(state: AgentState) -> dict:
     """The answer for the conversation (markdown) and the full report page (HTML), in the user's language."""
     report: Report = state.get("report_display") or state["report"]
     review: Review | None = state.get("review")
     review_note = review.reason if review and review.verdict != "pass" else None
-    charts = _charts_for_display(state)
+    charts = charts_for_display(state)
     sources = shown_sources(sources_of(state), report)
-    # Nothing is dropped: a statement the check could not verify is shown with a warning (D-034).
-    warnings: dict[str, list[str]] = {}
-    for f in state.get("grounding_flags") or []:
-        warnings.setdefault(f["where"], []).append(f["problem"])
+    warnings = report_warnings(state)
+    unsupported = review.unsupported if review else []
 
     def marked(where: str, text: str) -> str:
         return text + "".join(f" ⚠ Unverified: {w}" for w in warnings.get(where, []))
@@ -202,6 +230,7 @@ def render(state: AgentState) -> dict:
                        warnings=warnings)
     # Every report is an answer; what could not be verified, and the reviewer's note, travel with it as flags.
     flags = [f["message"] for f in state.get("grounding_flags") or []]
+    flags += [f"{p.where}: {p.problem} (not supported by its citations)" for p in unsupported]
     flags += [f"Reviewer note: {review_note}"] if review_note else []
     return {"answer": "\n".join(lines), "report_html": html, "outcome": "answered", "flags": flags}
 

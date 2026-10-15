@@ -46,6 +46,11 @@ def test_defaults_outside_a_run():
     assert (fallback.model_name, fallback.reasoning_effort) == ("gpt-6.1-sol", "low")
 
 
+def test_claims_are_checked_by_the_other_provider():
+    primary, fallback = build_models("check", SETTINGS)  # main model Claude Sonnet 5.5 writes; GPT 6.1 Sol checks
+    assert (primary.model_name, fallback.model) == ("gpt-6.1-sol", "claude-sonnet-5-5")
+
+
 def test_effort_and_model_come_from_the_request():
     primary, fallback = in_run({"model": "claude-sonnet-5-5", "reasoning_effort": "high"},
                                lambda: build_models("quality", SETTINGS))

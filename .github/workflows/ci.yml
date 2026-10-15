@@ -57,9 +57,7 @@ jobs:
       - name: Build the images
         run: docker compose build api web
       - name: Start the API and web UI (no API keys, so only health and data endpoints are checked)
-        run: |
-          mkdir -p var && chmod 777 var
-          docker compose up --detach --wait api web
+        run: docker compose up --detach --wait api web
       - name: Smoke test
         run: |
           curl --fail --silent http://localhost:8000/api/health

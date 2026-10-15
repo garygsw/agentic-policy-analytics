@@ -20,6 +20,7 @@ from sqlalchemy.orm import sessionmaker
 from app.api.db import LLMCallRecord, Run, RunEvent, Thread, utcnow
 from app.graph.events import LEVELS
 from app.llm.ledger import Ledger
+from app.report.export import export_markdown, export_pdf
 
 TERMINAL = {"completed", "failed", "cancelled"}
 DRAFT_FLUSH_CHARS = 120  # a draft snapshot is stored after about this many new characters, not every token
@@ -120,9 +121,9 @@ class RunManager:
             for mode, chunk in self.graph.stream(payload, config, stream_mode=["custom", "messages"]):
                 if run_id in self.cancelled:
                     flush_draft(final=True)
+                    self._finish(run_id, status="cancelled", ledger=ledger)
                     save({"node": "run", "kind": "end", "level": 1, "content": "Cancelled by the user",
                           "status": "cancelled", "ts": time.time()})
-                    self._finish(run_id, status="cancelled", ledger=ledger)
                     return
                 if mode == "custom":
                     flush_draft(final=True)
@@ -140,23 +141,24 @@ class RunManager:
                 flush_draft()
             flush_draft(final=True)
             snapshot = self.graph.get_state(config)
-            # The "end" event is stored before the run's status changes: a WebSocket stops following a run
-            # only once it has sent an "end" event and the run is no longer running.
+            # The run's results (answer, report, downloads) are saved before its "end" event: a client that
+            # fetches the run on "end" must find them. A WebSocket waits until it has sent "end" and the run is
+            # no longer running, so it follows the run to the end either way.
             if snapshot.interrupts:
                 pending = snapshot.interrupts[0].value
+                self._finish(run_id, status="awaiting_input", ledger=ledger, pending=pending)
                 save({"node": "run", "kind": "end", "level": 1, "content": "Waiting for your answer",
                       "status": "awaiting_input", "pending": pending, "ts": time.time()})
-                self._finish(run_id, status="awaiting_input", ledger=ledger, pending=pending)
             else:
                 values = snapshot.values
+                self._finish(run_id, status="completed", ledger=ledger, values=values)
                 save({"node": "run", "kind": "end", "level": 1, "content": values.get("outcome", ""),
                       "status": "completed", "outcome": values.get("outcome"), "flags": values.get("flags") or [],
                       "ts": time.time()})
-                self._finish(run_id, status="completed", ledger=ledger, values=values)
         except Exception as error:  # noqa: BLE001 - the run fails visibly; the server keeps going
+            self._finish(run_id, status="failed", ledger=ledger, error=f"{type(error).__name__}: {error}")
             save({"node": "run", "kind": "end", "level": 1, "content": f"Run failed: {type(error).__name__}",
                   "status": "failed", "ts": time.time()})
-            self._finish(run_id, status="failed", ledger=ledger, error=f"{type(error).__name__}: {error}")
         finally:
             self.cancelled.discard(run_id)
 
@@ -171,6 +173,7 @@ class RunManager:
                 run.outcome = values.get("outcome")
                 run.answer = values.get("answer")
                 run.report_html = values.get("report_html") or None
+                run.report_markdown, run.report_pdf = downloads(values)
                 run.sources = ((findings.get("analytics") or {}).get("sources")
                                or (findings.get("extraction") or {}).get("sources") or [])
                 thread = db.get(Thread, run.thread_id)
@@ -179,6 +182,17 @@ class RunManager:
             if status != "awaiting_input":
                 run.finished_at = utcnow()
             db.commit()
+
+
+def downloads(values: dict) -> tuple[str | None, bytes | None]:
+    """The Markdown and PDF downloads of a finished report. Without a report (a decline, a redirect) there are
+    none; if building them fails, the run still completes and only the downloads are missing."""
+    if values.get("report") is None:
+        return None, None
+    try:
+        return export_markdown(values), export_pdf(values)
+    except Exception:  # noqa: BLE001 - a download must never fail a finished run
+        return None, None
 
 
 def _merge_totals(previous: dict | None, current: dict) -> dict:

@@ -12,12 +12,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 
 from app.api.db import LLMCallRecord, Run, Thread, make_session_factory, utcnow
 from app.api.runs import RunManager, as_dict, event_rows, iso, new_id
+from app.api.titles import MAX_CHARS, short_question, write_title
 from app.config import REPO_ROOT, get_settings
 from app.data.registry import CURATED
 from app.data.store import SNAPSHOT_DIR, DataStore, DataUnavailable
@@ -26,6 +27,7 @@ from app.graph.checkpoint import sqlite_checkpointer
 from app.graph.options import RunOptions, available_models, available_tools
 from app.guardrails.language import detect_language
 from app.guardrails.pii import rejection_message, screen
+from app.llm.providers import chat
 
 CHECKPOINTS = REPO_ROOT / "var" / "checkpoints.sqlite"
 # The report page runs only its own inline script and plotly.js from cdnjs; it can load nothing else.
@@ -67,15 +69,27 @@ def warm_up() -> None:
         get_reranker()
 
 
+def retitle_old_threads(sessions, llm) -> None:
+    """Conversations from before titles were written carry their whole first question: give them a short title."""
+    with sessions() as session:
+        old = session.scalars(select(Thread).where(func.length(Thread.title) > MAX_CHARS + 1).limit(100)).all()
+        for thread in old:
+            thread.title = write_title(thread.title, llm)
+        session.commit()
+
+
 def create_app(graph=None, sessions=None, retriever=None, store: DataStore | None = None,
-               preload_models: bool = True) -> FastAPI:
+               preload_models: bool = True, llm=None) -> FastAPI:
+    title_llm = llm or chat  # the model factory that writes conversation titles
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.sessions = sessions or make_session_factory()
         app.state.graph = graph or build_graph(checkpointer=sqlite_checkpointer(CHECKPOINTS))
         app.state.manager = RunManager(app.state.graph, app.state.sessions)
+        app.state.background = set()  # title tasks, kept referenced until they finish
         if preload_models:
             threading.Thread(target=warm_up, daemon=True).start()
+            threading.Thread(target=retitle_old_threads, args=(app.state.sessions, title_llm), daemon=True).start()
         yield
 
     app = FastAPI(title="Agentic Policy Analytics API", version="0.1.0", lifespan=lifespan)
@@ -84,6 +98,14 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
 
     def db():
         return app.state.sessions()
+
+    def name_thread(thread_id: str, question: str) -> None:
+        title = write_title(question, title_llm)
+        with db() as session:
+            thread = session.get(Thread, thread_id)
+            if thread is not None:
+                thread.title = title
+                session.commit()
 
     def get_run(session, run_id: str) -> Run:
         run = session.get(Run, run_id)
@@ -173,7 +195,9 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
                                           "message": "Answer or cancel the current run first."})
             run = Run(id=new_id(), thread_id=thread_id, question=body.text, status="running",
                       options=body.options.model_dump())
-            thread.title = thread.title or body.text[:120]
+            needs_title = not thread.title
+            if needs_title:  # shown at once; replaced by a written title when the fast model replies
+                thread.title = short_question(body.text)
             thread.updated_at = utcnow()
             session.add(run)
             session.commit()
@@ -181,6 +205,10 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
         manager: RunManager = app.state.manager
         manager.start(run_id, thread_id, manager.message_payload(body.text, body.require_plan_approval),
                       body.options.model_dump())
+        if needs_title:
+            task = asyncio.create_task(asyncio.to_thread(name_thread, thread_id, body.text))
+            app.state.background.add(task)
+            task.add_done_callback(app.state.background.discard)
         return {"run_id": run_id, "thread_id": thread_id}
 
     # -- runs ---------------------------------------------------------------------------------------------------
@@ -228,9 +256,11 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
             run = get_run(session, run_id)
             calls = session.scalars(select(LLMCallRecord).where(LLMCallRecord.run_id == run_id)
                                     .order_by(LLMCallRecord.id)).all()
-            detail = {k: v for k, v in as_dict(run).items() if k != "report_html"}
+            large = ("report_html", "report_markdown", "report_pdf")  # served by their own endpoints
+            detail = {k: v for k, v in as_dict(run).items() if k not in large}
             return detail | {"started_at": iso(run.started_at), "finished_at": iso(run.finished_at),
-                             "has_report": bool(run.report_html), "llm_calls": [as_dict(c) for c in calls]}
+                             "has_report": bool(run.report_html), "has_pdf": bool(run.report_pdf),
+                             "llm_calls": [as_dict(c) for c in calls]}
 
     @app.get("/api/runs/{run_id}/events")
     def run_events(run_id: str, after: int = 0):
@@ -265,7 +295,10 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
                     pass
         except WebSocketDisconnect:
             return
-        await ws.close()
+        try:
+            await ws.close()
+        except RuntimeError:
+            pass  # the browser closed it first
 
     @app.get("/api/runs/{run_id}/report.html", response_class=HTMLResponse)
     def report_html(run_id: str):
@@ -277,12 +310,22 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
 
     @app.get("/api/runs/{run_id}/report.md", response_class=PlainTextResponse)
     def report_markdown(run_id: str):
+        """The report with its charts embedded as images (runs from before downloads existed: the answer text)."""
         with db() as session:
             run = get_run(session, run_id)
-            if not run.answer:
+            if not (run.report_markdown or run.answer):
                 raise HTTPException(404, "this run has no answer")
-            return PlainTextResponse(run.answer, media_type="text/markdown", headers={
+            return PlainTextResponse(run.report_markdown or run.answer, media_type="text/markdown", headers={
                 "Content-Disposition": f'attachment; filename="report-{run_id}.md"'})
+
+    @app.get("/api/runs/{run_id}/report.pdf")
+    def report_pdf(run_id: str):
+        with db() as session:
+            run = get_run(session, run_id)
+            if not run.report_pdf:
+                raise HTTPException(404, "this run has no PDF")
+            return Response(run.report_pdf, media_type="application/pdf", headers={
+                "Content-Disposition": f'attachment; filename="report-{run_id}.pdf"'})
 
     # -- search and data ---------------------------------------------------------------------------------------
     @app.get("/api/search")

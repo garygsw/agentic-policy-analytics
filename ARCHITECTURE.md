@@ -88,7 +88,7 @@ flowchart TD
 | `analytics` | A tool-using agent (at most 12 tool calls) that computes statistics and charts. Every number is recorded as a fact F1, F2… |
 | `report_writer` | Writes a structured report (title, summary, findings, caveats, charts). Every finding and caveat cites its facts and sources. |
 | `validate` | **Deterministic**: every number must match a computed fact (within 1%) or appear in a source the same statement cites (its text, notes, quality report or dates); every citation must exist. Problems go back to the writer, quoting the words around each number (at most 2 fixes). What still fails is kept and flagged ⚠, never dropped. |
-| `reviewer` | An LLM checks that the report answers the question. It may send the analysis back once; a remaining objection is shown as a flag on the report. |
+| `reviewer` | The other provider's model checks two things: does the report answer the question, and does each statement's citation support it (rankings, direction, periods, causes, attribution)? Unsupported statements go back to the writer (sharing the 2 fixes); the analysis can be sent back once. What remains is shown as flags on the report. |
 | `localize_report` | Translates the report field by field into the user's language. If any number changes, the English report is kept. |
 | `render` | Writes the answer as markdown, and the report as a self-contained HTML page. |
 | `fallback_report` | Only when the language models fail before a report exists: the computed figures as a template, with no generated prose. |
@@ -141,8 +141,10 @@ a numbered fact, and the report may only state numbers that match a fact or appe
    ⚠ with what could not be verified, so nothing the agents found is lost and nothing unverified passes as
    checked.
 4. **Translation guard.** A translated report must keep every number, or the English one is shown.
-5. **Review.** An LLM reviewer checks that the report answers the question. Its remaining objections are shown
-   to the user.
+5. **Claim check.** The reviewer, a model from the other provider, checks each statement against what it cites:
+   comparisons and rankings ("largest", "alone"), direction (rose or fell), periods and definitions, causes and
+   attribution. Unsupported statements go back to the writer. Those still unsupported after the fixes are
+   flagged ⚠ for the reader, never dropped.
 6. **Search results are data.** Passages and web pages are marked as source material, never instructions, to
    resist prompt injection. Web results are labelled untrusted.
 
@@ -153,7 +155,8 @@ How well this works is measured in [TESTING.md](TESTING.md#hallucination-detecti
 | Tier | Used for | Primary | Fallback |
 |---|---|---|---|
 | quality | coordinator, agents, report writer, reviewer | Claude Sonnet 5.5 | GPT 6.1 Sol |
-| fast | question rewrite, triage escalation, clarifying questions, translation | gpt-6-luna | claude-haiku-5-5 |
+| fast | question rewrite, triage escalation, clarifying questions, translation, conversation titles | gpt-6-luna | claude-haiku-5-5 |
+| check | the reviewer and claim checker: the other provider, so a model never checks its own writing | GPT 6.1 Sol | Claude Sonnet 5.5 |
 
 - **Fallback.** Each call tries the primary provider (one retry), then the other provider's model at the same
   price (`llm/providers.py`, LangChain `with_fallbacks`). Structured output uses each provider's native mode.
@@ -228,7 +231,7 @@ Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
 | POST | `/api/runs/{id}/cancel` | stop a run |
 | GET | `/api/runs/{id}`, `/api/runs/{id}/events?after=N` | status, answer, totals and LLM call log; stored events |
 | WS | `/api/runs/{id}/stream?after=N` | replay events after N, then follow the run live |
-| GET | `/api/runs/{id}/report.html`, `.md` | the report (HTML served with a Content-Security-Policy), Markdown download |
+| GET | `/api/runs/{id}/report.html`, `.md`, `.pdf` | the report (HTML served with a Content-Security-Policy); downloads: Markdown with chart images, PDF with clickable citations |
 | GET | `/api/search`, `/api/datasets`, `/api/datasets/{key}` | try retrieval; list and profile curated datasets |
 
 Interactive documentation is at `http://localhost:8000/docs` when the API runs.
@@ -278,6 +281,8 @@ erDiagram
     json pending
     text answer
     text report_html
+    text report_markdown
+    blob report_pdf
     json sources
     json totals
     text error
@@ -351,8 +356,16 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
 - **Report.** The API's HTML page runs in a sandboxed iframe: scripts on, no same-origin access. It posts only
   its height to the parent page.
 - **Inspector.** A side panel shows each agent's context window by category and the LLM call log.
-- **Options.** A model menu (with an Effort submenu) beside the send button, and a + menu with a switch per
-  tool, plan approval and the triage method. These and the Detail level are remembered in the browser.
+- **Controls.**
+  - The model menu, with an Effort submenu, sits beside the send button.
+  - The + menu has a switch per tool.
+  - The mode is Auto, or Plan (pause for plan approval).
+  - The sidebar can be hidden.
+
+  These choices and the Detail level are remembered in the browser. Triage is a server setting.
+- **Citations.** The report's frame never scrolls, so a citation click inside it asks the page to scroll the
+  conversation to the cited fact or source.
+- **Titles.** Conversation titles are written by the fast model in the background (`api/titles.py`).
 
 ## 10. Security and privacy
 
