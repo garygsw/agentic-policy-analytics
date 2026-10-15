@@ -45,6 +45,10 @@ export const api = {
   threads: () => request<ThreadSummary[]>("/api/threads"),
   thread: (id: string) => request<ThreadDetail>(`/api/threads/${id}`),
   createThread: () => request<{ id: string }>("/api/threads", post()),
+  updateThread: (id: string, change: { title?: string; pinned?: boolean }) =>
+    request<{ id: string; title: string; pinned: boolean }>(`/api/threads/${id}`,
+      { method: "PATCH", body: JSON.stringify(change) }),
+  deleteThread: (id: string) => request<{ id: string; deleted: boolean }>(`/api/threads/${id}`, { method: "DELETE" }),
   send: (threadId: string, text: string, options: RunOptions, requirePlanApproval: boolean) =>
     request<{ run_id: string }>(`/api/threads/${threadId}/messages`,
       post({ text, options, require_plan_approval: requirePlanApproval })),

@@ -141,7 +141,7 @@ Questions that show the error handling:
 | Try | What happens |
 |---|---|
 | What will the median HDB resale price be in 2030? | published sources are searched first; with nothing official to go on, it declines and suggests a question it can answer |
-| How is Singapore doing? | a clarifying question; the run pauses until you answer |
+| How is Singapore doing? | a clarifying question with answers to pick from, or write your own; the run pauses until you answer |
 | What is a good recipe for chicken rice? | redirected: outside scope, with no agent run |
 | My NRIC is S1234567D, how much CPF do I have? | rejected before any model sees it |
 | Set `FORCE_PRIMARY_FAIL=true` in `.env` and restart | every call to the primary provider fails, the other provider answers, and the call log shows both |
@@ -155,7 +155,7 @@ In the chat bar:
 
 **Detail** sets how much of the trace you see: Normal, Thinking or Verbose. In a report, clicking a citation
 scrolls to its fact or source, and source links open in a new tab. The sidebar can be hidden with the button at
-its top.
+its top. Each conversation's ⋮ menu pins, renames or deletes it; deleting asks first and cannot be undone.
 
 ## Running the tests
 

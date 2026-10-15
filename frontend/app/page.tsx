@@ -77,12 +77,11 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKey);
   }, [inspecting, running, cancel]);
 
-  const submit = (value: string) => (pending?.kind === "clarification" && active
-    ? conversation.answer(active.id, value, options)
-    : conversation.ask(value, options, mode === "plan"));
+  const submit = (value: string) => conversation.ask(value, options, mode === "plan");
 
+  // While the agents wait on the user, the answer is given in the run (choices, plan buttons), not here.
   const placeholder = running ? "The agents are working…"
-    : pending?.kind === "clarification" ? "Answer the clarifying question…"
+    : pending?.kind === "clarification" ? "Answer the question above, or cancel it"
       : pending?.kind === "plan_approval" ? "Approve or revise the plan above"
         : runs.length ? "Ask a follow-up question…" : "Ask about Singapore's public data…";
   const title = conversation.threads.find((t) => t.id === conversation.threadId)?.title;
@@ -95,6 +94,9 @@ export default function Home() {
         open={sidebarOpen}
         onOpen={(id) => { setSidebarOpen(false); void conversation.openThread(id); }}
         onNew={() => { setSidebarOpen(false); conversation.newThread(); }}
+        onRename={(id, name) => void conversation.updateThread(id, { title: name })}
+        onPin={(id, pinned) => void conversation.updateThread(id, { pinned })}
+        onDelete={(id) => void conversation.deleteThread(id)}
         onHide={() => setSidebarHidden(true)}
       />
       {sidebarOpen && <div className="backdrop" onClick={() => setSidebarOpen(false)} aria-hidden />}
@@ -137,6 +139,7 @@ export default function Home() {
               runs.map((run) => (
                 <RunBlock key={run.id} run={run} verbosity={verbosity} now={now}
                   onInspect={() => setInspecting(run.id)}
+                  onAnswer={(answer) => conversation.answer(run.id, answer, options)}
                   onPlan={(approved, feedback) => void conversation.decidePlan(run.id, approved, feedback, options)}
                   onCancel={() => void cancel(run.id)} />
               ))
@@ -154,7 +157,7 @@ export default function Home() {
             )}
             {running && <StatusLine view={running.view} now={now} onStop={() => void cancel(running.id)} />}
             <Composer text={text} onText={setText} placeholder={placeholder} onSubmit={submit}
-              disabled={Boolean(running) || pending?.kind === "plan_approval"}
+              disabled={Boolean(running) || Boolean(pending)}
               left={catalog && (
                 <>
                   <ToolsMenu catalog={catalog} value={options} onChange={setOptions} />

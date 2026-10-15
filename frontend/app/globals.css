@@ -77,8 +77,26 @@ pre { font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-wor
 .sidebar .new:hover { border-color: var(--accent); }
 .section-label { margin: 1.25rem 0.5rem 0.4rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 .sidebar ul { list-style: none; margin: 0; padding: 0; }
-.sidebar li button { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.4rem 0.5rem; border: 0; border-radius: 6px; background: none; text-align: left; }
-.sidebar li button:hover, .sidebar li button.active { background: var(--border); }
+.thread-row { position: relative; display: flex; align-items: center; border-radius: 6px; }
+.thread-row:hover, .thread-row.active, .thread-row.menu-open { background: var(--border); }
+.open-thread { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.5rem; border: 0; background: none; text-align: left; }
+/* The "more" button shows over the end of the title on hover or focus (always on touch screens, which have no
+   hover); the title only gives up that room while it shows. */
+.more { position: absolute; right: 0.25rem; display: inline-flex; padding: 0.25rem; border: 0; border-radius: 6px; background: none; color: var(--muted); opacity: 0; }
+.thread-row:hover .more, .thread-row:focus-within .more, .thread-row.menu-open .more { opacity: 1; }
+.thread-row:hover .open-thread, .thread-row:focus-within .open-thread, .thread-row.menu-open .open-thread { padding-right: 2rem; }
+.more:hover, .menu-open .more { background: var(--panel); color: var(--fg); }
+@media (hover: none) { .more { opacity: 1; } .open-thread { padding-right: 2rem; } }
+.popover.thread-menu { position: fixed; bottom: auto; width: 190px; }
+.thread-menu .menu-item { justify-content: flex-start; }
+.thread-menu .menu-item svg { flex: none; color: var(--muted); }
+.thread-menu .item-title { flex: 1; }
+.thread-menu kbd { font: 0.75rem var(--sans); color: var(--muted); }
+.thread-menu .menu-item.danger, .thread-menu .menu-item.danger svg { color: var(--err); }
+.rename { width: 100%; padding: 0.35rem 0.5rem; border: 1px solid var(--accent); border-radius: 6px; outline: 0; background: var(--panel); font-size: 0.9rem; }
+.sidebar .confirm { margin: 0.2rem 0; padding: 0.5rem 0.6rem; border: 1px solid var(--err); border-radius: 8px; background: var(--panel); font-size: 0.85rem; }
+.sidebar .confirm p { margin: 0; overflow-wrap: anywhere; }
+.row button.danger { background: var(--err); border-color: var(--err); color: #fff; }
 .sidebar .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
 .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
 .dot.completed { background: var(--ok); }
@@ -109,7 +127,6 @@ select { background: var(--panel); border: 1px solid var(--border); border-radiu
 .bubble.user { background: var(--code); margin-left: auto; width: fit-content; max-width: 85%; white-space: pre-wrap; }
 .bubble.assistant { background: var(--panel); border: 1px solid var(--border); }
 .bubble p { margin: 0.25rem 0; }
-.hint { color: var(--muted); font-size: 0.85rem; }
 .trace { margin: 0.5rem 0; }
 .trace-toggle { border: 0; background: none; padding: 0.2rem 0; color: var(--muted); font-size: 0.85rem; }
 .trace-toggle:hover { color: var(--fg); }
@@ -148,6 +165,17 @@ select { background: var(--panel); border: 1px solid var(--border); border-radiu
 .error-text { color: var(--err); }
 .run-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 0.9rem; font-size: 0.78rem; color: var(--muted); padding: 0.25rem 0; }
 .link { border: 0; background: none; padding: 0; color: var(--accent); font-size: inherit; }
+
+/* A clarifying question: offered answers, then the user's own. */
+.clarify { border: 1px solid var(--accent); border-radius: 12px; padding: 0.75rem 1rem; margin: 0.75rem 0; background: var(--panel); }
+.clarify-question { margin: 0 0 0.6rem; font-weight: 500; }
+.choices { display: flex; flex-direction: column; gap: 0.4rem; }
+.choice { display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.5rem 0.7rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); text-align: left; }
+.choice:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.choice-number { flex: none; display: inline-grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 6px; background: var(--code); color: var(--muted); font-size: 0.8rem; }
+.own-answer input { flex: 1; min-width: 0; padding: 0.35rem 0.6rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.own-answer input:focus { outline: 0; border-color: var(--accent); }
+.own-answer button.quiet { margin-left: 0; }
 
 .plan { border: 1px solid var(--accent); border-radius: 12px; padding: 0.75rem 1rem; margin: 0.75rem 0; background: var(--panel); }
 .plan-title { font-weight: 600; margin-top: 0; }

@@ -11,6 +11,7 @@ from app.graph.nodes.intake import llm_decider
 from app.graph.state import (
     Claim,
     ClaimProblem,
+    Clarification,
     CoordinatorStep,
     Report,
     ReportTexts,
@@ -33,6 +34,7 @@ BAD = Report(title="Tech employment grew", summary="ICT employment rose 31% betw
              findings=[Claim(text="Employment reached 131,000 persons.", citations=["F2"])])
 IN_SCOPE = TriageDecision(category="in_scope", reason="labour statistics question")
 PASS = Review(verdict="pass", reason="answers the question")
+WHICH_AREA = Clarification(question="Which area: employment or housing?", choices=["Employment", "Housing"])
 
 
 class FakeWorkers:
@@ -105,13 +107,15 @@ def test_off_topic_is_redirected_without_reaching_the_agents():
 def test_vague_question_pauses_for_a_clarifying_answer_then_resumes():
     graph, llm, _ = make({
         "TriageDecision": [TriageDecision(category="vague", reason="no topic"), IN_SCOPE],
-        "text": ["Which area interests you: employment, housing or transport?"],
+        "Clarification": [Clarification(question="Which area interests you: employment, housing or transport?",
+                                        choices=["Employment", " Housing ", "", "Transport", "Health", "Education"])],
         "StandaloneQuestion": [StandaloneQuestion(question=QUESTION)],
         "CoordinatorStep": steps("extract", "analyse", "report"), "Report": [GOOD], "Review": [PASS]})
     paused = ask(graph, "Tell me something interesting")
     assert paused.next == ("ask_user",)
-    assert paused.interrupts[0].value == {"kind": "clarification",
-                                          "question": "Which area interests you: employment, housing or transport?"}
+    assert paused.interrupts[0].value == {  # blank choices dropped, at most four offered
+        "kind": "clarification", "question": "Which area interests you: employment, housing or transport?",
+        "choices": ["Employment", "Housing", "Transport", "Health"]}
     state = resume(graph, "employment in tech, 2020 to 2024").values
     assert state["outcome"] == "answered" and state["clarifications"] == 1 and state["question"] == QUESTION
     # The rewrite step saw the clarifying question and the user's answer.
@@ -380,7 +384,7 @@ def test_ledger_attributes_each_llm_call_to_its_agent():
 def test_paused_conversation_survives_a_restart(tmp_path):
     """Stateless requests: a new process (new graph, new connection) resumes a paused thread from SQLite."""
     replies = {"TriageDecision": [TriageDecision(category="vague", reason="no topic"), IN_SCOPE],
-               "text": ["Which area: employment or housing?"],
+               "Clarification": [WHICH_AREA],
                "StandaloneQuestion": [StandaloneQuestion(question=QUESTION)],
                "CoordinatorStep": steps("extract", "analyse", "report"), "Report": [GOOD], "Review": [PASS]}
     llm = FakeLLMs(replies)

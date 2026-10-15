@@ -17,9 +17,10 @@ TRIAGE = f"""Classify a question for a research assistant whose scope is {SCOPE}
   only about other countries. Comparing another country with Singapore is in scope.
 Do not judge whether data exists; that is decided later."""
 
-CLARIFY = """The user's question is too vague to analyse. Ask ONE short clarifying question that offers two or three
-concrete options (a sector, a measure, or a period) from this scope: {scope}.
-Write it in {language}. Output only the question."""
+CLARIFY = """The user's question is too vague to analyse. Ask ONE short clarifying question, and offer two to four
+answers the user can pick: each a short, complete reply naming a concrete sector, measure or period from this
+scope: {scope}.
+Write the question and the answers in {language}."""
 
 COORDINATOR = """You coordinate a team that answers policy research questions with Singapore government data.
 Choose the next action:

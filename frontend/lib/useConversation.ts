@@ -80,6 +80,29 @@ export function useConversation() {
     setError(null);
   }, []);
 
+  /** Rename or pin a conversation in the history list. */
+  const updateThread = useCallback(async (id: string, change: { title?: string; pinned?: boolean }) => {
+    setError(null);
+    try {
+      await api.updateThread(id, change);
+    } catch (e) {
+      setError(messageOf(e));
+    }
+    refreshThreads();
+  }, [refreshThreads]);
+
+  /** Delete a conversation for good; if it is open, the page starts a new one. */
+  const deleteThread = useCallback(async (id: string) => {
+    setError(null);
+    try {
+      await api.deleteThread(id);
+      if (id === threadId) newThread();
+    } catch (e) {
+      setError(messageOf(e));
+    }
+    refreshThreads();
+  }, [threadId, newThread, refreshThreads]);
+
   /** Ask a question; returns whether it was accepted (a refused message stays in the box to edit). */
   const ask = useCallback(async (text: string, options: RunOptions, planApproval: boolean) => {
     setError(null);
@@ -141,6 +164,7 @@ export function useConversation() {
   }, [update, loadDetail, refreshThreads]);
 
   return {
-    threads, threadId, runs, error, setError, openThread, newThread, ask, answer, decidePlan, cancel, onEvent,
+    threads, threadId, runs, error, setError, openThread, newThread, updateThread, deleteThread, ask, answer,
+    decidePlan, cancel, onEvent,
   };
 }

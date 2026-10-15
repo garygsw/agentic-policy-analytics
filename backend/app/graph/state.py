@@ -14,6 +14,12 @@ class StandaloneQuestion(BaseModel):
     question: str = Field(description="The question in English, with references to earlier turns resolved.")
 
 
+class Clarification(BaseModel):
+    """A clarifying question with a few answers the user can pick (the user may also write their own)."""
+    question: str = Field(description="One short clarifying question.")
+    choices: list[str] = Field(description="Two to four short answers the user can pick, each a complete reply.")
+
+
 class TriageDecision(BaseModel):
     """What a classifier (local model, Jev or LLM) returns."""
     category: Literal["in_scope", "off_topic", "vague"]
@@ -85,6 +91,7 @@ class AgentState(TypedDict, total=False):
     triage: TriageResult
     clarifications: int
     pending_question: str
+    pending_choices: list[str]  # answers offered with the clarifying question
     coordinator_steps: list[CoordinatorStep]
     plan_approved: bool
     findings: dict[str, Any]
@@ -105,7 +112,8 @@ class AgentState(TypedDict, total=False):
 
 
 TURN_RESET: dict[str, Any] = {
-    "question": "", "clarifications": 0, "pending_question": "", "coordinator_steps": [], "plan_approved": False,
+    "question": "", "clarifications": 0, "pending_question": "", "pending_choices": [],
+    "coordinator_steps": [], "plan_approved": False,
     "findings": {}, "report": None, "report_display": None, "chart_titles": {}, "report_html": "",
     "grounding_issues": [], "grounding_flags": [], "flags": [], "review": None, "revisions": 0,
     "analysis_reworks": 0, "answer": "",

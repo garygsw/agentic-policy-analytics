@@ -43,6 +43,14 @@ def ask_until_clean(prompt: str) -> str:
             return answer
 
 
+def clarification_answer(request: dict) -> str:
+    """The user's answer to a clarifying question: the number of an offered answer, or their own words."""
+    choices = request.get("choices") or []
+    menu = "".join(f"\n  {number}. {choice}" for number, choice in enumerate(choices, 1))
+    reply = ask_until_clean(f"\n? {request['question']}{menu}\n> ")
+    return choices[int(reply) - 1] if reply.isdigit() and 1 <= int(reply) <= len(choices) else reply
+
+
 def plan_decision(text: str) -> dict:
     if text.lower() in ("y", "yes"):
         return {"approved": True}
@@ -113,7 +121,7 @@ def run_turn(graph, config: dict, payload, display: Display) -> dict | None:
         request = snapshot.interrupts[0].value
         try:
             if request["kind"] == "clarification":
-                payload = Command(resume=ask_until_clean(f"\n? {request['question']}\n> "))
+                payload = Command(resume=clarification_answer(request))
             else:
                 reply = ask_until_clean(f"\nProposed plan: {request['plan']}\nApprove? [y / n / or feedback] > ")
                 payload = Command(resume=plan_decision(reply))

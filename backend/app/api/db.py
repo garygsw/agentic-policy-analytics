@@ -17,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     event,
+    false,
     inspect,
     text,
 )
@@ -40,6 +41,8 @@ class Thread(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     title: Mapped[str] = mapped_column(String(200), default="")
     language: Mapped[str | None] = mapped_column(String(8))
+    pinned: Mapped[bool] = mapped_column(default=False, server_default=false())  # listed first
+    renamed: Mapped[bool] = mapped_column(default=False, server_default=false())  # the user's title: keep it
     created_at: Mapped[dt.datetime] = mapped_column(default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(default=utcnow)
 
@@ -128,4 +131,6 @@ def add_missing_columns(engine) -> None:
             for column in table.columns:
                 if column.name not in present:
                     kind = column.type.compile(dialect=engine.dialect)
+                    if column.server_default is not None:  # existing rows get the default, not NULL
+                        kind += f" default {column.server_default.arg.compile(dialect=engine.dialect)}"
                     connection.execute(text(f'alter table {table.name} add column "{column.name}" {kind}'))

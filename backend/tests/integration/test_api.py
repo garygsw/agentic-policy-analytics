@@ -4,9 +4,10 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 from langgraph.checkpoint.memory import InMemorySaver
+from sqlalchemy import func, select
 
-from app.api.db import make_session_factory
-from app.api.main import create_app
+from app.api.db import LLMCallRecord, Run, RunEvent, make_session_factory
+from app.api.main import create_app, retitle_old_threads
 from app.api.runs import draft_view
 from app.api.titles import Title, short_question, write_title
 from app.graph.build import Deps, build_graph
@@ -16,7 +17,7 @@ from app.graph.state import StandaloneQuestion, TriageDecision
 from app.llm.fake import ScriptedChatModel, reply, structured
 from app.llm.providers import chat
 from app.rag.retriever import Retriever
-from tests.unit.test_graph import GOOD, IN_SCOPE, PASS, QUESTION, FakeWorkers, steps
+from tests.unit.test_graph import GOOD, IN_SCOPE, PASS, QUESTION, WHICH_AREA, FakeWorkers, steps
 from tests.unit.test_rag import HashEmbedder, OverlapReranker, add, make_index
 
 
@@ -135,7 +136,7 @@ def test_personal_data_is_rejected_before_anything_runs(tmp_path):
 
 def test_clarification_pauses_then_resumes(tmp_path):
     replies = {"TriageDecision": [TriageDecision(category="vague", reason="no topic"), IN_SCOPE],
-               "text": ["Which area: employment or housing?"],
+               "Clarification": [WHICH_AREA],
                "StandaloneQuestion": [StandaloneQuestion(question=QUESTION)], **{k: v for k, v in ANSWERED.items()
                                                                                  if k != "TriageDecision"}}
     with client_for(replies, tmp_path) as client:
@@ -143,7 +144,8 @@ def test_clarification_pauses_then_resumes(tmp_path):
         run_id = client.post(f"/api/threads/{thread}/messages", json={"text": "Tell me something"}).json()["run_id"]
         paused = wait(client, run_id)
         assert paused["status"] == "awaiting_input"
-        assert paused["pending"] == {"kind": "clarification", "question": "Which area: employment or housing?"}
+        assert paused["pending"] == {"kind": "clarification", "question": "Which area: employment or housing?",
+                                     "choices": ["Employment", "Housing"]}
         busy = client.post(f"/api/threads/{thread}/messages", json={"text": "another question"})
         assert busy.status_code == 409 and busy.json()["detail"]["run_id"] == run_id
         assert client.post(f"/api/runs/{run_id}/resume", json={"answer": "S1234567D"}).status_code == 400
@@ -157,7 +159,7 @@ def test_clarification_pauses_then_resumes(tmp_path):
 
 def test_a_paused_run_can_be_cancelled_and_the_conversation_goes_on(tmp_path):
     replies = {"TriageDecision": [TriageDecision(category="vague", reason="no topic"), *ANSWERED["TriageDecision"]],
-               "text": ["Which area?"], "StandaloneQuestion": [StandaloneQuestion(question=QUESTION)],
+               "Clarification": [WHICH_AREA], "StandaloneQuestion": [StandaloneQuestion(question=QUESTION)],
                **{k: v for k, v in ANSWERED.items() if k != "TriageDecision"}}
     with client_for(replies, tmp_path) as client:
         thread = client.post("/api/threads").json()["id"]
@@ -204,13 +206,54 @@ def test_streamed_report_json_becomes_readable_text():
 def test_an_older_database_gains_the_new_columns(tmp_path):
     import sqlite3
     path = tmp_path / "old.sqlite"
-    with sqlite3.connect(path) as old:  # a runs table from before the report downloads existed
+    with sqlite3.connect(path) as old:  # tables from before the report downloads and pinning existed
         old.execute("create table runs (id varchar(32) primary key, thread_id varchar(32), question text, "
                     "status varchar(20))")
+        old.execute("create table threads (id varchar(32) primary key, title varchar(200))")
+        old.execute("insert into threads values ('t1', 'COE premiums')")
     make_session_factory(f"sqlite:///{path}")
     with sqlite3.connect(path) as db:
         columns = {row[1] for row in db.execute("pragma table_info(runs)")}
+        thread = db.execute("select pinned, renamed from threads").fetchone()
     assert {"report_markdown", "report_pdf", "report_html", "totals"} <= columns
+    assert thread == (0, 0)  # existing rows get the column's default
+
+
+def test_conversations_can_be_renamed_pinned_and_deleted(answered):
+    client, thread, run_id, _ = answered
+    other = client.post("/api/threads").json()["id"]  # newer, so listed first until the older one is pinned
+
+    def listed():
+        return [(t["id"], t["title"], t["pinned"]) for t in client.get("/api/threads").json()]
+    assert listed()[0][0] == other
+    name = "My own name for the conversation about tech employment trends"  # longer than written titles
+    assert client.patch(f"/api/threads/{thread}", json={"title": f"  {name} "}).json()["title"] == name
+    assert client.patch(f"/api/threads/{thread}", json={"pinned": True}).json()["pinned"] is True
+    assert listed()[0] == (thread, name, True)
+    retitle_old_threads(client.app.state.sessions, Script({"Title": [Title(title="Other")]}))
+    assert listed()[0][1] == name  # a name the user chose is never replaced by a written one
+    assert client.patch(f"/api/threads/{thread}", json={"title": "  "}).status_code == 422
+    assert client.patch(f"/api/threads/{thread}", json={"title": "Call S1234567D"}).status_code == 400
+    assert client.patch("/api/threads/nope", json={"pinned": True}).status_code == 404
+
+    assert client.delete(f"/api/threads/{thread}").json() == {"id": thread, "deleted": True}
+    assert client.get(f"/api/threads/{thread}").status_code == 404
+    assert client.get(f"/api/runs/{run_id}").status_code == 404
+    with client.app.state.sessions() as session:  # its trace and LLM call log went with it
+        for table in (RunEvent, LLMCallRecord):
+            assert session.scalar(select(func.count()).select_from(table).where(table.run_id == run_id)) == 0
+    assert client.app.state.graph.get_state({"configurable": {"thread_id": thread}}).values == {}
+    assert [t[0] for t in listed()] == [other]
+
+
+def test_a_conversation_with_a_running_analysis_is_not_deleted(tmp_path):
+    with client_for({}, tmp_path) as client:
+        thread = client.post("/api/threads").json()["id"]
+        with client.app.state.sessions() as session:
+            session.add(Run(id="r1", thread_id=thread, question="q", status="running"))
+            session.commit()
+        assert client.delete(f"/api/threads/{thread}").status_code == 409
+        assert client.delete("/api/threads/nope").status_code == 404
 
 
 def test_titles_fall_back_to_the_question_cut_at_a_word():

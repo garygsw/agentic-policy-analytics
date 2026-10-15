@@ -447,3 +447,15 @@ Changes from the first round of hands-on testing.
   - In testing, a rejection ended the run with "cancelled at your request", when the user wanted to see another plan.
   - Cost: an answer evaluation run costs about $3.80 with the claim checker and $2.60 without.
 
+## D-038 · 2026-10-15 · Clarifying questions offer answers; conversations can be pinned, renamed and deleted
+- **What happened:** in testing, a clarifying question said "Reply in the box below", but the box was the chat bar at the bottom of the page, far from the question, and was easy to miss.
+- **Decision:**
+  - **Clarifying questions.** The fast model now writes the question together with two to four short answers, as structured output (at most four are kept). The question card shows them as buttons, with its own box below them for a different answer, and a Cancel button. The chat bar is disabled while the agents wait, as it is during plan approval, so there is one place to answer. In the terminal, an answer can be picked by its number.
+  - **Conversation menu.** Each conversation in the sidebar has a ⋮ menu: Pin (pinned conversations are listed first, under their own heading), Rename (edited in place), and Delete (asks for confirmation in the page). The keys P, R and D choose an item while the menu is open. The "New analysis" button is now "+ New".
+  - **Rename** marks the conversation as renamed, so the background title writer (and the start-up retitling of long titles) never replaces a name the user chose. Neither renaming nor pinning moves a conversation among the recent ones.
+  - **Delete** is permanent. It removes the conversation, its runs, their trace events and LLM call logs, and its LangGraph checkpoints. It is refused while a run is working, since that run would keep writing.
+  - Two new columns (`pinned`, `renamed`) are added to existing databases by the start-up column check, which now applies column defaults to existing rows.
+- **Alternatives:**
+  - **Keep answering in the chat bar, with the choices in the card:** two places to answer one question.
+  - **Soft delete (hide, keep the data):** keeps the audit trail, but the user asked for Delete, and a hidden record of a question the user removed is surprising. The LLM call log of a deleted conversation goes with it.
+  - **Pins kept in the browser only:** simpler, but pins would not follow the user to another browser and the API could not order the list.

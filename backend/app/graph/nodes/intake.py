@@ -6,10 +6,11 @@ from langgraph.types import interrupt
 
 from app.graph import prompts
 from app.graph.events import emit, guarded
-from app.graph.state import TURN_RESET, AgentState, StandaloneQuestion, TriageDecision, TriageResult
+from app.graph.state import TURN_RESET, AgentState, Clarification, StandaloneQuestion, TriageDecision, TriageResult
 from app.guardrails.language import LANGUAGE_NAMES, detect_language
 
 MAX_CLARIFICATIONS = 2
+MAX_CHOICES = 4
 HISTORY_MESSAGES = 10  # recent messages given to the model to resolve follow-up questions
 
 Decider = Callable[[str], TriageResult]
@@ -66,16 +67,18 @@ def make_clarify(llm) -> Callable:
         steps = state.get("coordinator_steps") or []
         unclear = steps[-1].instructions if steps and steps[-1].action == "clarify" else state["triage"].reason
         system = prompts.CLARIFY.format(scope=prompts.SCOPE, language=LANGUAGE_NAMES[state["language"]])
-        text = llm("fast").invoke([SystemMessage(system),
-                                   HumanMessage(f"Question: {state['question']}\nWhat is unclear: {unclear}")]).content
-        emit("clarify", "action", f"Asking the user: {text}")
-        return {"pending_question": text}
+        result = llm("fast", schema=Clarification).invoke(
+            [SystemMessage(system), HumanMessage(f"Question: {state['question']}\nWhat is unclear: {unclear}")])
+        choices = [c.strip() for c in result.choices if c.strip()][:MAX_CHOICES]
+        emit("clarify", "action", f"Asking the user: {result.question}")
+        return {"pending_question": result.question, "pending_choices": choices}
     return clarify
 
 
 def ask_user(state: AgentState) -> dict:
-    """Pause the run until the user answers; the API or CLI resumes it with the answer."""
-    answer = interrupt({"kind": "clarification", "question": state["pending_question"]})
+    """Pause the run until the user answers (a choice or their own words); the API or CLI resumes it."""
+    answer = interrupt({"kind": "clarification", "question": state["pending_question"],
+                        "choices": state.get("pending_choices") or []})
     return {
         "messages": [AIMessage(state["pending_question"]), HumanMessage(answer)],
         "clarifications": state.get("clarifications", 0) + 1,

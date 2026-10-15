@@ -41,7 +41,7 @@ export interface ContextMessage {
 export type RunStatus = "running" | "awaiting_input" | "completed" | "failed" | "cancelled";
 
 export type Pending =
-  | { kind: "clarification"; question: string }
+  | { kind: "clarification"; question: string; choices?: string[] } // answers the user can pick, or write their own
   | { kind: "plan_approval"; plan: string; reasoning: string };
 
 export interface ModelInfo {
@@ -78,6 +78,7 @@ export interface OptionsResponse {
 export interface ThreadSummary {
   id: string;
   title: string;
+  pinned: boolean;
   updated_at: string;
   runs: number;
   last_status: RunStatus | null;

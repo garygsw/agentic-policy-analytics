@@ -14,9 +14,9 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 
-from app.api.db import LLMCallRecord, Run, Thread, make_session_factory, utcnow
+from app.api.db import LLMCallRecord, Run, RunEvent, Thread, make_session_factory, utcnow
 from app.api.runs import RunManager, as_dict, event_rows, iso, new_id
 from app.api.titles import MAX_CHARS, short_question, write_title
 from app.config import REPO_ROOT, get_settings
@@ -42,6 +42,11 @@ class MessageIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     options: RunOptions = Field(default_factory=RunOptions)
     require_plan_approval: bool = False
+
+
+class ThreadUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=100)  # a new name chosen by the user
+    pinned: bool | None = None
 
 
 class ResumeIn(BaseModel):
@@ -72,7 +77,8 @@ def warm_up() -> None:
 def retitle_old_threads(sessions, llm) -> None:
     """Conversations from before titles were written carry their whole first question: give them a short title."""
     with sessions() as session:
-        old = session.scalars(select(Thread).where(func.length(Thread.title) > MAX_CHARS + 1).limit(100)).all()
+        old = session.scalars(select(Thread).where(func.length(Thread.title) > MAX_CHARS + 1,
+                                                   Thread.renamed.is_not(True)).limit(100)).all()
         for thread in old:
             thread.title = write_title(thread.title, llm)
         session.commit()
@@ -103,7 +109,7 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
         title = write_title(question, title_llm)
         with db() as session:
             thread = session.get(Thread, thread_id)
-            if thread is not None:
+            if thread is not None and not thread.renamed:  # a name the user chose in the meantime stays
                 thread.title = title
                 session.commit()
 
@@ -155,14 +161,15 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
     @app.get("/api/threads")
     def list_threads():
         with db() as session:
-            threads = session.scalars(select(Thread).order_by(Thread.updated_at.desc()).limit(100)).all()
+            threads = session.scalars(select(Thread).order_by(Thread.pinned.desc(), Thread.updated_at.desc())
+                                      .limit(100)).all()
             result = []
             for thread in threads:
                 last = session.scalars(select(Run).where(Run.thread_id == thread.id)
                                        .order_by(Run.started_at.desc()).limit(1)).first()
                 count = session.scalar(select(func.count()).select_from(Run).where(Run.thread_id == thread.id))
                 result.append({"id": thread.id, "title": thread.title, "language": thread.language,
-                               "updated_at": iso(thread.updated_at), "runs": count,
+                               "pinned": bool(thread.pinned), "updated_at": iso(thread.updated_at), "runs": count,
                                "last_status": last.status if last else None})
             return result
 
@@ -180,6 +187,42 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
                 "runs": [{"id": r.id, "question": r.question, "status": r.status, "outcome": r.outcome,
                           "pending": r.pending, "totals": r.totals, "started_at": iso(r.started_at),
                           "finished_at": iso(r.finished_at)} for r in runs]}
+
+    @app.patch("/api/threads/{thread_id}")
+    def update_thread(thread_id: str, body: ThreadUpdate):
+        """Rename or pin a conversation. Neither changes its place among the recent ones."""
+        title = " ".join((body.title or "").split())
+        if body.title is not None and not title:
+            raise HTTPException(422, "a title cannot be empty")
+        reject_personal_data(title)
+        with db() as session:
+            thread = session.get(Thread, thread_id)
+            if thread is None:
+                raise HTTPException(404, "unknown conversation")
+            if title:
+                thread.title, thread.renamed = title, True
+            if body.pinned is not None:
+                thread.pinned = body.pinned
+            session.commit()
+            return {"id": thread.id, "title": thread.title, "pinned": thread.pinned}
+
+    @app.delete("/api/threads/{thread_id}")
+    def delete_thread(thread_id: str):
+        """Delete a conversation for good: its runs, their events and LLM call log, and its checkpoints."""
+        with db() as session:
+            thread = session.get(Thread, thread_id)
+            if thread is None:
+                raise HTTPException(404, "unknown conversation")
+            if session.scalars(select(Run).where(Run.thread_id == thread_id, Run.status == "running")).first():
+                raise HTTPException(409, {"code": "busy", "message": "Stop the running analysis first."})
+            runs = select(Run.id).where(Run.thread_id == thread_id)
+            session.execute(delete(LLMCallRecord).where(LLMCallRecord.run_id.in_(runs)))
+            session.execute(delete(RunEvent).where(RunEvent.run_id.in_(runs)))
+            session.execute(delete(Run).where(Run.thread_id == thread_id))
+            session.delete(thread)
+            session.commit()
+        app.state.graph.checkpointer.delete_thread(thread_id)
+        return {"id": thread_id, "deleted": True}
 
     @app.post("/api/threads/{thread_id}/messages", status_code=202)
     async def post_message(thread_id: str, body: MessageIn):

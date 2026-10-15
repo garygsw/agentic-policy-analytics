@@ -17,12 +17,13 @@ interface Props {
   verbosity: number;
   now: number;
   onInspect: () => void;
+  onAnswer: (answer: string) => Promise<boolean>; // reply to a clarifying question; false: refused
   onPlan: (approved: boolean, feedback: string) => void;
   onCancel: () => void;
 }
 
 /** One question and everything the agents did for it. */
-export function RunBlock({ run, verbosity, now, onInspect, onPlan, onCancel }: Props) {
+export function RunBlock({ run, verbosity, now, onInspect, onAnswer, onPlan, onCancel }: Props) {
   const status = displayedStatus(run);
   const working = status === "running";
   const [stepsOpen, setStepsOpen] = useState<boolean | null>(null); // null: open while working, closed after
@@ -49,10 +50,8 @@ export function RunBlock({ run, verbosity, now, onInspect, onPlan, onCancel }: P
       )}
 
       {pending?.kind === "clarification" && (
-        <div className="bubble assistant">
-          <p>{pending.question}</p>
-          <p className="hint">Reply in the box below.</p>
-        </div>
+        <ClarifyingQuestion question={pending.question} choices={pending.choices ?? []} onAnswer={onAnswer}
+          onCancel={onCancel} />
       )}
       {pending?.kind === "plan_approval" && (
         <PlanApproval plan={pending.plan} reasoning={pending.reasoning} onDecide={onPlan} onCancel={onCancel} />
@@ -108,6 +107,44 @@ function Answer({ runId, detail, outcome, check, flags }: {
       ) : (
         detail.answer && <div className="bubble assistant markdown"><Markdown>{detail.answer}</Markdown></div>
       )}
+    </div>
+  );
+}
+
+/** A clarifying question: pick one of the offered answers or write your own. */
+function ClarifyingQuestion({ question, choices, onAnswer, onCancel }: {
+  question: string; choices: string[]; onAnswer: (answer: string) => Promise<boolean>; onCancel: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const send = async (answer: string) => {
+    const value = answer.trim();
+    if (!value || sending) return;
+    setSending(true);
+    const accepted = await onAnswer(value);
+    setSending(false);
+    if (accepted) setText("");
+  };
+  return (
+    <div className="clarify">
+      <p className="clarify-question">{question}</p>
+      {choices.length > 0 && (
+        <div className="choices">
+          {choices.map((choice, i) => (
+            <button key={choice} type="button" className="choice" disabled={sending} onClick={() => void send(choice)}>
+              <span className="choice-number">{i + 1}</span>
+              <span>{choice}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <form className="row own-answer" onSubmit={(e) => { e.preventDefault(); void send(text); }}>
+        <input aria-label="Your answer" value={text} disabled={sending} autoFocus
+          placeholder={choices.length ? "Or write your own answer…" : "Your answer…"}
+          onChange={(e) => setText(e.target.value)} />
+        <button type="submit" className="primary" disabled={sending || !text.trim()}>Send</button>
+        <button type="button" className="quiet" onClick={onCancel}>Cancel</button>
+      </form>
     </div>
   );
 }
