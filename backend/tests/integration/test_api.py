@@ -270,6 +270,12 @@ def test_conversations_are_found_by_title_or_question(answered):
     assert found("housing") == [] and found("%") == []  # % is a character to find, not a wildcard
     assert len(found("  ")) == 2  # a blank search lists everything
 
+    # Paging: newest first; the conversation with no runs (its first message never sent) can be left out.
+    page = client.get("/api/threads", params={"limit": 1}).json()
+    assert len(page) == 1 and page[0]["runs"] == 0  # the empty one is the newest
+    assert [t["id"] for t in client.get("/api/threads", params={"limit": 1, "with_runs": True}).json()] == [thread]
+    assert client.get("/api/threads", params={"limit": 0}).status_code == 422
+
 
 def test_a_conversation_with_a_running_analysis_is_not_deleted(tmp_path):
     with client_for({}, tmp_path) as client:

@@ -59,8 +59,8 @@ a { color: var(--accent); }
 pre { font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; margin: 0.4rem 0; }
 
 /* Layout: sidebar, then the conversation with the composer at the bottom. */
-.app { display: grid; grid-template-columns: 264px 1fr; height: 100dvh; }
-.main { display: flex; flex-direction: column; min-width: 0; height: 100dvh; }
+.app { display: grid; grid-template-columns: var(--sidebar-width, 264px) 1fr; height: 100dvh; }
+.main { position: relative; display: flex; flex-direction: column; min-width: 0; height: 100dvh; }
 .scroll { flex: 1; overflow-y: auto; }
 .column { width: 100%; max-width: 860px; margin: 0 auto; padding: 0 1.25rem; }
 .bottom { padding-bottom: 1rem; background: linear-gradient(transparent, var(--bg) 1rem); }
@@ -80,6 +80,16 @@ pre { font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-wor
 .sidebar .new:hover { border-color: var(--accent); }
 .sidebar .search { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.5rem; padding: 0 0.6rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--muted); }
 .sidebar .search:focus-within { border-color: var(--accent); }
+.sidebar .search kbd { flex: none; font: 0.72rem var(--sans); color: var(--muted); }
+.view-more { display: block; width: 100%; margin-top: 0.25rem; padding: 0.4rem 0.5rem; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: 0.85rem; text-align: left; }
+.view-more:hover { background: var(--border); color: var(--fg); }
+/* The sidebar's edge: a thin strip that shows the accent colour on hover, focus or drag. */
+.sidebar-resizer { position: absolute; top: 0; bottom: 0; left: -4px; z-index: 5; width: 8px; cursor: col-resize; }
+.sidebar-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background 0.15s; }
+.sidebar-resizer:hover::after, .sidebar-resizer:focus-visible::after, :root.resizing .sidebar-resizer::after { background: var(--accent); }
+.sidebar-resizer:focus { outline: none; }
+:root.resizing, :root.resizing * { cursor: col-resize !important; user-select: none; }
+:root.resizing iframe { pointer-events: none; }  /* report frames would otherwise swallow the drag */
 .sidebar .search input { flex: 1; min-width: 0; padding: 0.4rem 0; border: 0; outline: 0; background: none; font-size: 0.9rem; }
 .section-label { margin: 1.25rem 0.5rem 0.4rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 .sidebar ul { list-style: none; margin: 0; padding: 0; }
@@ -283,6 +293,7 @@ button.menu-item:hover, label.menu-item:hover { background: var(--code); }
   .backdrop { position: fixed; inset: 0; z-index: 14; background: rgb(0 0 0 / 30%); }
   .menu-button { display: inline-flex; }
   .hide-sidebar { display: none; }
+  .sidebar-resizer { display: none; }  /* the slide-over sidebar has a fixed width */
   .app.sidebar-hidden .sidebar { display: block; }  /* narrow screens use the slide-over instead */
   .column { padding: 0 0.9rem; }
   .bubble.user { max-width: 95%; }

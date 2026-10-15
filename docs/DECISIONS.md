@@ -527,3 +527,11 @@ Changes from the first round of hands-on testing.
 - **Found:** the one low score came from source attribution. The writer's prompt said web results "are third-party pages", so a report called government pages found through web search third-party. The prompt and the web search tool now say that a web result is official when its URL is a government site. A re-run of that question no longer mislabelled the pages, but its summary still claimed official support that only a third-party page gave, and the judge again scored it 1. Attribution is left as a known limit (TESTING.md section 8): the number check cannot see it, and the reviewer missed it.
 - **Also found:** the evaluation starts three runs at once, which exposed a race in creating the new dataset tables (D-042). Fixed with a lock, with a test that fails without it.
 - **Alternatives:** check attribution in code, by comparing each statement's wording ("official", "the government") with the publishers of the sources it cites. It is possible, but not before the code freeze.
+
+## D-046 · 2026-10-15 · History list: search shortcut, paging, resizable sidebar
+- **Decision:**
+  - ⌘K (Ctrl+K) focuses the sidebar's search, showing a hidden sidebar first. Ctrl+F stays with the browser.
+  - The list shows 15 conversations; **View more** adds 15 at a time. The API pages the list (`limit`) and can leave out conversations whose first message was refused (`with_runs`), so a page is never padded with rows the sidebar hides. The UI asks for one row more than it shows, to know whether there are more.
+  - The sidebar's right edge can be dragged between 200 and 480 px. Double-click resets it, and the arrow keys move it when it has focus. The width is remembered in the browser. Narrow screens keep the slide-over sidebar at a fixed width.
+  - The top bar keeps the open conversation's title even when it is not on the loaded page.
+- **Alternatives:** infinite scroll (less predictable in a short demo); loading every conversation and truncating in the browser (simpler, but the list grows without bound).

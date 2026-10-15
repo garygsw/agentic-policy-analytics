@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 
 import { Composer } from "@/components/Composer";
 import { Inspector } from "@/components/Inspector";
@@ -8,10 +8,12 @@ import { ModeMenu, type Mode } from "@/components/ModeMenu";
 import { ModelMenu } from "@/components/ModelMenu";
 import { RunBlock } from "@/components/RunBlock";
 import { Sidebar } from "@/components/Sidebar";
+import { SidebarResizer } from "@/components/SidebarResizer";
 import { StatusLine } from "@/components/StatusLine";
 import { ToolsMenu } from "@/components/ToolsMenu";
 import { api } from "@/lib/api";
 import { useNow, useStoredState } from "@/lib/hooks";
+import { clampSidebarWidth, SIDEBAR_WIDTH } from "@/lib/layout";
 import { pendingOf } from "@/lib/runState";
 import type { OptionsResponse, RunOptions, TraceEvent } from "@/lib/types";
 import { displayedStatus, useConversation, type RunEntry } from "@/lib/useConversation";
@@ -46,6 +48,10 @@ export default function Home() {
   const [inspecting, setInspecting] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false); // narrow screens: the sidebar slides over the page
   const [sidebarHidden, setSidebarHidden] = useStoredState<boolean>("sidebar-hidden", false); // wide screens
+  const [savedWidth, saveWidth] = useStoredState<number>("sidebar-width", SIDEBAR_WIDTH.initial);
+  const [dragWidth, setDragWidth] = useState<number | null>(null); // while the edge is being dragged
+  const sidebarWidth = dragWidth ?? clampSidebarWidth(savedWidth);
+  const searchBox = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.options().then(setCatalog).catch((e) => setError(e.message));
@@ -74,13 +80,20 @@ export default function Home() {
         conversation.newThread();
         return;
       }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "k") { // search the history
+        e.preventDefault();
+        if (window.matchMedia("(max-width: 860px)").matches) setSidebarOpen(true);
+        else setSidebarHidden(false);
+        setTimeout(() => searchBox.current?.select(), 0); // once a hidden sidebar is shown again
+        return;
+      }
       if (e.key !== "Escape" || e.defaultPrevented) return; // an Escape that closed a menu does nothing else
       if (inspecting) setInspecting(null);
       else if (running) void cancel(running.id);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [inspecting, running, cancel, conversation.newThread]);
+  }, [inspecting, running, cancel, conversation.newThread, setSidebarHidden]);
 
   const submit = (value: string) => conversation.ask(value, options, mode === "plan");
 
@@ -89,12 +102,16 @@ export default function Home() {
     : pending?.kind === "clarification" ? "Answer the question above, or cancel it"
       : pending?.kind === "plan_approval" ? "Approve or revise the plan above"
         : runs.length ? "Ask a follow-up question…" : "Ask about Singapore's public data…";
-  const title = conversation.threads.find((t) => t.id === conversation.threadId)?.title;
+  const title = conversation.title;
 
   return (
-    <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
+    <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}
+      style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
       <Sidebar
         threads={conversation.threads}
+        hasMore={conversation.hasMore}
+        onMore={conversation.showMore}
+        searchBox={searchBox}
         search={conversation.search}
         onSearch={conversation.setSearch}
         activeId={conversation.threadId}
@@ -108,6 +125,10 @@ export default function Home() {
       />
       {sidebarOpen && <div className="backdrop" onClick={() => setSidebarOpen(false)} aria-hidden />}
       <main className="main">
+        {!sidebarHidden && (
+          <SidebarResizer width={sidebarWidth} onResize={setDragWidth}
+            onResizeEnd={(width) => { saveWidth(width); setDragWidth(null); }} />
+        )}
         <header className="topbar">
           <button className="icon menu-button" aria-label="Show conversations" title="Show conversations"
             onClick={() => (window.matchMedia("(max-width: 860px)").matches

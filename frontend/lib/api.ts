@@ -42,8 +42,7 @@ const post = (body?: unknown): RequestInit => ({ method: "POST", body: body === 
 
 export const api = {
   options: () => request<OptionsResponse>("/api/options"),
-  threads: (search = "") =>
-    request<ThreadSummary[]>(`/api/threads${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ""}`),
+  threads: (search: string, limit: number) => request<ThreadSummary[]>(threadsPath(search, limit)),
   thread: (id: string) => request<ThreadDetail>(`/api/threads/${id}`),
   createThread: () => request<{ id: string }>("/api/threads", post()),
   updateThread: (id: string, change: { title?: string; pinned?: boolean }) =>
@@ -61,6 +60,13 @@ export const api = {
   run: (runId: string) => request<RunDetail>(`/api/runs/${runId}`),
   events: (runId: string, after = 0) => request<TraceEvent[]>(`/api/runs/${runId}/events?after=${after}`),
 };
+
+/** The history list: conversations with at least one run, matching `search`, at most `limit` of them. */
+export function threadsPath(search: string, limit: number): string {
+  const params = new URLSearchParams({ limit: String(limit), with_runs: "true" });
+  if (search.trim()) params.set("q", search.trim());
+  return `/api/threads?${params}`;
+}
 
 export const reportUrl = (runId: string) => `${API_URL}/api/runs/${runId}/report.html`;
 export const markdownUrl = (runId: string) => `${API_URL}/api/runs/${runId}/report.md`;

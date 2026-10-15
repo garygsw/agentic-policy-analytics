@@ -227,7 +227,7 @@ Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
 |---|---|---|
 | GET | `/api/health`, `/api/health/ready` | liveness; readiness (database, keys, index, web search) |
 | GET | `/api/options` | models, tools, efforts, triage methods, verbosity levels, defaults |
-| POST, GET | `/api/threads`, `/api/threads?q=…` | start a conversation; list conversations (pinned first), or those with the words in their title or a question |
+| POST, GET | `/api/threads`, `/api/threads?q=…&limit=N&with_runs=true` | start a conversation; list conversations (pinned first), or those with the words in their title or a question; `limit` pages the list and `with_runs` leaves out conversations whose first message was refused |
 | PATCH, DELETE | `/api/threads/{id}` | rename or pin a conversation; delete it (a soft delete: hidden from every route, kept for `python -m app.admin restore`; 409 while a run is working) |
 | GET | `/api/threads/{id}` | a conversation's messages and runs |
 | POST | `/api/threads/{id}/messages` | ask a question: **202** with a run ID; 400 if it contains personal data; 409 if a run is active |
@@ -405,7 +405,9 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
   - The + menu has a switch per tool.
   - The mode is Auto, or Plan (pause for plan approval).
   - The sidebar can be hidden. It has a search box (titles and questions, searched by the API), and each
-    conversation's ⋮ menu pins, renames or deletes it (keys P, R, D). ⌘⇧O or Ctrl+Shift+O starts a new one.
+    conversation's ⋮ menu pins, renames or deletes it (keys P, R, D). ⌘⇧O or Ctrl+Shift+O starts a new one,
+    and ⌘K or Ctrl+K focuses the search. The list loads 15 conversations at a time ("View more"), and the
+    sidebar's width can be dragged (200–480 px).
 
   These choices and the Detail level are remembered in the browser. Triage is a server setting.
 - **Citations.** The report's frame never scrolls, so a citation click inside it asks the page to scroll the

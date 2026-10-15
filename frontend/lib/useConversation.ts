@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "./api";
+import { pageOf, THREADS_PAGE } from "./layout";
 import { applyEvent, applyEvents, emptyRun, runStatus, type RunView } from "./runState";
 import type { RunDetail, RunOptions, RunStatus, ThreadSummary, TraceEvent } from "./types";
 
@@ -30,24 +31,39 @@ function messageOf(error: unknown): string {
 export function useConversation() {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [openTitle, setOpenTitle] = useState<string | null>(null); // the open conversation may not be listed
   const [runs, setRuns] = useState<RunEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const [search, setSearch] = useState(""); // the sidebar's search: words in titles or questions
-  const searchRef = useRef(search);
+  const [search, setSearchText] = useState(""); // the sidebar's search: words in titles or questions
+  const [limit, setLimit] = useState(THREADS_PAGE); // how many conversations are listed ("View more" adds a page)
+  const [hasMore, setHasMore] = useState(false);
+  const listing = useRef({ search, limit });
   const latestList = useRef(0);
 
   const refreshThreads = useCallback(() => {
     const ticket = ++latestList.current; // a slower, older reply must not replace a newer list
-    api.threads(searchRef.current)
-      .then((list) => { if (ticket === latestList.current) setThreads(list); })
+    const { search, limit } = listing.current;
+    api.threads(search, limit + 1)
+      .then((rows) => {
+        if (ticket !== latestList.current) return;
+        const { shown, more } = pageOf(rows, limit);
+        setThreads(shown);
+        setHasMore(more);
+      })
       .catch((e) => setError(messageOf(e)));
   }, []);
   useEffect(() => {
-    searchRef.current = search;
+    listing.current = { search, limit };
     const timer = setTimeout(refreshThreads, search ? 200 : 0); // wait for a pause in typing
     return () => clearTimeout(timer);
-  }, [search, refreshThreads]);
+  }, [search, limit, refreshThreads]);
+
+  const setSearch = useCallback((text: string) => {
+    setSearchText(text);
+    setLimit(THREADS_PAGE); // a new search starts from its first page
+  }, []);
+  const showMore = useCallback(() => setLimit((current) => current + THREADS_PAGE), []);
 
   const update = useCallback((id: string, change: (run: RunEntry) => RunEntry) => {
     setRuns((previous) => previous.map((run) => (run.id === id ? change(run) : run)));
@@ -79,6 +95,7 @@ export function useConversation() {
         };
       }));
       setThreadId(id);
+      setOpenTitle(thread.title);
       setRuns(entries);
     } catch (e) {
       setError(messageOf(e));
@@ -87,6 +104,7 @@ export function useConversation() {
 
   const newThread = useCallback(() => {
     setThreadId(null);
+    setOpenTitle(null);
     setRuns([]);
     setError(null);
   }, []);
@@ -95,12 +113,13 @@ export function useConversation() {
   const updateThread = useCallback(async (id: string, change: { title?: string; pinned?: boolean }) => {
     setError(null);
     try {
-      await api.updateThread(id, change);
+      const updated = await api.updateThread(id, change);
+      if (id === threadId) setOpenTitle(updated.title);
     } catch (e) {
       setError(messageOf(e));
     }
     refreshThreads();
-  }, [refreshThreads]);
+  }, [threadId, refreshThreads]);
 
   /** Delete a conversation (the backend keeps it and can restore it); if it is open, the page starts a new one. */
   const deleteThread = useCallback(async (id: string) => {
@@ -174,8 +193,10 @@ export function useConversation() {
     }
   }, [update, loadDetail, refreshThreads]);
 
+  const title = threads.find((t) => t.id === threadId)?.title ?? openTitle;
+
   return {
-    threads, threadId, runs, error, setError, search, setSearch, openThread, newThread, updateThread, deleteThread,
-    ask, answer, decidePlan, cancel, onEvent,
+    title, threads, hasMore, showMore, threadId, runs, error, setError, search, setSearch, openThread, newThread,
+    updateThread, deleteThread, ask, answer, decidePlan, cancel, onEvent,
   };
 }

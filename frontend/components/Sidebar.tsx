@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 
 import { sidebarSections } from "@/lib/threads";
 import type { ThreadSummary } from "@/lib/types";
@@ -14,21 +14,25 @@ interface Actions {
 }
 
 interface Props extends Actions {
-  threads: ThreadSummary[]; // already filtered by the search
+  threads: ThreadSummary[]; // one page, already filtered by the search
+  hasMore: boolean; // more conversations than are listed
+  onMore: () => void;
   search: string;
   onSearch: (text: string) => void;
+  searchBox: RefObject<HTMLInputElement | null>; // focused by the page's ⌘K shortcut
   activeId: string | null;
   open: boolean; // on narrow screens the list slides in
   onNew: () => void;
   onHide: () => void; // collapse the sidebar (wide screens)
 }
 
-/** Conversation history: a search box, pinned conversations, then recent ones. Each has a menu to pin, rename or
- * delete it. */
-export function Sidebar({ threads, search, onSearch, activeId, open, onNew, onHide, ...actions }: Props) {
+/** Conversation history: a search box, pinned conversations, then recent ones, a page at a time. Each has a menu
+ * to pin, rename or delete it. */
+export function Sidebar({ threads, hasMore, onMore, search, onSearch, searchBox, activeId, open, onNew, onHide,
+  ...actions }: Props) {
   const { pinned, recent } = sidebarSections(threads);
   const searching = search.trim() !== "";
-  const shortcut = useNewShortcutLabel();
+  const mac = useIsMac();
   const item = (t: ThreadSummary) => <ThreadItem key={t.id} thread={t} active={t.id === activeId} {...actions} />;
   return (
     <nav className={`sidebar${open ? " open" : ""}`} aria-label="Conversations">
@@ -41,11 +45,11 @@ export function Sidebar({ threads, search, onSearch, activeId, open, onNew, onHi
       <button className="new" onClick={onNew} title="New conversation">
         <svg className="new-icon" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="currentColor" /><path d="M10 6v8M6 10h8" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" /></svg>
         <span className="new-label">New</span>
-        <kbd>{shortcut}</kbd>
+        <kbd>{mac ? "⌘⇧O" : "Ctrl+Shift+O"}</kbd>
       </button>
       <label className="search">
         <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
-        <input type="search" aria-label="Search conversations" placeholder="Search" value={search}
+        <input ref={searchBox} type="search" aria-label="Search conversations" placeholder="Search" value={search}
           onChange={(e) => onSearch(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Escape" && search) {
@@ -53,6 +57,7 @@ export function Sidebar({ threads, search, onSearch, activeId, open, onNew, onHi
               onSearch("");
             }
           }} />
+        {!search && <kbd>{mac ? "⌘K" : "Ctrl+K"}</kbd>}
       </label>
       {searching ? (
         <>
@@ -75,18 +80,19 @@ export function Sidebar({ threads, search, onSearch, activeId, open, onNew, onHi
           <ul>{recent.map(item)}</ul>
         </>
       )}
+      {hasMore && <button className="view-more" onClick={onMore}>View more</button>}
     </nav>
   );
 }
 
-/** The New shortcut as this computer writes it: ⌘⇧O on a Mac, Ctrl+Shift+O elsewhere (the page handles both).
- * Worked out after the first render, so the server's HTML and the browser's first render agree. */
-function useNewShortcutLabel(): string {
-  const [label, setLabel] = useState("Ctrl+Shift+O");
+/** Whether to write shortcuts the Mac way (⌘) or with Ctrl; the page accepts both keys everywhere. Worked out
+ * after the first render, so the server's HTML and the browser's first render agree. */
+function useIsMac(): boolean {
+  const [mac, setMac] = useState(false);
   useEffect(() => {
-    if (/Mac|iPhone|iPad/.test(navigator.userAgent)) setLabel("⌘⇧O");
+    setMac(/Mac|iPhone|iPad/.test(navigator.userAgent));
   }, []);
-  return label;
+  return mac;
 }
 
 const MENU_WIDTH = 190;

@@ -169,7 +169,8 @@ In the chat bar:
 scrolls to its fact or source, and source links open in a new tab. The sidebar can be hidden with the button at
 its top. The search box finds conversations by words in their titles or questions. Each conversation's ⋮ menu
 pins, renames or deletes it (deleted conversations can be restored from the backend; see above). **New**, or
-⌘⇧O (Ctrl+Shift+O), starts a new conversation.
+⌘⇧O (Ctrl+Shift+O), starts a new conversation, and ⌘K (Ctrl+K) jumps to the search. The list shows 15
+conversations, with **View more** for the next 15. Drag the sidebar's edge to resize it (double-click resets it).
 
 ## Running the tests
 

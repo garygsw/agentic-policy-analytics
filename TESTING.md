@@ -7,7 +7,7 @@ re-run from `backend/` (and `frontend/` for the UI tests). Results are saved in 
 |---|---|---|---|---|
 | Unit tests | agents, tools, statistics, data cleaning, guardrails, LLM layer, RAG, report check, downloads | 189 | `uv run pytest tests/unit` | free (fake models) |
 | Integration tests | the whole graph and API: background runs, pauses, streaming, replay, concurrency, restarts, downloads | 23 | `uv run pytest tests/integration` | free (scripted models) |
-| Frontend tests | the event reducer behind the live view, the history list | 8 | `npm test` (in `frontend/`) | free |
+| Frontend tests | the event reducer behind the live view, the history list, sidebar paging and width | 11 | `npm test` (in `frontend/`) | free |
 | Live provider tests | real calls to both providers, structured output, fallback | 3 | `uv run pytest -m live` | cents |
 | Retrieval evaluation | recall@k and MRR for each search mode | 50 questions | `uv run python -m app.evals.retrieval run` | free |
 | Triage evaluation | accuracy, F1, latency and cost of each classifier | 84 questions | `uv run python scripts/triage_trial.py` | cents |
@@ -57,7 +57,7 @@ The language models are the part that cannot be unit-tested, so the design keeps
 | Guardrails | `test_pii.py` (19): NRIC/FIN, emails, phones, unit numbers, bank accounts, cards (Luhn); names and statistics allowed. `test_language.py` (9). `test_triage.py` (8) |
 | Retrieval | `test_rag.py` (24): chunking, crawling rules, incremental re-crawls, each search mode, fusion, filters, per-document cap, web result de-duplication, concurrent searches |
 | Performance and load | `test_load.py`: 20 concurrent runs through the API with no lost events. `scripts/load_test.py`: HTTP load (section 6) |
-| Frontend | `runState.test.ts` (7): replayed events are idempotent, usage adds up across pauses, draft revisions, status across pause and resume, working time excludes waiting, verbosity filtering. `threads.test.ts` (1): pinned conversations listed apart |
+| Frontend | `runState.test.ts` (7): replayed events are idempotent, usage adds up across pauses, draft revisions, status across pause and resume, working time excludes waiting, verbosity filtering. `threads.test.ts` (1): pinned conversations listed apart. `layout.test.ts` (3): sidebar width limits, paging, the list request |
 
 ## 3. Hallucination detection
 

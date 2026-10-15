@@ -10,7 +10,7 @@ import threading
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
@@ -171,14 +171,19 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
             return {"id": thread.id}
 
     @app.get("/api/threads")
-    def list_threads(q: str = ""):
-        """Conversations, pinned first, then the most recently used. `q` finds a word in titles or questions."""
+    def list_threads(q: str = "", limit: int = Query(100, ge=1, le=500), with_runs: bool = False):
+        """Conversations, pinned first, then the most recently used. `q` finds a word in titles or questions;
+        `limit` pages the list (ask for one more than you show to learn whether there are more); `with_runs`
+        leaves out conversations whose first message was refused, which the UI does not list."""
         query = select(Thread).where(Thread.deleted_at.is_(None))
+        if with_runs:
+            query = query.where(Thread.id.in_(select(Run.thread_id)))
         if q.strip():
             asked = select(Run.thread_id).where(Run.question.icontains(q.strip(), autoescape=True))
             query = query.where(or_(Thread.title.icontains(q.strip(), autoescape=True), Thread.id.in_(asked)))
         with db() as session:
-            threads = session.scalars(query.order_by(Thread.pinned.desc(), Thread.updated_at.desc()).limit(100)).all()
+            threads = session.scalars(query.order_by(Thread.pinned.desc(), Thread.updated_at.desc())
+                                      .limit(limit)).all()
             result = []
             for thread in threads:
                 last = session.scalars(select(Run).where(Run.thread_id == thread.id)
