@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     # search alone and added about half a second per search (see TESTING.md).
     rag_rerank: bool = False
 
+    # The claim checker: the reviewer also checks each statement against what it cites (D-035). On by default;
+    # off makes runs cheaper and faster (about a third less per evaluation run) at the cost of that check.
+    claim_check: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

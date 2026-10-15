@@ -11,7 +11,7 @@
                                                                            ^     (fix)     |  (wrong analysis:
                                                                            '---------------'   back to coordinator)
                                                      -> localize_report -> render -> respond
-                                                  (fallback_report, decline, cancel -> localize -> respond)
+                                                  (fallback_report, decline -> localize -> respond)
 Any failing step routes to fallback_report.
 """
 from dataclasses import dataclass
@@ -68,10 +68,7 @@ def route_coordinator(state: AgentState) -> str:
 
 
 def route_plan(state: AgentState) -> str:
-    if state.get("plan_approved"):
-        return "extraction"
-    feedback = (state.get("findings") or {}).get("plan_feedback", "")
-    return "cancel" if feedback == "rejected without feedback" else "coordinator"
+    return "extraction" if state.get("plan_approved") else "coordinator"  # rejected: plan again
 
 
 def route_validate(state: AgentState) -> str:
@@ -114,7 +111,6 @@ def build_graph(deps: Deps | None = None, checkpointer=None):
     g.add_node("localize_report", reporting.make_localize_report(deps.llm))
     g.add_node("render", reporting.render)
     g.add_node("fallback_report", reporting.fallback_report)
-    g.add_node("cancel", reporting.cancel)
     g.add_node("localize", reporting.make_localize(deps.llm))
     g.add_node("respond", reporting.respond)
 
@@ -127,7 +123,7 @@ def build_graph(deps: Deps | None = None, checkpointer=None):
     g.add_conditional_edges("coordinator", route_coordinator,
                             ["approve_plan", "extraction", "analytics", "clarify", "decline", "report_writer",
                              "fallback_report"])
-    g.add_conditional_edges("approve_plan", route_plan, ["extraction", "coordinator", "cancel"])
+    g.add_conditional_edges("approve_plan", route_plan, ["extraction", "coordinator"])
     g.add_conditional_edges("extraction", route_after("coordinator"), ["coordinator", "fallback_report"])
     g.add_conditional_edges("analytics", route_after("coordinator"), ["coordinator", "fallback_report"])
     g.add_conditional_edges("report_writer", route_after("validate"), ["validate", "fallback_report"])
@@ -135,7 +131,7 @@ def build_graph(deps: Deps | None = None, checkpointer=None):
     g.add_conditional_edges("reviewer", route_review, ["localize_report", "coordinator", "report_writer"])
     g.add_edge("localize_report", "render")
     g.add_edge("render", "respond")  # rendered in the user's language already
-    for node in ("decline", "fallback_report", "cancel"):
+    for node in ("decline", "fallback_report"):
         g.add_edge(node, "localize")
     g.add_edge("redirect", "respond")  # redirect replies are already written in every language
     g.add_edge("localize", "respond")

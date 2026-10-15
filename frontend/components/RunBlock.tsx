@@ -18,10 +18,11 @@ interface Props {
   now: number;
   onInspect: () => void;
   onPlan: (approved: boolean, feedback: string) => void;
+  onCancel: () => void;
 }
 
 /** One question and everything the agents did for it. */
-export function RunBlock({ run, verbosity, now, onInspect, onPlan }: Props) {
+export function RunBlock({ run, verbosity, now, onInspect, onPlan, onCancel }: Props) {
   const status = displayedStatus(run);
   const working = status === "running";
   const [stepsOpen, setStepsOpen] = useState<boolean | null>(null); // null: open while working, closed after
@@ -54,7 +55,7 @@ export function RunBlock({ run, verbosity, now, onInspect, onPlan }: Props) {
         </div>
       )}
       {pending?.kind === "plan_approval" && (
-        <PlanApproval plan={pending.plan} reasoning={pending.reasoning} onDecide={onPlan} />
+        <PlanApproval plan={pending.plan} reasoning={pending.reasoning} onDecide={onPlan} onCancel={onCancel} />
       )}
 
       {working && draft && (
@@ -111,8 +112,9 @@ function Answer({ runId, detail, outcome, check, flags }: {
   );
 }
 
-function PlanApproval({ plan, reasoning, onDecide }: {
-  plan: string; reasoning: string; onDecide: (approved: boolean, feedback: string) => void;
+/** Approve the plan, ask for a revised or different one (it comes back here for approval), or cancel. */
+function PlanApproval({ plan, reasoning, onDecide, onCancel }: {
+  plan: string; reasoning: string; onDecide: (approved: boolean, feedback: string) => void; onCancel: () => void;
 }) {
   const [feedback, setFeedback] = useState("");
   return (
@@ -129,7 +131,10 @@ function PlanApproval({ plan, reasoning, onDecide }: {
       />
       <div className="row">
         <button className="primary" onClick={() => onDecide(true, "")}>Approve</button>
-        <button onClick={() => onDecide(false, feedback.trim())}>{feedback.trim() ? "Revise the plan" : "Reject"}</button>
+        <button onClick={() => onDecide(false, feedback.trim())}>
+          {feedback.trim() ? "Revise the plan" : "Suggest another plan"}
+        </button>
+        <button className="quiet" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );

@@ -137,7 +137,8 @@ export default function Home() {
               runs.map((run) => (
                 <RunBlock key={run.id} run={run} verbosity={verbosity} now={now}
                   onInspect={() => setInspecting(run.id)}
-                  onPlan={(approved, feedback) => void conversation.decidePlan(run.id, approved, feedback, options)} />
+                  onPlan={(approved, feedback) => void conversation.decidePlan(run.id, approved, feedback, options)}
+                  onCancel={() => void cancel(run.id)} />
               ))
             )}
           </div>

@@ -83,7 +83,7 @@ flowchart TD
 | `clarify` / `ask_user` | Writes one clarifying question, then pauses the run (LangGraph `interrupt`) until the user answers. At most 2 per question. |
 | `redirect` | Explains the scope in the user's language. No LLM call. |
 | `coordinator` | A ReAct agent: each step returns a `thought`, an `action` (extract, analyse, clarify, decline, report) and `instructions`. At most 6 steps. It sees the curated dataset list, the agents' summaries, and what the state records as loaded and computed. A decline before any search is turned into a search of documents and the web, so an announced policy is found rather than declined. |
-| `approve_plan` | Optional (off by default): pauses before any data is fetched, so the user can approve, reject or revise the plan. |
+| `approve_plan` | Optional (Plan mode; Auto is the default): pauses before any data is fetched. The user approves, or rejects with or without feedback, which sends the coordinator back to plan again and pause again. Cancel stops the run through the API. |
 | `extraction` | A tool-using agent (at most 6 tool calls) that loads datasets and searches documents and the web. |
 | `analytics` | A tool-using agent (at most 12 tool calls) that computes statistics and charts. Every number is recorded as a fact F1, F2… |
 | `report_writer` | Writes a structured report (title, summary, findings, caveats, charts). Every finding and caveat cites its facts and sources. |

@@ -439,3 +439,11 @@ Changes from the first round of hands-on testing.
   - Keep sharing `./var` with a rule not to open the files while Docker runs: easy to break by accident, as happened here.
   - Use SQLite's rollback journal instead of WAL: it relies on file locks across the VM boundary, which are not reliable either.
 
+## D-037 · 2026-10-15 · A rejected plan brings another plan; the claim checker is a server setting
+- **Decision:**
+  - **Plan mode.** Rejecting a plan no longer cancels the run. The coordinator drafts a different plan, using the user's feedback if given, and pauses again for approval. The plan card offers Approve, "Revise the plan" (with feedback) or "Suggest another plan" (without), and a separate Cancel, which stops the run through the API. The graph's cancel step is removed, as nothing leads to it.
+  - **Claim checker setting.** It can be switched off with `CLAIM_CHECK=false` (default on). There is no UI control. Off, the reviewer gets the short verdict-only prompt and none of the writer's material, so it costs what it did before D-035.
+- **Why:**
+  - In testing, a rejection ended the run with "cancelled at your request", when the user wanted to see another plan.
+  - Cost: an answer evaluation run costs about $3.80 with the claim checker and $2.60 without.
+

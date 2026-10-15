@@ -231,6 +231,18 @@ def test_a_claim_its_citations_do_not_support_is_sent_back_and_fixed():
     assert state["outcome"] == "answered" and state["flags"] == [] and state["revisions"] == 1
 
 
+def test_the_claim_check_can_be_switched_off(monkeypatch):
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "claim_check", False)
+    graph, llm, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
+                          "Report": [GOOD], "Review": [UNSUPPORTED]})
+    state = ask(graph, QUESTION).values
+    review_request = [m for key, m in llm.calls if key == "Review"][0]
+    assert "Also check every statement" not in review_request[0].content and "Facts and sources" not in \
+        review_request[-1].content
+    assert state["revisions"] == 0 and state["flags"] == []  # nothing sent back, nothing flagged
+
+
 def test_a_claim_still_unsupported_after_two_fixes_is_flagged_not_dropped():
     graph, _, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
                         "Report": [GOOD, GOOD, GOOD], "Review": [UNSUPPORTED] * 3})
@@ -306,11 +318,17 @@ def test_plan_approval_pause_when_enabled():
     assert state["outcome"] == "answered" and state["plan_approved"]
 
 
-def test_rejecting_the_plan_without_feedback_cancels():
-    graph, _, workers = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract")})
+def test_rejecting_the_plan_brings_another_plan_to_approve():
+    graph, llm, workers = make({"TriageDecision": [IN_SCOPE],
+                                "CoordinatorStep": steps("extract", "extract", "analyse", "report"),
+                                "Report": [GOOD], "Review": [PASS]})
     ask(graph, QUESTION, require_plan_approval=True)
-    state = resume(graph, {"approved": False}).values
-    assert state["outcome"] == "cancelled" and workers.calls == []
+    again = resume(graph, {"approved": False})  # rejected without a comment
+    assert again.interrupts[0].value["kind"] == "plan_approval" and workers.calls == []  # a new plan, paused
+    replanning = [m for key, m in llm.calls if key == "CoordinatorStep"][1][0].content
+    assert "propose a clearly different approach" in replanning
+    state = resume(graph, {"approved": True}).values
+    assert state["outcome"] == "answered" and workers.calls == ["extract", "analyse"]
 
 
 DECLINE = CoordinatorStep(thought="This asks for a forecast", action="decline",

@@ -115,15 +115,18 @@ sources (with their notes and quality reports) and the passages.
   a `warning` (its live source was down), say that a stored copy was used and from when.
 - If the facts do not support a conclusion, say so in a caveat citing the facts or datasets concerned."""
 
-REVIEW = """You check a report written from computed facts and cited sources. Do two things.
+REVIEW = """You check a report written from computed facts and cited sources.
 
-1. Does it answer the user's question? Give a verdict:
+Does it answer the user's question? Give a verdict:
 - pass: the analysis and report answer the question.
 - wrong_analysis: the analysis computed the wrong thing (wrong measure, filter, period or grouping).
 - poor_report: the analysis is right but the report misses part of the question or is unclear.
-Give a one-sentence reason that tells the next step what to fix.
+Give a one-sentence reason that tells the next step what to fix. Numbers have already been checked by code."""
 
-2. Check every statement (the summary, each finding, each caveat) against the facts and sources it cites, and
+# Added to REVIEW when the claim checker is on (CLAIM_CHECK, default on).
+CLAIM_CHECK = """
+
+Also check every statement (the summary, each finding, each caveat) against the facts and sources it cites, and
 list in `unsupported` each statement its citations do not support. Code has already checked that every number
 matches a fact; you check the meaning around the numbers:
 - comparisons and rankings ("largest", "only", "alone", "first", "more than"): do the cited facts show it?

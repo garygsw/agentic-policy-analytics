@@ -81,8 +81,11 @@ def approve_plan(state: AgentState) -> dict:
     if decision.get("approved"):
         emit("approve_plan", "observation", "Plan approved by the user")
         return {"plan_approved": True}
-    findings["plan_feedback"] = decision.get("feedback") or "rejected without feedback"
-    emit("approve_plan", "observation", f"Plan rejected: {findings['plan_feedback']}")
+    # A rejection asks for another plan, shown again for approval; stopping is the user's Cancel (the API).
+    feedback = (decision.get("feedback") or "").strip()
+    findings["plan_feedback"] = feedback or ("The user rejected this plan without comment: "
+                                             "propose a clearly different approach.")
+    emit("approve_plan", "observation", f"Plan rejected{': ' + feedback if feedback else ''}. Drafting another plan")
     return {"plan_approved": False, "findings": findings}
 
 

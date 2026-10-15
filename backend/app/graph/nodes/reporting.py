@@ -5,6 +5,7 @@ from collections.abc import Callable
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.analysis.charts import plain
+from app.config import get_settings
 from app.graph import prompts
 from app.graph.events import STATUS, emit, guarded
 from app.graph.state import AgentState, Report, ReportTexts, Review
@@ -121,16 +122,21 @@ def make_reviewer(llm) -> Callable:
     def reviewer(state: AgentState) -> dict:
         analytics = (state.get("findings") or {}).get("analytics") or {}
         report: Report = state["report"]
+        claim_check = get_settings().claim_check
         statements = [f"summary: {report.summary}"]
         statements += [f"finding {i}: {c.text} [{', '.join(c.citations)}]" for i, c in enumerate(report.findings, 1)]
         statements += [f"caveat {i}: {c.text} [{', '.join(c.citations)}]" for i, c in enumerate(report.caveats, 1)]
         material = {"facts": facts_of(state),
                     "sources": [{k: v for k, v in s.items() if k != "key"} for s in sources_of(state)]}
         content = (f"Question: {state['question']}\n\nAnalysis performed: {analytics.get('summary', '')}\n\n"
-                   f"Report title: {report.title}\n\nStatements:\n" + "\n".join(statements)
-                   + f"\n\nFacts and sources the writer had:\n{json.dumps(material, ensure_ascii=False)}")
+                   f"Report title: {report.title}\n\nStatements:\n" + "\n".join(statements))
+        if claim_check:  # the statements are checked against what the writer had
+            content += f"\n\nFacts and sources the writer had:\n{json.dumps(material, ensure_ascii=False)}"
+        system = prompts.REVIEW + (prompts.CLAIM_CHECK if claim_check else "")
         # The other provider's model checks, so the writer's model never checks its own work.
-        review = llm("check", schema=Review).invoke([SystemMessage(prompts.REVIEW), HumanMessage(content)])
+        review = llm("check", schema=Review).invoke([SystemMessage(system), HumanMessage(content)])
+        if not claim_check:
+            review = review.model_copy(update={"unsupported": []})
         emit("reviewer", "reasoning", f"{review.verdict}: {review.reason}")
         if review.unsupported:
             emit("reviewer", "observation", f"{len(review.unsupported)} statement(s) not supported by their citations: "
@@ -262,13 +268,9 @@ def fallback_report(state: AgentState) -> dict:
     return {"answer": "\n".join(lines), "report_html": html, "outcome": "fallback"}
 
 
-def cancel(state: AgentState) -> dict:
-    return {"answer": "The analysis was cancelled at your request.", "outcome": "cancelled"}
-
-
 def make_localize(llm) -> Callable:
     def localize(state: AgentState) -> dict:
-        """Translate a plain-text answer (decline, fallback, cancel) unless a number changed on the way.
+        """Translate a plain-text answer (decline, fallback) unless a number changed on the way.
         Reports are translated field by field in localize_report instead."""
         if state["language"] == "en":
             return {}
