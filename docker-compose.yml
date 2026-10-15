@@ -2,15 +2,17 @@
 #   cp .env.example .env    # then add your keys, or: python3 scripts/set_keys.py
 #   docker compose up --build
 # Web UI: http://localhost:3000   API: http://localhost:8000/docs
+# On a server, set PUBLIC_API_URL, API_CORS_ORIGINS and BIND_ADDRESS in .env (README, "Deployment").
+# To run the published images instead of building: docker-compose.release.yml.
 #
-# Runtime state lives in the "state" volume (/app/var): the document index, dataset caches, embedding models,
-# conversations and reports. It is a Docker volume, not a folder shared with the host, because SQLite is not
-# safe across that boundary: a host process opening the same database while a container writes it can corrupt
-# it (D-036). A new volume starts with an empty document index. The ingest service fills it at 03:00 Singapore
-# time; to fill it at once:
+# Runtime state lives in the "state" volume (/app/var): the document index, embedding models, and the
+# application database (conversations, reports and stored datasets). It is a Docker volume, not a folder shared
+# with the host, because SQLite is not safe across that boundary: a host process opening the same database while
+# a container writes it can corrupt it (D-036). A new volume starts with an empty document index. The ingest
+# service fills it at 03:00 Singapore time; to fill it at once:
 #   docker compose run --rm ingest python -m app.rag.scheduler --now
 # To start from a local development var/ instead (stop the stack and every local process using var/ first):
-#   docker compose run --rm --no-deps -v "$PWD/var:/seed:ro" api sh -c "cp -r /seed/rag /seed/models /seed/cache /seed/*.sqlite /app/var/"
+#   docker compose run --rm --no-deps -v "$PWD/var:/seed:ro" api sh -c "cp -r /seed/rag /seed/models /seed/*.sqlite /app/var/"
 name: policy-analytics
 
 x-backend: &backend
@@ -29,7 +31,7 @@ services:
   api:
     <<: *backend
     ports:
-      - "8000:8000"
+      - "${BIND_ADDRESS:-0.0.0.0}:8000:8000"  # 127.0.0.1 behind a reverse proxy
 
   # The scheduled document ingestion (cron, see INGEST_CRON), as its own service.
   ingest:
@@ -43,10 +45,10 @@ services:
     build:
       context: frontend
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}  # where browsers reach the API (built in)
     image: policy-analytics-web
     ports:
-      - "3000:3000"
+      - "${BIND_ADDRESS:-0.0.0.0}:3000:3000"
     depends_on:
       api:
         condition: service_healthy

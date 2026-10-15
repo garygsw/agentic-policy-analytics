@@ -5,16 +5,16 @@ re-run from `backend/` (and `frontend/` for the UI tests). Results are saved in 
 
 | Level | What it checks | Count | Command | Cost |
 |---|---|---|---|---|
-| Unit tests | agents, tools, statistics, data cleaning, guardrails, LLM layer, RAG, report check, downloads | 183 | `uv run pytest tests/unit` | free (fake models) |
-| Integration tests | the whole graph and API: background runs, pauses, streaming, replay, concurrency, downloads | 14 | `uv run pytest tests/integration` | free (scripted models) |
-| Frontend tests | the event reducer behind the live view, formatting | 7 | `npm test` (in `frontend/`) | free |
+| Unit tests | agents, tools, statistics, data cleaning, guardrails, LLM layer, RAG, report check, downloads | 189 | `uv run pytest tests/unit` | free (fake models) |
+| Integration tests | the whole graph and API: background runs, pauses, streaming, replay, concurrency, restarts, downloads | 23 | `uv run pytest tests/integration` | free (scripted models) |
+| Frontend tests | the event reducer behind the live view, the history list | 8 | `npm test` (in `frontend/`) | free |
 | Live provider tests | real calls to both providers, structured output, fallback | 3 | `uv run pytest -m live` | cents |
 | Retrieval evaluation | recall@k and MRR for each search mode | 50 questions | `uv run python -m app.evals.retrieval run` | free |
 | Triage evaluation | accuracy, F1, latency and cost of each classifier | 84 questions | `uv run python scripts/triage_trial.py` | cents |
 | Answer evaluation | outcomes, groundedness, citations, LLM-as-judge, consistency | 12 questions | `uv run python -m app.evals.answers` | about $4 |
 | Load test | latency and throughput under concurrent clients | 20 clients | `uv run python scripts/load_test.py` | free |
 
-`uv run pytest` runs the unit and integration tests together (197), with no network access and no API keys. CI
+`uv run pytest` runs the unit and integration tests together (212), with no network access and no API keys. CI
 runs them on every push (section 7).
 
 ## 1. Test plan
@@ -47,17 +47,17 @@ The language models are the part that cannot be unit-tested, so the design keeps
 
 | Requirement | Where it is tested |
 |---|---|
-| Agents and tools | `test_analysis.py` (23): every analytics tool, summing rules, error hints, the tool loop and its step limit, extraction then analysis with shared source IDs, retries keeping earlier results, `rank_changes` |
-| API endpoints | `test_api.py` (19): health and options, background runs, numbered events, WebSocket replay, reports and their security policy, personal-data rejection, clarification pause and resume (with answer choices), cancelling, invalid input, search and datasets, renaming, pinning, soft-deleting and restoring conversations, searching them, adding new columns to an older database, a run cut off by a restart continuing (or ending after a second cut), Stop on a run whose worker is gone |
-| Multi-agent workflows | `test_graph.py` (27): the full graph with scripted models (coordinator, extraction, analytics, report writer, number check, reviewer, translation) across every route, including a conversation surviving a restart |
+| Agents and tools | `test_analysis.py` (25): every analytics tool, summing rules, error hints, the tool loop and its step limit, extraction then analysis with shared source IDs, retries keeping earlier results, `rank_changes`, line, bar and scatter charts (a scatter chart plots exactly the points its correlation uses) |
+| API endpoints | `test_api.py` (22): health, readiness and options, background runs, numbered events, WebSocket replay, reports and their security policy, personal-data rejection, clarification pause and resume (with answer choices), cancelling, invalid input, search and datasets, renaming, pinning, soft-deleting and restoring conversations, searching them, adding new columns to an older database, a run cut off by a restart continuing (or ending after a second cut), Stop on a run whose worker is gone or still working, a dataset's profile |
+| Multi-agent workflows | `test_graph.py` (28): the full graph with scripted models (coordinator, extraction, analytics, report writer, number check, reviewer, translation) across every route, including a conversation surviving a restart and a translation that changes a number |
 | Hallucination detection | `test_grounding.py` (7) and the report-check tests in `test_graph.py`; measured by the answer evaluation (section 3) |
 | Accuracy and consistency | the answer evaluation: expected outcomes, judge scores, overlap between repeated runs |
-| Data quality validation | `test_data.py` (33): period normalisation, number parsing, placeholders, duplicates, total rows, case-merged labels, personal columns dropped, rail-station names matched across layers, the internal workbook's planted problems, every committed snapshot loading |
+| Data quality validation | `test_data.py` (33): period normalisation, number parsing, placeholders, duplicates, total rows, case-merged labels, personal columns dropped, rail-station names matched across layers, the internal workbook's planted problems, every committed snapshot loading, cleaned tables stored in and read back from the database |
 | Error handling | `test_llm_layer.py`: provider failure and fallback, including structured output. `test_data.py`: retries, then stale cache, then snapshot. `test_graph.py`: model failure leads to the template report; an unanswerable question is declined; a vague one gets a clarifying question |
 | Guardrails | `test_pii.py` (19): NRIC/FIN, emails, phones, unit numbers, bank accounts, cards (Luhn); names and statistics allowed. `test_language.py` (9). `test_triage.py` (8) |
 | Retrieval | `test_rag.py` (24): chunking, crawling rules, incremental re-crawls, each search mode, fusion, filters, per-document cap, web result de-duplication, concurrent searches |
 | Performance and load | `test_load.py`: 20 concurrent runs through the API with no lost events. `scripts/load_test.py`: HTTP load (section 6) |
-| Frontend | `runState.test.ts` (7): replayed events are idempotent, usage adds up across pauses, draft revisions, status across pause and resume, working time excludes waiting, verbosity filtering |
+| Frontend | `runState.test.ts` (7): replayed events are idempotent, usage adds up across pauses, draft revisions, status across pause and resume, working time excludes waiting, verbosity filtering. `threads.test.ts` (1): pinned conversations listed apart |
 
 ## 3. Hallucination detection
 
@@ -115,15 +115,18 @@ judge (section 5); the results so far are mixed.
 
 ## 4. Coverage
 
-Line coverage of the backend is **80%** (`uv run pytest --cov=app`, 3,865 statements):
+Line coverage of the backend is **83%** (`uv run pytest --cov=app`, 4,079 statements). Without the
+command-line programs (the evaluation runners, the terminal client, the ingest scheduler and the admin
+commands), it is **92.5%** (3,580 statements). CI saves the full report with every run: `coverage.xml` and an
+HTML report, under the run's artifacts (section 7).
 
 | Area | Coverage | Note |
 |---|---|---|
-| Statistics, workspace, cleaning, graph routing, guardrails, options, number grounding, LLM layer | 94–100% | the logic that decides answers |
-| Agent tools, reporting nodes, charts, tool loop | 78–88% | |
-| API and run manager | 80–91% | |
-| Data sources, registry, RAG ingest and search | 67–94% | network paths are tested with stubs; live calls are not |
-| CLI | 27% | a terminal front end; the same graph is tested through the API |
+| Statistics, workspace, cleaning, graph routing, guardrails, options, number grounding, LLM layer | 93–100% | the logic that decides answers |
+| Agent tools, reporting nodes, charts, the dataset store and its tables | 91–99% | |
+| API and run manager | 93–94% | |
+| Data sources, curated cleaners, RAG ingest and search | 67–94% | network paths are tested with stubs; live calls are not. The cleaners of some curated datasets run only when snapshots are rebuilt from live data |
+| CLI, admin commands | 34–56% | terminal front ends; the same graph and functions are tested through the API |
 | Ingest scheduler, evaluation runners | 0% | thin wrappers; the scheduler calls the tested ingest, and the runners are exercised by running the evaluations |
 
 ## 5. Evaluations
@@ -339,13 +342,16 @@ Most of the time is model latency. The live view shows elapsed time, tokens and 
 
 `.github/workflows/ci.yml` runs on every push and pull request:
 
-1. **Backend:** `ruff` lint, then all 205 tests with coverage.
+1. **Backend:** `ruff` lint, then all 212 tests with coverage. The coverage report (`coverage.xml` and HTML) is
+   kept with the run for 30 days.
 2. **Frontend:** type check, unit tests and a production build.
-3. **Images:** build both images, start the API and web UI with Docker Compose, then smoke-test:
+3. **Secrets:** gitleaks scans every commit in the history, not just the latest, since a key removed later is
+   still published. (A local pre-commit hook also blocks keys before they are committed.)
+4. **Images:** build both images, start the API and web UI with Docker Compose, then smoke-test:
    - API health
    - all 19 datasets listed
    - the web page served
-4. **Publishing (on a version tag):** push both images to the GitHub Container Registry.
+5. **Publishing (on a version tag):** push both images to the GitHub Container Registry (README, "Deployment").
 
 The evaluations call paid APIs, so they run on demand, not in CI. Their results are committed.
 

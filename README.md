@@ -77,9 +77,9 @@ docker compose up --build
 Open the UI at http://localhost:3000; the API's interactive docs are at http://localhost:8000/docs.
 The API has no login (D-040), so run it on your own machine rather than on a shared network.
 
-Runtime state (document index, caches, models, conversations) lives in a Docker volume, not in a folder shared
-with your machine, because SQLite is not safe across that boundary (D-036). The datasets work at once, from
-committed snapshots or live. Document search needs the index built once. This crawls up to 500 pages per agency,
+Runtime state (document index, models, and the database of conversations and datasets) lives in a Docker
+volume, not in a folder shared with your machine, because SQLite is not safe across that boundary (D-036). The
+datasets work at once, from committed snapshots or live. Document search needs the index built once. This crawls up to 500 pages per agency,
 which takes about 40 minutes; a nightly cron job keeps it fresh:
 
 ```bash
@@ -251,23 +251,101 @@ Demo switches:
 | `FORCE_PRIMARY_FAIL` | `false` | make the primary provider fail |
 | `FORCE_SOURCE_FAIL` | `false` | make live data sources fail |
 
+Deployment (also read by Docker Compose; see the next section):
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `PUBLIC_API_URL` | `http://localhost:8000` | where browsers reach the API; built into the web image |
+| `API_CORS_ORIGINS` | `["http://localhost:3000"]` | the UI's address, if it differs from the API's |
+| `BIND_ADDRESS` | `0.0.0.0` | `127.0.0.1` keeps the ports off the network, behind a reverse proxy |
+
+## Deployment
+
+CI builds and smoke-tests both images on every push. For each version tag (`v1.0.0`, ...), it also publishes them
+to the GitHub Container Registry.
+
+**On one machine, from the published images.** Nothing is built:
+
+```bash
+VERSION=v1.0.0 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+```
+
+The published web image calls the API at `http://localhost:8000`, so the browser must be on the same machine.
+
+**On a server with its own address.** The API's address is built into the web image, so build on the server:
+
+1. Install Docker with Compose and clone the repository. Create `.env` with the keys: `python3 scripts/set_keys.py`,
+   then `python3 scripts/set_keys.py --verify`. Make it readable only by you: `chmod 600 .env`.
+2. Serve the UI and the API from one address, and keep the ports local. Add to `.env`:
+
+   ```
+   PUBLIC_API_URL=https://analytics.example.org
+   BIND_ADDRESS=127.0.0.1
+   ```
+
+3. Start it: `docker compose up -d --build`. Then build the document index once:
+   `docker compose run --rm ingest python -m app.rag.scheduler --now` (about 40 minutes; nightly after that).
+4. Put a reverse proxy with TLS in front. With [Caddy](https://caddyserver.com), certificates are automatic and
+   WebSockets pass through. The app has no login of its own (D-040), so the proxy asks for one:
+
+   ```
+   analytics.example.org {
+       basic_auth {
+           analyst <hash from: caddy hash-password>
+       }
+       handle /api/* {
+           reverse_proxy 127.0.0.1:8000
+       }
+       handle {
+           reverse_proxy 127.0.0.1:3000
+       }
+   }
+   ```
+
+   Because the UI and the API share one address, browsers need no cross-origin settings. With two addresses,
+   set `API_CORS_ORIGINS` to the UI's.
+
+**Running it:**
+- **Health.** `/api/health` says the API is up (Docker uses it). `/api/health/ready` checks the database, the
+  keys, the document index and web search, and answers 503 if the API cannot answer questions.
+- **Logs.** `docker compose logs -f api`; every LLM call is also in the inspector and the database.
+- **Backups.** All state is in the `state` volume. SQLite files must not be copied while in use, so stop the
+  stack first:
+
+  ```bash
+  docker compose stop && docker run --rm -v policy-analytics_state:/state:ro -v "$PWD:/backup" alpine tar czf /backup/state.tgz -C /state . && docker compose start
+  ```
+
+- **Upgrades.** `git pull`, then `docker compose up -d --build` (or a new `VERSION` with the published images).
+  New database columns are added on start-up, and analyses cut off by the restart continue from their last step
+  (D-041).
+- **Rolling back.** Check out the previous tag (or set the previous `VERSION`) and run the same command. Restore
+  the backup if the newer version wrote data the older one should not see.
+- **Keys.** They live only in `.env` on the server, never in images or the repository. To rotate one, edit `.env`
+  and run `docker compose up -d`.
+
+**Limits of this setup:** one machine, SQLite, and runs inside the single API process, so do not run several API
+replicas (D-041). For many users, see "Scaling and production" in ARCHITECTURE.md.
+
 ## Repository layout
 
 ```
 backend/
   app/
-    api/         FastAPI: endpoints, background runs, WebSocket, database
+    api/         FastAPI: endpoints, background runs, WebSocket, the API's database tables
     graph/       LangGraph: state, nodes (intake, coordinator, workers, reporting), prompts, events
     agents/      tool-using agents and their tools
     analysis/    statistics (pandas), charts (Plotly), the workspace of facts and sources
-    data/        sources, curated dataset registry and cleaners, cache and snapshot store
+    data/        sources, curated dataset registry and cleaners, the store and its database tables
     rag/         document crawl, chunking, index, hybrid search, web search, scheduler
     llm/         providers and fallback, usage ledger, pricing, fake models for tests
     guardrails/  personal-data screen, language detection, triage classifier
     quality/     number grounding
-    report/      HTML report template
+    report/      HTML report template, Markdown and PDF downloads
     evals/       retrieval and answer evaluations
+    database.py  the application database (one SQLite file for both sets of tables)
     cli.py       command-line interface
+    admin.py     list and restore deleted conversations
   data/          snapshots, catalogue, mock internal workbook, evaluation sets and results
   tests/         unit/ and integration/ (pytest)
   scripts/       snapshots, mock data, triage trial, load test
@@ -275,7 +353,7 @@ frontend/        Next.js UI (app/, components/, lib/)
 docs/            DECISIONS.md: every design decision
 scripts/         set_keys.py: enter and verify API keys
 ARCHITECTURE.md  TESTING.md  DATA_SOURCES.md
-docker-compose.yml  .github/workflows/ci.yml
+docker-compose.yml  docker-compose.release.yml (published images)  .github/workflows/ci.yml
 ```
 
 ## Data and licences

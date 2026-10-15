@@ -1,4 +1,5 @@
-# Tests and builds on every push and pull request. On a version tag (v1.0.0, ...), the two images are also
+# On every push and pull request: lint and tests (the coverage report is kept with the run), a secret scan of the
+# whole history, and the images built and smoke-tested. On a version tag (v1.0.0, ...), the two images are also
 # published to the GitHub Container Registry.
 name: CI
 
@@ -27,7 +28,24 @@ jobs:
       - name: Lint
         run: uv run ruff check app tests scripts
       - name: Unit and integration tests (fake language models, no network)
-        run: uv run pytest --cov=app --cov-report=term
+        run: uv run pytest --cov=app --cov-report=term --cov-report=xml --cov-report=html
+      - name: Keep the coverage report (coverage.xml and an HTML report, under the run's artifacts)
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: coverage-report
+          path: |
+            backend/coverage.xml
+            backend/htmlcov/
+          retention-days: 30
+
+  secrets:
+    runs-on: ubuntu-24.04  # pinned: ubuntu-latest changes to Ubuntu 26 from 19 Oct 2026
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0  # the whole history: a key removed in a later commit is still published
+      - name: Scan every commit for secrets (gitleaks)
+        run: docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --no-banner
 
   frontend:
     runs-on: ubuntu-24.04  # pinned: ubuntu-latest changes to Ubuntu 26 from 19 Oct 2026
@@ -47,7 +65,7 @@ jobs:
       - run: npm run build
 
   images:
-    needs: [backend, frontend]
+    needs: [backend, frontend, secrets]
     runs-on: ubuntu-24.04  # pinned: ubuntu-latest changes to Ubuntu 26 from 19 Oct 2026
     permissions:
       contents: read

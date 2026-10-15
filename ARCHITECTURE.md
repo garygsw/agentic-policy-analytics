@@ -122,7 +122,7 @@ A run can also pause as `awaiting_input`.
 | | `rank_changes` | Ranks groups by their rise or fall between the same two periods. |
 | | `compute_correlation` | Pearson correlation of two series, of levels and of period-to-period changes. |
 | | `list_records` | Counts records in tables without a time dimension (e.g. planned stations). |
-| | `create_chart` | A line or bar chart (Plotly spec) from the data, with its data table. |
+| | `create_chart` | A line, bar or scatter chart (Plotly spec) from the data, with its data table. A scatter chart plots two measures against each other on the same periods as `compute_correlation`. |
 
 The tools apply each dataset's **summing rules**. A measure can be added up only across the dimensions the
 dataset allows; for any other dimension, the agent must filter to one value. This stops, for example, adding up
@@ -181,7 +181,10 @@ How well this works is measured in [TESTING.md](TESTING.md#hallucination-detecti
 Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
 
 - **Load order** (`data/store.py`): a fresh cache (under 24 hours old), then the live source, then a stale
-  cache, then the committed snapshot. Each loaded dataset carries its provenance: origin, retrieval time, licence,
+  cache, then the committed snapshot. The cache is a set of tables in the application database
+  (`data/database.py`, section 8): each cleaned dataset row by row, with its quality report and provenance, and
+  every raw download, kept for auditing and re-cleaning. Snapshots are files in the repository, so a fresh install
+  works offline. Each loaded dataset carries its provenance: origin, retrieval time, licence,
   and a warning when a fallback was used. `FORCE_SOURCE_FAIL=true` skips live sources, to demonstrate the
   fallback.
 - **Cleaning** (`data/cleaning.py`, `data/registry.py`): every dataset is reshaped into one tidy form,
@@ -262,9 +265,10 @@ is rejected with a message in the user's language, and nothing is stored or sent
 
 ## 8. Database schema
 
-Runtime state lives in `var/` (never committed), as three SQLite databases plus caches.
+Runtime state lives in `var/` (never committed), as three SQLite databases plus model files.
 
-**`var/app.sqlite`** (SQLAlchemy, `api/db.py`): what the API and UI list, replay and audit.
+**`var/app.sqlite`** (SQLAlchemy): the application database. It holds what the API and UI list, replay and audit
+(`api/db.py`), and the datasets the agents analyse (`data/database.py`).
 
 ```mermaid
 erDiagram
@@ -328,8 +332,39 @@ erDiagram
   }
 ```
 
+```mermaid
+erDiagram
+  datasets ||--o{ dataset_rows : holds
+  datasets {
+    string key PK
+    string title
+    json columns
+    int rows
+    json quality
+    json provenance
+    datetime stored_at
+  }
+  dataset_rows {
+    int id PK
+    string dataset_key FK
+    string period
+    json dimensions
+    string measure
+    float value
+    string unit
+  }
+  raw_downloads {
+    string source PK
+    string source_id PK
+    blob data
+    string format
+    datetime retrieved_at
+  }
+```
+
 `run_events` has a unique `(run_id, seq)`. Run status is one of `running`, `awaiting_input`, `completed`,
-`failed` or `cancelled`.
+`failed` or `cancelled`. Each dataset is replaced as a whole when it is fetched again; its rows can be queried
+with SQL (for example `json_extract(dimensions, '$.town')`), though the agents read whole tables into pandas.
 
 **`var/checkpoints.sqlite`**: LangGraph's checkpointer holds each thread's conversation state. That includes the
 messages, the current question, the coordinator's steps, the findings (facts, sources, charts) and the report.
@@ -347,7 +382,6 @@ It is serialised with an allow-list of the app's own types.
 | `meta` | the embedding model and dimension; a mismatch refuses to search |
 
 **Other state in `var/`:**
-- `cache/raw` and `cache/clean`: downloaded and cleaned datasets
 - `models/`: embedding and reranker weights
 - `reports/`: HTML reports from the CLI
 - `evals/`: saved evaluation material

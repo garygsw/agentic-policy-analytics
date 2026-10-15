@@ -496,3 +496,28 @@ Changes from the first round of hands-on testing.
   - **End such runs as failed** (simplest), and the user asks again: all the work done before the restart is lost.
   - **Mark them interrupted, with a Continue button:** nothing spends money without the user, but it needs more UI, and in practice the user wants the answer.
 - **Limits:** this assumes one API process, which runs every run. With several processes or separate workers, each run would need a lease renewed by its worker, so another process continues only runs whose owner has stopped. The usage of the part of a run that was cut off is in the LLM call log but not in the run's totals.
+
+## D-042 · 2026-10-15 · Datasets are stored in the application database
+- **Decision:** the dataset cache moves from files (`var/cache/clean/*.csv.gz` and `var/cache/raw/*`) into three tables of the application database, `var/app.sqlite`:
+  - `datasets`: one row per dataset, with its columns, quality report and provenance.
+  - `dataset_rows`: the cleaned values, one row per observation in the tidy form, with the dimensions as JSON.
+  - `raw_downloads`: each source file as downloaded, for auditing and re-cleaning.
+  The load order is unchanged: fresh cache, live source, stale cache, committed snapshot. Snapshots stay as files in the repository, so a fresh install works offline. The data layer declares its own tables (`data/database.py`); both layers open the database through one helper (`app/database.py`).
+- **Why:** the brief asks for database integration for storing datasets and results. Results were already in the database; datasets were files. Rows in a table can also be inspected and queried with SQL.
+- **Measured:** the largest dataset (44,843 rows) is written in 0.35 s and read back in 0.09 s, identical to the original. A dataset is written only when fetched, at most once a day.
+- **Alternatives:**
+  - **One row per dataset, the table stored as a compressed blob:** simpler and smaller, but not queryable.
+  - **A separate database file for datasets:** no write contention with run events. That contention is small, since datasets are written rarely, and one database tells a simpler story.
+
+## D-043 · 2026-10-15 · Scatter charts for correlations
+- **Decision:** `create_chart` draws a scatter chart of two measures, one point per shared period, labelled with the period when there are 12 or fewer. It aligns the series exactly as `compute_correlation` does (matching periods, or calendar years when only one is yearly), using the same helper, so the chart shows the points the correlation was computed from. The Markdown and PDF downloads draw it too.
+- **Why:** a correlation was previously shown as two lines on two axes, where co-movement is harder to read and easy to over-read.
+
+## D-044 · 2026-10-15 · Deployment configuration, coverage reports and secret scanning in CI
+- **Decision:**
+  - **Configurable addresses.** Docker Compose takes `PUBLIC_API_URL` (where browsers reach the API, built into the web image) and `BIND_ADDRESS` (`127.0.0.1` keeps the ports off the network behind a proxy) from `.env`. The defaults keep the local setup unchanged.
+  - **Published images.** `docker-compose.release.yml` runs the images CI publishes for a version tag, with nothing built.
+  - **Deployment guide.** The README describes a server deployment: one address for the UI and the API behind a reverse proxy with TLS (Caddy), a login at the proxy (the app has none, D-040), health checks, logs, backups of the state volume, upgrades and rollback.
+  - **CI.** The coverage report (`coverage.xml` and HTML) is kept with each run. A new job scans every commit for secrets with gitleaks; the images are built only after it passes.
+- **Verified:** with a test proxy (Caddy) in front of the running stack and a web image built for that address, the conversation list, the report frame, the WebSocket replay and the PDF download all worked through the one address. The whole history (32 commits) scanned clean.
+- **Limit:** the published web image calls the API at `http://localhost:8000`, so it suits one machine; a server builds its own web image with its address. A runtime setting would remove that step, at the cost of serving configuration to the browser at start-up.
