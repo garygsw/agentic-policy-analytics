@@ -213,40 +213,43 @@ tools. The two consistency questions run three times each.
   its metadata, and the cited passages.
 - **Consistency.** The average overlap (Jaccard) of the numbers stated by repeated runs of the same question.
 
-**Results** (15 Oct 2026, with the claim checker; `answers_results.json`):
+**Results** (15 Oct 2026, second run: claim checker on, and the judge sees charts and the analysis summary;
+`answers_results.json`):
 
 | Question | Expected | Outcome | Time | LLM calls | Cost | Numbers grounded | Statements cited | Judge: rel / comp / faith / clarity / caveats |
 |---|---|---|---|---|---|---|---|---|
-| tech-employment | answered | answered | 59 s | 11 | $0.21 | 66/66 | 100% | 5 / 5 / 5 / 5 / 5 |
-| hdb-towns | answered | answered | 100 s | 14 | $0.54 | 50/50 | 100% | 5 / 4 / **1** / 5 / 4 |
-| coe | answered | answered | 88 s | 20 | $0.23 | 42/42 | 100% | 5 / 4 / **1** / 4 / 4 |
-| life-expectancy | answered | answered | 47 s | 11 | $0.14 | 56/56 | 100% | 5 / 4 / 5 / 5 / 5 |
-| retrenchment-gdp | answered | answered | 132 s | 25 | $0.33 | 37/37 | 100% | 5 / 5 / 4 / 5 / 5 |
-| mrt-stations | answered or partial | answered | 51 s | 9 | $0.16 | 24/24 | 100% | 5 / 5 / 5 / 4 / 5 |
-| internal-programmes | answered | answered | 52 s | 11 | $0.16 | 79/79 | 100% | 5 / 5 / 5 / 4 / 4 |
-| chinese (in Chinese) | answered | answered | 55 s | 11 | $0.14 | 57/57 | 100% | 5 / 5 / 5 / 5 / 5 |
-| future-policy | answered | answered | 132 s | 21 | $0.43 | 49/49 | 100% | 4 / 4 / 5 / 4 / 4 |
-| forecast | declined or answered | declined (after a search) | 17 s | 4 | $0.05 | | | |
+| tech-employment | answered | answered | 59 s | 10 | $0.15 | 70/70 | 100% | 5 / 5 / 5 / 5 / 5 |
+| hdb-towns | answered | answered | 129 s | 18 | $0.59 | 53/53 | 100% | 5 / 4 / 5 / 4 / 4 |
+| coe | answered | answered | 113 s | 18 | $0.20 | 43/43 | 100% | 5 / 4 / 5 / 4 / 4 |
+| life-expectancy | answered | answered | 56 s | 11 | $0.13 | 53/53 | 100% | 5 / 4 / 5 / 5 / 4 |
+| retrenchment-gdp | answered | answered | 80 s | 15 | $0.19 | 35/35 | 100% | 5 / 4 / 5 / 4 / 4 |
+| mrt-stations | answered or partial | answered | 114 s | 18 | $0.30 | 15/15 | 100% | 5 / 5 / 5 / 4 / 4 |
+| internal-programmes | answered | answered | 66 s | 14 | $0.20 | 81/81 | 100% | 5 / 5 / 5 / 4 / 4 |
+| chinese (in Chinese) | answered | answered | 92 s | 15 | $0.21 | 64/64 | 100% | 5 / 5 / 5 / 5 / 5 |
+| future-policy | answered | answered | 121 s | 14 | $0.35 | 57/57 | 100% | 4 / 4 / **1** / 3 / 3 |
+| forecast | declined or answered | declined (after a search) | 18 s | 4 | $0.05 | | | |
 | off-topic | off_topic | off_topic | 0 s | 0 | $0.00 | | | |
-| vague | clarification | clarification | 2 s | 1 | $0.00 | | | |
+| vague | clarification | clarification | 1 s | 1 | $0.00 | | | |
 
 "Statements cited" counts findings and caveats.
 
 **Across the configurations** (each a full run of the set):
 
-| | GPT 6.1 Sol, first run | GPT 6.1 Sol, after D-031 | Claude Sonnet 5.5, after D-034 | + claim checker (D-035) |
-|---|---|---|---|---|
-| Outcomes as expected | 11 of 11 | 10 of 11 | **12 of 12** | **12 of 12** |
-| Numbers grounded | 227 of 227 | 257 of 257 | 494 of 494 | 460 of 460 |
-| Drafts rejected by the number check | 1 of 13 | 3 of 16 | 1 of 14 | 0 of 21 |
-| Judge: faithfulness | 3.62 | 4.38 | 4.33 | 4.00 |
-| Judge: relevance / completeness / clarity / caveats | 4.88 / 4.12 / 4.62 / 3.88 | 4.75 / 4.12 / 4.62 / 4.75 | 4.78 / 4.67 / 4.56 / 4.78 | 4.89 / 4.56 / 4.56 / 4.56 |
-| Consistency (tech-employment / hdb-towns) | 0.79 / 0.80 | 0.77 / 0.44 | 0.80 / 0.60 | 0.66 / 0.38 |
-| Median time for an answered question | 104 s | 115 s | **51 s** | 59 s |
-| Cost of a full run | $1.94 | $1.91 | $2.60 (12 questions) | $3.77 (12 questions) |
+| | GPT 6.1 Sol, first run | GPT 6.1 Sol, after D-031 | Claude Sonnet 5.5, after D-034 | + claim checker (D-035) | + judge sees charts and analysis |
+|---|---|---|---|---|---|
+| Outcomes as expected | 11 of 11 | 10 of 11 | **12 of 12** | **12 of 12** | **12 of 12** |
+| Numbers grounded | 227 of 227 | 257 of 257 | 494 of 494 | 460 of 460 | 471 of 471 |
+| Drafts rejected by the number check | 1 of 13 | 3 of 16 | 1 of 14 | 0 of 21 | 0 of 24 |
+| Judge: faithfulness | 3.62 | 4.38 | 4.33 | 4.00 | **4.56** |
+| Judge: relevance / completeness / clarity / caveats | 4.88 / 4.12 / 4.62 / 3.88 | 4.75 / 4.12 / 4.62 / 4.75 | 4.78 / 4.67 / 4.56 / 4.78 | 4.89 / 4.56 / 4.56 / 4.56 | 4.89 / 4.44 / 4.22 / 4.11 |
+| Consistency (tech-employment / hdb-towns) | 0.79 / 0.80 | 0.77 / 0.44 | 0.80 / 0.60 | 0.66 / 0.38 | 0.72 / 0.54 |
+| Median time for an answered question | 104 s | 115 s | **51 s** | 59 s | 92 s |
+| Cost of a full run | $1.94 | $1.91 | $2.60 (12 questions) | $3.77 (12 questions) | $3.58 (12 questions) |
 
-The judge was Claude Sonnet 5.5 for the first two columns and GPT 6.1 Sol for the last two, so the faithfulness
-scores are close but not strictly comparable.
+The judge was Claude Sonnet 5.5 for the first two columns and GPT 6.1 Sol for the last three, so the
+faithfulness scores are close but not strictly comparable. In the last run the dataset cache started empty (it had
+just moved into the database, D-042), so the first runs fetched every dataset live; repeats of the same question
+took 43–65 s.
 
 **What each round changed:**
 - **Prose was not grounded (D-031).** The first run showed every number grounded, but faithfulness was the
@@ -278,13 +281,21 @@ scores are close but not strictly comparable.
 
 - **The claim checker (D-035), measured.** The reviewer, a model from the other provider, now checks each
   statement against what it cites and sends unsupported ones back.
-  - **What it did:** it rewrote statements in about seven drafts (21 drafts, against 14), and the number check
-    then had nothing to reject.
-  - **What it cost:** about 45% more per run, and 8 s more per question.
-  - **What the judge saw:** faithfulness did not rise (4.33 to 4.00, within noise for nine reports). Both of the
-    judge's 1-scores were about claims it could not check: what chart C1 shows, and what the analysis did. The
-    judge was not given the charts or the analysis summary, though the writer and reviewer were. It now is, so
-    the next run will measure the claim checker more fairly.
+  - **What it did:** it rewrote statements in most reports (24 drafts for 9 reports, against 14 without it),
+    and the number check then had nothing to reject.
+  - **What it cost:** about 38–45% more per run ($3.58 against $2.60).
+  - **What the judge saw:** the first run with the checker scored faithfulness 4.00, but both of its 1-scores
+    were about claims the judge could not check (what chart C1 shows, what the analysis did), because the judge
+    was not given the charts or the analysis summary. With them, the second run scored **4.56**, against 4.33
+    without the checker: eight of nine reports scored 5. The difference is small for nine reports, so the
+    evidence is that the checker does not hurt and probably helps.
+- **Source attribution, the error that remains.** The one low score (future-policy, faithfulness 1) was about
+  who said something, not about a number. The report called government web pages "third-party sources",
+  because the writer's prompt described all web results as third-party. The prompt now says a web result is
+  official when its URL is a government site. A re-run of that question no longer mislabelled the pages, but
+  scored 1 again for a related error: its summary said "third-party and official pages" describe the 2030
+  target, when only a third-party page in its material did. The number check cannot see attribution, and the
+  claim checker missed it twice; it is the main error class left.
 
 **What the checks caught in an earlier run (D-034 column):**
 - **The number check.** In the life-expectancy report, the writer computed a gap of "4.44 years" between men and
@@ -357,9 +368,13 @@ The evaluations call paid APIs, so they run on demand, not in CI. Their results 
 
 ## 8. Limits
 
-- **Small sets.** The evaluation sets show behaviour, not population accuracy: 11 questions, 50 retrieval
+- **Small sets.** The evaluation sets show behaviour, not population accuracy: 12 answer questions, 50 retrieval
   questions, 84 triage questions. Differences of a few points are within noise.
 - **Not human-validated.** Labels and generated questions were drafted with AI help. The judge is one model
   run, not calibrated against human ratings.
-- **Variation between runs.** Repeated runs agree on most numbers for a narrow question (0.77) and fewer for an
-  open one (0.44), and an outcome can change between runs (COE was partial once, answered twice).
+- **Variation between runs.** Repeated runs agree on most numbers for a narrow question (0.66–0.80 across the
+  runs) and fewer for an open one (0.38–0.60). Outcomes have been stable in the last three runs (12 of 12 each);
+  in an earlier run, one question was answered only partly once.
+- **Attribution is not checked in code.** Numbers are checked against the facts, and statements against what
+  they cite, but who said something (an official source or a third party) is checked only by the reviewer, which
+  missed it in one report (section 5).

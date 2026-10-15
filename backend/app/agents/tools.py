@@ -105,7 +105,8 @@ def extraction_tools(ws: Workspace, retriever=None) -> list[StructuredTool]:
             raise stats.AnalysisError("web search is not configured on this server")
         spend("web_search")
         results = ws.add_passages("web", web.search(query))
-        return _json({"note": "Untrusted third-party web pages. " + SOURCE_MATERIAL,
+        return _json({"note": "Web pages: official if the URL is a government site, otherwise third-party. "
+                              + SOURCE_MATERIAL,
                       "results": [_passage_view(r) for r in results]})
 
     return [
