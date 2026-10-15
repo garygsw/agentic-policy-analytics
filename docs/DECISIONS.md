@@ -459,3 +459,16 @@ Changes from the first round of hands-on testing.
   - **Keep answering in the chat bar, with the choices in the card:** two places to answer one question.
   - **Soft delete (hide, keep the data):** keeps the audit trail, but the user asked for Delete, and a hidden record of a question the user removed is surprising. The LLM call log of a deleted conversation goes with it.
   - **Pins kept in the browser only:** simpler, but pins would not follow the user to another browser and the API could not order the list.
+
+## D-039 · 2026-10-15 · Deletes are soft deletes; conversations can be searched
+- **Decision:**
+  - **Soft delete.** Deleting a conversation sets `threads.deleted_at` and nothing else. The conversation, its runs, their trace events, the LLM call log and the LangGraph checkpoints are kept. Every API route treats it as unknown (404), including its runs and reports, and the history list and search leave it out. This replaces the permanent delete of D-038.
+  - **Restoring** is a backend task, not a UI feature: `python -m app.admin deleted` lists deleted conversations and `python -m app.admin restore ID` brings one back. In Docker it runs inside the API container (`docker compose exec api …`), so the database is never opened from the host (D-036).
+  - **Search.** The sidebar's search box asks the API (`GET /api/threads?q=…`), which matches the words in a conversation's title or in any question asked in it, ignoring letter case. `%` and `_` are matched literally. The box waits for a 200 ms pause in typing, and a slower, older reply never replaces a newer list.
+  - **Clarifying questions** list "Other" as the last numbered answer, with its own box, so writing your own answer reads as one more choice.
+  - **New** has an icon and a shortcut, ⌘⇧O or Ctrl+Shift+O (as in other chat apps; Ctrl+N and Ctrl+T belong to the browser). The tools menu no longer lists the tools that are always on.
+- **Why:** a deleted conversation should be recoverable, for mistakes and for audit. Searching questions as well as titles finds a conversation by what was asked, even after it has been renamed.
+- **Trade-offs:**
+  - Deleted data is never removed. A real deployment needs a retention rule: purge conversations deleted more than N days ago, and erase at once on a data-protection request. That purge would be a further `app.admin` command; it is not built.
+  - Search uses SQL `LIKE` over at most a few hundred conversations. At scale it would use the existing FTS5 machinery or the vector index instead.
+- **Alternatives:** restore through an API route (it needs an administrator role, which needs authentication first); search only the loaded titles in the browser (instant, but misses questions and anything past the first 100 conversations).

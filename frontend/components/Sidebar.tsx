@@ -14,16 +14,21 @@ interface Actions {
 }
 
 interface Props extends Actions {
-  threads: ThreadSummary[];
+  threads: ThreadSummary[]; // already filtered by the search
+  search: string;
+  onSearch: (text: string) => void;
   activeId: string | null;
   open: boolean; // on narrow screens the list slides in
   onNew: () => void;
   onHide: () => void; // collapse the sidebar (wide screens)
 }
 
-/** Conversation history: pinned conversations, then recent ones. Each has a menu to pin, rename or delete it. */
-export function Sidebar({ threads, activeId, open, onNew, onHide, ...actions }: Props) {
+/** Conversation history: a search box, pinned conversations, then recent ones. Each has a menu to pin, rename or
+ * delete it. */
+export function Sidebar({ threads, search, onSearch, activeId, open, onNew, onHide, ...actions }: Props) {
   const { pinned, recent } = sidebarSections(threads);
+  const searching = search.trim() !== "";
+  const shortcut = useNewShortcutLabel();
   const item = (t: ThreadSummary) => <ThreadItem key={t.id} thread={t} active={t.id === activeId} {...actions} />;
   return (
     <nav className={`sidebar${open ? " open" : ""}`} aria-label="Conversations">
@@ -33,18 +38,55 @@ export function Sidebar({ threads, activeId, open, onNew, onHide, ...actions }: 
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor" strokeWidth="1.3" /><line x1="6" y1="2.5" x2="6" y2="13.5" stroke="currentColor" strokeWidth="1.3" /></svg>
         </button>
       </div>
-      <button className="new" onClick={onNew}>+ New</button>
-      {pinned.length > 0 && (
+      <button className="new" onClick={onNew} title="New conversation">
+        <svg className="new-icon" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="currentColor" /><path d="M10 6v8M6 10h8" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" /></svg>
+        <span className="new-label">New</span>
+        <kbd>{shortcut}</kbd>
+      </button>
+      <label className="search">
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+        <input type="search" aria-label="Search conversations" placeholder="Search" value={search}
+          onChange={(e) => onSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && search) {
+              e.preventDefault(); // clears the search; it should not also stop a running analysis
+              onSearch("");
+            }
+          }} />
+      </label>
+      {searching ? (
         <>
-          <div className="section-label">Pinned</div>
-          <ul>{pinned.map(item)}</ul>
+          <div className="section-label">Results</div>
+          {pinned.length + recent.length === 0 && <p className="muted small">No conversation matches “{search.trim()}”.</p>}
+          <ul>{[...pinned, ...recent].map(item)}</ul>
+        </>
+      ) : (
+        <>
+          {pinned.length > 0 && (
+            <>
+              <div className="section-label">Pinned</div>
+              <ul>{pinned.map(item)}</ul>
+            </>
+          )}
+          <div className="section-label">Recent</div>
+          {recent.length === 0 && (
+            <p className="muted small">{pinned.length ? "Nothing else yet." : "No conversations yet."}</p>
+          )}
+          <ul>{recent.map(item)}</ul>
         </>
       )}
-      <div className="section-label">Recent</div>
-      {recent.length === 0 && <p className="muted small">{pinned.length ? "Nothing else yet." : "No conversations yet."}</p>}
-      <ul>{recent.map(item)}</ul>
     </nav>
   );
+}
+
+/** The New shortcut as this computer writes it: ⌘⇧O on a Mac, Ctrl+Shift+O elsewhere (the page handles both).
+ * Worked out after the first render, so the server's HTML and the browser's first render agree. */
+function useNewShortcutLabel(): string {
+  const [label, setLabel] = useState("Ctrl+Shift+O");
+  useEffect(() => {
+    if (/Mac|iPhone|iPad/.test(navigator.userAgent)) setLabel("⌘⇧O");
+  }, []);
+  return label;
 }
 
 const MENU_WIDTH = 190;
@@ -109,7 +151,7 @@ function ThreadItem({ thread, active, onOpen, onRename, onPin, onDelete }: Actio
   if (mode === "delete") {
     return (
       <li className="confirm" role="alertdialog" aria-label="Delete conversation">
-        <p>Delete “{title}”? This cannot be undone.</p>
+        <p>Delete “{title}”? It will be removed from your history.</p>
         <div className="row">
           <button className="danger" onClick={() => { setMode("view"); onDelete(thread.id); }}>Delete</button>
           <button autoFocus onClick={() => setMode("view")}>Cancel</button>

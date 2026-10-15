@@ -69,13 +69,18 @@ export default function Home() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "o") { // New, as in other chat apps
+        e.preventDefault();
+        conversation.newThread();
+        return;
+      }
       if (e.key !== "Escape" || e.defaultPrevented) return; // an Escape that closed a menu does nothing else
       if (inspecting) setInspecting(null);
       else if (running) void cancel(running.id);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [inspecting, running, cancel]);
+  }, [inspecting, running, cancel, conversation.newThread]);
 
   const submit = (value: string) => conversation.ask(value, options, mode === "plan");
 
@@ -90,6 +95,8 @@ export default function Home() {
     <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
       <Sidebar
         threads={conversation.threads}
+        search={conversation.search}
+        onSearch={conversation.setSearch}
         activeId={conversation.threadId}
         open={sidebarOpen}
         onOpen={(id) => { setSidebarOpen(false); void conversation.openThread(id); }}

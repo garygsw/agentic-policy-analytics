@@ -14,9 +14,9 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import func, or_, select, text
 
-from app.api.db import LLMCallRecord, Run, RunEvent, Thread, make_session_factory, utcnow
+from app.api.db import LLMCallRecord, Run, Thread, make_session_factory, utcnow
 from app.api.runs import RunManager, as_dict, event_rows, iso, new_id
 from app.api.titles import MAX_CHARS, short_question, write_title
 from app.config import REPO_ROOT, get_settings
@@ -77,8 +77,9 @@ def warm_up() -> None:
 def retitle_old_threads(sessions, llm) -> None:
     """Conversations from before titles were written carry their whole first question: give them a short title."""
     with sessions() as session:
-        old = session.scalars(select(Thread).where(func.length(Thread.title) > MAX_CHARS + 1,
-                                                   Thread.renamed.is_not(True)).limit(100)).all()
+        long_titles = select(Thread).where(func.length(Thread.title) > MAX_CHARS + 1, Thread.renamed.is_not(True),
+                                           Thread.deleted_at.is_(None))
+        old = session.scalars(long_titles.limit(100)).all()
         for thread in old:
             thread.title = write_title(thread.title, llm)
         session.commit()
@@ -113,9 +114,19 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
                 thread.title = title
                 session.commit()
 
+    def get_thread_row(session, thread_id: str) -> Thread:
+        """A conversation, unless it is unknown or deleted (deleted ones are kept but hidden: see app/admin.py)."""
+        thread = session.get(Thread, thread_id)
+        if thread is None or thread.deleted_at is not None:
+            raise HTTPException(404, "unknown conversation")
+        return thread
+
     def get_run(session, run_id: str) -> Run:
         run = session.get(Run, run_id)
         if run is None:
+            raise HTTPException(404, "unknown run")
+        thread = session.get(Thread, run.thread_id)
+        if thread is not None and thread.deleted_at is not None:  # runs of a deleted conversation are hidden too
             raise HTTPException(404, "unknown run")
         return run
 
@@ -159,10 +170,14 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
             return {"id": thread.id}
 
     @app.get("/api/threads")
-    def list_threads():
+    def list_threads(q: str = ""):
+        """Conversations, pinned first, then the most recently used. `q` finds a word in titles or questions."""
+        query = select(Thread).where(Thread.deleted_at.is_(None))
+        if q.strip():
+            asked = select(Run.thread_id).where(Run.question.icontains(q.strip(), autoescape=True))
+            query = query.where(or_(Thread.title.icontains(q.strip(), autoescape=True), Thread.id.in_(asked)))
         with db() as session:
-            threads = session.scalars(select(Thread).order_by(Thread.pinned.desc(), Thread.updated_at.desc())
-                                      .limit(100)).all()
+            threads = session.scalars(query.order_by(Thread.pinned.desc(), Thread.updated_at.desc()).limit(100)).all()
             result = []
             for thread in threads:
                 last = session.scalars(select(Run).where(Run.thread_id == thread.id)
@@ -176,9 +191,7 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
     @app.get("/api/threads/{thread_id}")
     def get_thread(thread_id: str):
         with db() as session:
-            thread = session.get(Thread, thread_id)
-            if thread is None:
-                raise HTTPException(404, "unknown conversation")
+            thread = get_thread_row(session, thread_id)
             runs = session.scalars(select(Run).where(Run.thread_id == thread_id).order_by(Run.started_at)).all()
         state = app.state.graph.get_state({"configurable": {"thread_id": thread_id}})
         messages = [{"role": "user" if m.type == "human" else "assistant", "content": m.content}
@@ -196,9 +209,7 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
             raise HTTPException(422, "a title cannot be empty")
         reject_personal_data(title)
         with db() as session:
-            thread = session.get(Thread, thread_id)
-            if thread is None:
-                raise HTTPException(404, "unknown conversation")
+            thread = get_thread_row(session, thread_id)
             if title:
                 thread.title, thread.renamed = title, True
             if body.pinned is not None:
@@ -208,29 +219,21 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
 
     @app.delete("/api/threads/{thread_id}")
     def delete_thread(thread_id: str):
-        """Delete a conversation for good: its runs, their events and LLM call log, and its checkpoints."""
+        """Delete a conversation: a soft delete. It disappears from the API and the UI, but its runs, trace, LLM
+        call log and checkpoints are kept, and `python -m app.admin restore ID` brings it back."""
         with db() as session:
-            thread = session.get(Thread, thread_id)
-            if thread is None:
-                raise HTTPException(404, "unknown conversation")
+            thread = get_thread_row(session, thread_id)
             if session.scalars(select(Run).where(Run.thread_id == thread_id, Run.status == "running")).first():
                 raise HTTPException(409, {"code": "busy", "message": "Stop the running analysis first."})
-            runs = select(Run.id).where(Run.thread_id == thread_id)
-            session.execute(delete(LLMCallRecord).where(LLMCallRecord.run_id.in_(runs)))
-            session.execute(delete(RunEvent).where(RunEvent.run_id.in_(runs)))
-            session.execute(delete(Run).where(Run.thread_id == thread_id))
-            session.delete(thread)
+            thread.deleted_at = utcnow()
             session.commit()
-        app.state.graph.checkpointer.delete_thread(thread_id)
         return {"id": thread_id, "deleted": True}
 
     @app.post("/api/threads/{thread_id}/messages", status_code=202)
     async def post_message(thread_id: str, body: MessageIn):
         reject_personal_data(body.text)
         with db() as session:
-            thread = session.get(Thread, thread_id)
-            if thread is None:
-                raise HTTPException(404, "unknown conversation")
+            thread = get_thread_row(session, thread_id)
             busy = session.scalars(select(Run).where(Run.thread_id == thread_id,
                                                      Run.status.in_(["running", "awaiting_input"]))).first()
             if busy:

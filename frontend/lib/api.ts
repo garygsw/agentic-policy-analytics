@@ -42,7 +42,8 @@ const post = (body?: unknown): RequestInit => ({ method: "POST", body: body === 
 
 export const api = {
   options: () => request<OptionsResponse>("/api/options"),
-  threads: () => request<ThreadSummary[]>("/api/threads"),
+  threads: (search = "") =>
+    request<ThreadSummary[]>(`/api/threads${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ""}`),
   thread: (id: string) => request<ThreadDetail>(`/api/threads/${id}`),
   createThread: () => request<{ id: string }>("/api/threads", post()),
   updateThread: (id: string, change: { title?: string; pinned?: boolean }) =>

@@ -26,7 +26,8 @@ export function ToolsMenu({ catalog, value, onChange }: Props) {
     <div className="menu-anchor" ref={ref}>
       <button type="button" className="plus" aria-label="Tools" aria-haspopup="menu"
         aria-expanded={open} onClick={() => setOpen(!open)}>
-        +{switchedOff > 0 && <span className="off-count">{switchedOff} off</span>}
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+        {switchedOff > 0 && <span className="off-count">{switchedOff} off</span>}
       </button>
       {open && (
         <div className="popover align-left" role="menu">
@@ -41,9 +42,6 @@ export function ToolsMenu({ catalog, value, onChange }: Props) {
                 label={TOOL_NAMES[t.name] ?? t.name} />
             </div>
           ))}
-          <p className="menu-note">
-            Always on: {catalog.tools.filter((t) => t.required).map((t) => TOOL_NAMES[t.name] ?? t.name).join(", ")}.
-          </p>
         </div>
       )}
     </div>

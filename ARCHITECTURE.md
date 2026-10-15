@@ -80,7 +80,7 @@ flowchart TD
 | `detect_language` | Detects English, Chinese, Malay or Tamil (lingua). Short follow-ups keep the previous language. |
 | `understand` | Rewrites a follow-up as a self-contained English question (fast LLM). A first message in English is used as is. |
 | `triage` | Classifies the question as in scope, vague or off topic. The default is a local classifier (embeddings + logistic regression, 3 ms) that sends uncertain cases (confidence < 0.6) to the fast LLM. Jev or the LLM can be chosen per request. |
-| `clarify` / `ask_user` | Writes one clarifying question with two to four answers to pick from, then pauses the run (LangGraph `interrupt`) until the user picks one or writes their own. At most 2 per question. |
+| `clarify` / `ask_user` | Writes one clarifying question with two to four answers to pick from, then pauses the run (LangGraph `interrupt`) until the user picks one or writes their own ("Other"). At most 2 per question. |
 | `redirect` | Explains the scope in the user's language. No LLM call. |
 | `coordinator` | A ReAct agent: each step returns a `thought`, an `action` (extract, analyse, clarify, decline, report) and `instructions`. At most 6 steps. It sees the curated dataset list, the agents' summaries, and what the state records as loaded and computed. A decline before any search is turned into a search of documents and the web, so an announced policy is found rather than declined. |
 | `approve_plan` | Optional (Plan mode; Auto is the default): pauses before any data is fetched. The user approves, or rejects with or without feedback, which sends the coordinator back to plan again and pause again. Cancel stops the run through the API. |
@@ -224,8 +224,8 @@ Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
 |---|---|---|
 | GET | `/api/health`, `/api/health/ready` | liveness; readiness (database, keys, index, web search) |
 | GET | `/api/options` | models, tools, efforts, triage methods, verbosity levels, defaults |
-| POST, GET | `/api/threads` | start a conversation; list conversations (pinned first) |
-| PATCH, DELETE | `/api/threads/{id}` | rename or pin a conversation; delete it with its runs, trace, LLM call log and checkpoints (409 while a run is working) |
+| POST, GET | `/api/threads`, `/api/threads?q=…` | start a conversation; list conversations (pinned first), or those with the words in their title or a question |
+| PATCH, DELETE | `/api/threads/{id}` | rename or pin a conversation; delete it (a soft delete: hidden from every route, kept for `python -m app.admin restore`; 409 while a run is working) |
 | GET | `/api/threads/{id}` | a conversation's messages and runs |
 | POST | `/api/threads/{id}/messages` | ask a question: **202** with a run ID; 400 if it contains personal data; 409 if a run is active |
 | POST | `/api/runs/{id}/resume` | answer a clarifying question, or approve or revise a plan |
@@ -269,6 +269,9 @@ erDiagram
     string id PK
     string title
     string language
+    bool pinned
+    bool renamed
+    datetime deleted_at
     datetime created_at
     datetime updated_at
   }
@@ -361,7 +364,8 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
   - The model menu, with an Effort submenu, sits beside the send button.
   - The + menu has a switch per tool.
   - The mode is Auto, or Plan (pause for plan approval).
-  - The sidebar can be hidden. Each conversation's ⋮ menu pins, renames or deletes it (keys P, R, D).
+  - The sidebar can be hidden. It has a search box (titles and questions, searched by the API), and each
+    conversation's ⋮ menu pins, renames or deletes it (keys P, R, D). ⌘⇧O or Ctrl+Shift+O starts a new one.
 
   These choices and the Detail level are remembered in the browser. Triage is a server setting.
 - **Citations.** The report's frame never scrolls, so a citation click inside it asks the page to scroll the

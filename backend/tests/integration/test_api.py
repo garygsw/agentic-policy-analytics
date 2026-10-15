@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy import func, select
 
+from app.admin import deleted_threads, restore
 from app.api.db import LLMCallRecord, Run, RunEvent, make_session_factory
 from app.api.main import create_app, retitle_old_threads
 from app.api.runs import draft_view
@@ -237,13 +238,36 @@ def test_conversations_can_be_renamed_pinned_and_deleted(answered):
     assert client.patch("/api/threads/nope", json={"pinned": True}).status_code == 404
 
     assert client.delete(f"/api/threads/{thread}").json() == {"id": thread, "deleted": True}
+    assert [t[0] for t in listed()] == [other]  # gone from the history list, search and every route
+    assert client.get("/api/threads", params={"q": "employment"}).json() == []
     assert client.get(f"/api/threads/{thread}").status_code == 404
     assert client.get(f"/api/runs/{run_id}").status_code == 404
-    with client.app.state.sessions() as session:  # its trace and LLM call log went with it
+    assert client.post(f"/api/threads/{thread}/messages", json={"text": QUESTION}).status_code == 404
+    assert client.delete(f"/api/threads/{thread}").status_code == 404
+
+    # A soft delete: the trace, LLM call log and checkpoints are kept, and the backend can restore it.
+    sessions = client.app.state.sessions
+    with sessions() as session:
         for table in (RunEvent, LLMCallRecord):
-            assert session.scalar(select(func.count()).select_from(table).where(table.run_id == run_id)) == 0
-    assert client.app.state.graph.get_state({"configurable": {"thread_id": thread}}).values == {}
-    assert [t[0] for t in listed()] == [other]
+            assert session.scalar(select(func.count()).select_from(table).where(table.run_id == run_id)) > 0
+    assert client.app.state.graph.get_state({"configurable": {"thread_id": thread}}).values["messages"]
+    assert [(t["id"], t["title"], t["runs"]) for t in deleted_threads(sessions)] == [(thread, name, 1)]
+    assert restore(sessions, thread) and not restore(sessions, thread) and not restore(sessions, "nope")
+    assert listed()[0] == (thread, name, True) and deleted_threads(sessions) == []
+    assert client.get(f"/api/runs/{run_id}").json()["outcome"] == "answered"
+
+
+def test_conversations_are_found_by_title_or_question(answered):
+    client, thread, _, _ = answered
+    client.patch(f"/api/threads/{thread}", json={"title": "Tech jobs"})
+    client.post("/api/threads")  # an empty conversation matches nothing
+
+    def found(q):
+        return [t["id"] for t in client.get("/api/threads", params={"q": q}).json()]
+    assert found("tech jobs") == [thread]  # the title, in any letter case
+    assert found("SECTOR FROM 2020") == [thread]  # words of the question asked
+    assert found("housing") == [] and found("%") == []  # % is a character to find, not a wildcard
+    assert len(found("  ")) == 2  # a blank search lists everything
 
 
 def test_a_conversation_with_a_running_analysis_is_not_deleted(tmp_path):

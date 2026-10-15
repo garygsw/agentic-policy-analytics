@@ -48,7 +48,7 @@ The language models are the part that cannot be unit-tested, so the design keeps
 | Requirement | Where it is tested |
 |---|---|
 | Agents and tools | `test_analysis.py` (23): every analytics tool, summing rules, error hints, the tool loop and its step limit, extraction then analysis with shared source IDs, retries keeping earlier results, `rank_changes` |
-| API endpoints | `test_api.py` (15): health and options, background runs, numbered events, WebSocket replay, reports and their security policy, personal-data rejection, clarification pause and resume (with answer choices), cancelling, invalid input, search and datasets, renaming, pinning and deleting conversations, adding new columns to an older database |
+| API endpoints | `test_api.py` (16): health and options, background runs, numbered events, WebSocket replay, reports and their security policy, personal-data rejection, clarification pause and resume (with answer choices), cancelling, invalid input, search and datasets, renaming, pinning, soft-deleting and restoring conversations, searching them, adding new columns to an older database |
 | Multi-agent workflows | `test_graph.py` (27): the full graph with scripted models (coordinator, extraction, analytics, report writer, number check, reviewer, translation) across every route, including a conversation surviving a restart |
 | Hallucination detection | `test_grounding.py` (7) and the report-check tests in `test_graph.py`; measured by the answer evaluation (section 3) |
 | Accuracy and consistency | the answer evaluation: expected outcomes, judge scores, overlap between repeated runs |
@@ -339,7 +339,7 @@ Most of the time is model latency. The live view shows elapsed time, tokens and 
 
 `.github/workflows/ci.yml` runs on every push and pull request:
 
-1. **Backend:** `ruff` lint, then all 201 tests with coverage.
+1. **Backend:** `ruff` lint, then all 202 tests with coverage.
 2. **Frontend:** type check, unit tests and a production build.
 3. **Images:** build both images, start the API and web UI with Docker Compose, then smoke-test:
    - API health

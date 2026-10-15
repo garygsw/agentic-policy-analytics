@@ -111,7 +111,7 @@ function Answer({ runId, detail, outcome, check, flags }: {
   );
 }
 
-/** A clarifying question: pick one of the offered answers or write your own. */
+/** A clarifying question: pick one of the offered answers, or "Other" to write your own. */
 function ClarifyingQuestion({ question, choices, onAnswer, onCancel }: {
   question: string; choices: string[]; onAnswer: (answer: string) => Promise<boolean>; onCancel: () => void;
 }) {
@@ -128,23 +128,24 @@ function ClarifyingQuestion({ question, choices, onAnswer, onCancel }: {
   return (
     <div className="clarify">
       <p className="clarify-question">{question}</p>
-      {choices.length > 0 && (
-        <div className="choices">
-          {choices.map((choice, i) => (
-            <button key={choice} type="button" className="choice" disabled={sending} onClick={() => void send(choice)}>
-              <span className="choice-number">{i + 1}</span>
-              <span>{choice}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      <form className="row own-answer" onSubmit={(e) => { e.preventDefault(); void send(text); }}>
-        <input aria-label="Your answer" value={text} disabled={sending} autoFocus
-          placeholder={choices.length ? "Or write your own answer…" : "Your answer…"}
-          onChange={(e) => setText(e.target.value)} />
-        <button type="submit" className="primary" disabled={sending || !text.trim()}>Send</button>
-        <button type="button" className="quiet" onClick={onCancel}>Cancel</button>
-      </form>
+      <div className="choices" role="group" aria-label="Answers">
+        {choices.map((choice, i) => (
+          <button key={choice} type="button" className="choice" disabled={sending} onClick={() => void send(choice)}>
+            <span className="choice-number">{i + 1}</span>
+            <span>{choice}</span>
+          </button>
+        ))}
+        <form className="choice other" onSubmit={(e) => { e.preventDefault(); void send(text); }}>
+          <span className="choice-number">{choices.length + 1}</span>
+          <input aria-label="Other answer" value={text} disabled={sending} autoFocus={choices.length === 0}
+            placeholder={choices.length ? "Other: write your own answer" : "Write your answer"}
+            onChange={(e) => setText(e.target.value)} />
+          <button type="submit" className="primary" disabled={sending || !text.trim()}>Send</button>
+        </form>
+      </div>
+      <div className="clarify-foot">
+        <button type="button" className="link quiet-link" onClick={onCancel}>Cancel</button>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "./api";
 import { applyEvent, applyEvents, emptyRun, runStatus, type RunView } from "./runState";
@@ -33,10 +33,21 @@ export function useConversation() {
   const [runs, setRuns] = useState<RunEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const [search, setSearch] = useState(""); // the sidebar's search: words in titles or questions
+  const searchRef = useRef(search);
+  const latestList = useRef(0);
+
   const refreshThreads = useCallback(() => {
-    api.threads().then(setThreads).catch((e) => setError(messageOf(e)));
+    const ticket = ++latestList.current; // a slower, older reply must not replace a newer list
+    api.threads(searchRef.current)
+      .then((list) => { if (ticket === latestList.current) setThreads(list); })
+      .catch((e) => setError(messageOf(e)));
   }, []);
-  useEffect(refreshThreads, [refreshThreads]);
+  useEffect(() => {
+    searchRef.current = search;
+    const timer = setTimeout(refreshThreads, search ? 200 : 0); // wait for a pause in typing
+    return () => clearTimeout(timer);
+  }, [search, refreshThreads]);
 
   const update = useCallback((id: string, change: (run: RunEntry) => RunEntry) => {
     setRuns((previous) => previous.map((run) => (run.id === id ? change(run) : run)));
@@ -91,7 +102,7 @@ export function useConversation() {
     refreshThreads();
   }, [refreshThreads]);
 
-  /** Delete a conversation for good; if it is open, the page starts a new one. */
+  /** Delete a conversation (the backend keeps it and can restore it); if it is open, the page starts a new one. */
   const deleteThread = useCallback(async (id: string) => {
     setError(null);
     try {
@@ -164,7 +175,7 @@ export function useConversation() {
   }, [update, loadDetail, refreshThreads]);
 
   return {
-    threads, threadId, runs, error, setError, openThread, newThread, updateThread, deleteThread, ask, answer,
-    decidePlan, cancel, onEvent,
+    threads, threadId, runs, error, setError, search, setSearch, openThread, newThread, updateThread, deleteThread,
+    ask, answer, decidePlan, cancel, onEvent,
   };
 }
