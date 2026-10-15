@@ -193,6 +193,19 @@ def test_each_search_mode_finds_the_relevant_passage(corpus, mode):
     assert hits[0].url == "u1" and hits[0].ranks["rerank"] > 0
 
 
+def test_many_threads_can_search_one_index_at_once(corpus):
+    # The API's worker threads share one index connection; unguarded, concurrent use fails or mixes up rows.
+    from concurrent.futures import ThreadPoolExecutor
+
+    def urls(query):
+        return [p.url for p in search(query, index=corpus, embedder=HashEmbedder(), mode="hybrid", k=3)]
+    queries = ["employment grew", "car premiums", "nurse numbers"] * 100
+    expected = {q: urls(q) for q in set(queries)}
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        results = list(pool.map(urls, queries))
+    assert results == [expected[q] for q in queries]
+
+
 def test_one_document_cannot_fill_every_result(tmp_path):
     index = make_index(tmp_path)
     long_text = "\n".join("Tech employment paragraph " + "jobs growth " * 120 for _ in range(6))

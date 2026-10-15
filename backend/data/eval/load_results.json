@@ -1,0 +1,52 @@
+{
+ "date": "2026-10-15",
+ "clients": 20,
+ "seconds": 30.1,
+ "requests": 8803,
+ "errors": 0,
+ "throughput_rps": 292.3,
+ "endpoints": {
+  "health": {
+   "requests": 1460,
+   "errors": 0,
+   "p50_ms": 1.6,
+   "p95_ms": 22.5,
+   "max_ms": 765.5
+  },
+  "options": {
+   "requests": 1464,
+   "errors": 0,
+   "p50_ms": 1.5,
+   "p95_ms": 28.6,
+   "max_ms": 256.7
+  },
+  "datasets": {
+   "requests": 1467,
+   "errors": 0,
+   "p50_ms": 3.5,
+   "p95_ms": 33.4,
+   "max_ms": 566.5
+  },
+  "conversations": {
+   "requests": 1470,
+   "errors": 0,
+   "p50_ms": 6.3,
+   "p95_ms": 35.5,
+   "max_ms": 384.8
+  },
+  "search (keyword)": {
+   "requests": 1473,
+   "errors": 0,
+   "p50_ms": 143.8,
+   "p95_ms": 230.5,
+   "max_ms": 478.2
+  },
+  "search (hybrid)": {
+   "requests": 1469,
+   "errors": 0,
+   "p50_ms": 225.0,
+   "p95_ms": 347.3,
+   "max_ms": 573.7
+  }
+ }
+}

@@ -33,8 +33,8 @@ class Script:
         return chat(tier, schema=schema, models=(model, model))
 
 
-def client_for(replies: dict, tmp_path) -> TestClient:
-    llm = Script(replies)
+def client_for(replies: dict, tmp_path, llm=None) -> TestClient:
+    llm = llm or Script(replies)
     graph = build_graph(Deps(llm=llm, workers=FakeWorkers(), decide=llm_decider(llm)),
                         checkpointer=InMemorySaver(serde=serializer()))
     index = make_index(tmp_path)

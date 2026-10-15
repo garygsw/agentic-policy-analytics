@@ -1,8 +1,10 @@
 """The document index: one SQLite file with documents, passages, a BM25 keyword index (FTS5) and a vector index
 (sqlite-vec). Built by the ingest service, read by search. WAL mode lets both run at the same time.
 """
+import functools
 import re
 import sqlite3
+import threading
 from pathlib import Path
 
 import sqlite_vec
@@ -40,9 +42,20 @@ def fts_query(text: str) -> str:
     return " OR ".join(f'"{w}"' for w in dict.fromkeys(words))
 
 
+def locked(method):
+    """One thread at a time: the API's worker threads share this index's single SQLite connection, and a
+    connection used by two threads at once fails ("bad parameter or other API misuse") or mixes up results."""
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self.lock:
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
 class DocumentIndex:
     def __init__(self, path: Path = INDEX_PATH, model: str = "", dim: int = 0):
         path.parent.mkdir(parents=True, exist_ok=True)
+        self.lock = threading.RLock()  # re-entrant: a locked method may call another
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.enable_load_extension(True)
@@ -62,9 +75,11 @@ class DocumentIndex:
             self.db.execute(f"create virtual table if not exists chunks_vec using vec0(embedding float[{self.dim}])")
 
     # -- writing ------------------------------------------------------------------------------------------------
+    @locked
     def document(self, url: str) -> sqlite3.Row | None:
         return self.db.execute("select * from documents where url = ?", (url,)).fetchone()
 
+    @locked
     def upsert(self, doc: dict, chunks: list[Chunk], vectors: list[list[float]]) -> int:
         """Insert or replace a document and all its passages, in one transaction."""
         with self.db:
@@ -92,6 +107,7 @@ class DocumentIndex:
                                 (chunk_id, sqlite_vec.serialize_float32(vector)))
         return doc_id
 
+    @locked
     def touch(self, url: str, lastmod: str) -> None:
         with self.db:
             self.db.execute("update documents set lastmod = ? where url = ?", (lastmod, url))
@@ -103,6 +119,7 @@ class DocumentIndex:
             self.db.execute("delete from chunks_vec where rowid = ?", (chunk_id,))
         self.db.execute("delete from chunks where document_id = ?", (doc_id,))
 
+    @locked
     def record_run(self, run: dict) -> None:
         with self.db:
             self.db.execute("insert into ingest_runs(source, started, finished, seen, new, updated, unchanged, "
@@ -121,6 +138,7 @@ class DocumentIndex:
             params.append(since)
         return sql, params
 
+    @locked
     def keyword(self, query: str, limit: int, source: str | None = None, since: str | None = None,
                 datasets: bool = False) -> list[int]:
         """Chunk IDs by BM25 relevance (FTS5's bm25(): lower is better)."""
@@ -134,6 +152,7 @@ class DocumentIndex:
                                [match, *params, limit])
         return [r[0] for r in rows]
 
+    @locked
     def nearest(self, vector: list[float], limit: int, source: str | None = None, since: str | None = None,
                 datasets: bool = False) -> list[int]:
         """Chunk IDs by vector distance. Filters apply after the nearest-neighbour search, so it over-fetches."""
@@ -148,6 +167,7 @@ class DocumentIndex:
                                                   where c.id in ({marks}) {where}""", [*ids, *params])}
         return [i for i in ids if i in keep][:limit]
 
+    @locked
     def passages(self, chunk_ids: list[int]) -> dict[int, sqlite3.Row]:
         if not chunk_ids:
             return {}
@@ -157,6 +177,7 @@ class DocumentIndex:
                                    where c.id in ({marks})""", chunk_ids)
         return {r["id"]: r for r in rows}
 
+    @locked
     def stats(self) -> dict:
         by_source = dict(self.db.execute("select source, count(*) from documents group by source").fetchall())
         chunks = self.db.execute("select count(*) from chunks").fetchone()[0]
