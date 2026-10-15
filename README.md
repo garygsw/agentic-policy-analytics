@@ -249,6 +249,7 @@ docker-compose.yml  .github/workflows/ci.yml
 
 ## Data and licences
 
-Contains information from data.gov.sg, made available under the
+The code is released under the [MIT Licence](LICENSE). The data is not covered by it: it contains information
+from data.gov.sg, made available under the
 [Singapore Open Data Licence v1.0](https://data.gov.sg/open-data-licence). The internal workbook is synthetic,
 made for this project. Sources, APIs and licences are listed in [DATA_SOURCES.md](DATA_SOURCES.md).

@@ -36,3 +36,6 @@ out/
 
 # Runtime state (checkpoints, caches)
 /var/
+
+# Personal notes (e.g. demo rehearsal): never committed
+/notes/
