@@ -1,4 +1,5 @@
-"""The application database (SQLite via SQLAlchemy): conversations, runs, their trace events and LLM calls.
+"""The API's tables in the application database (SQLite via SQLAlchemy): conversations, runs, their trace events
+and LLM calls.
 
 Conversation state itself (messages, plan, findings) lives in the LangGraph checkpointer; this database holds
 what the API and UI need to list, replay and audit runs. Tables are created on start-up; a production deployment
@@ -15,17 +16,13 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    create_engine,
-    event,
     false,
     inspect,
     text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-from app.config import REPO_ROOT
-
-DB_PATH = REPO_ROOT / "var" / "app.sqlite"
+from app.database import sqlite_engine
 
 
 def utcnow() -> dt.datetime:
@@ -104,18 +101,7 @@ class LLMCallRecord(Base):
 
 
 def make_session_factory(url: str | None = None) -> sessionmaker:
-    if url is None:
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        url = f"sqlite:///{DB_PATH}"
-    # A file database, one connection per thread. (A shared in-memory connection would let one thread's rollback
-    # undo another thread's insert while a run is writing events.)
-    engine = create_engine(url, connect_args={"check_same_thread": False})
-
-    @event.listens_for(engine, "connect")
-    def _pragmas(connection, _record):
-        connection.execute("pragma journal_mode = wal")  # readers (WebSockets) never block the run writing
-        connection.execute("pragma foreign_keys = on")
-
+    engine = sqlite_engine(url)
     Base.metadata.create_all(engine)
     add_missing_columns(engine)
     return sessionmaker(engine, expire_on_commit=False)

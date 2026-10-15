@@ -395,3 +395,18 @@ def test_paused_conversation_survives_a_restart(tmp_path):
                          checkpointer=sqlite_checkpointer(tmp_path / "c.db"))
     state = resume(second, "employment").values
     assert state["outcome"] == "answered" and state["coordinator_steps"][0].action == "extract"
+
+
+def test_short_answers_are_translated_unless_a_number_changes():
+    """A decline or fallback answer is translated as plain text; a translation that alters a number, or fails,
+    keeps the English answer with a note."""
+    from app.graph.nodes.reporting import make_localize
+    english = {"language": "zh", "answer": "Prices rose 3.5% in 2024, the data shows."}
+    translated = make_localize(FakeLLMs({"text": ["数据显示，2024 年价格上涨了 3.5%。"]}))(english)
+    assert translated == {"answer": "数据显示，2024 年价格上涨了 3.5%。"}
+    altered = make_localize(FakeLLMs({"text": ["数据显示，2024 年价格上涨了 5.3%。"]}))(english)["answer"]
+    assert altered.startswith("Prices rose 3.5% in 2024") and "altered some numbers" in altered
+    failed = make_localize(FakeLLMs({"text": [RuntimeError("provider down")]}))(english)["answer"]
+    assert failed.startswith("Prices rose 3.5%") and "Translation unavailable" in failed
+    assert make_localize(FakeLLMs({}))({"language": "en", "answer": "Prices rose."}) == {}  # nothing to do
+

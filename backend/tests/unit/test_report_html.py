@@ -110,3 +110,14 @@ def test_pdf_download_links_citations_to_sources_and_sources_to_the_web():
     malay = report(title="Pekerjaan teknologi")
     assert pdf_text(final_state("ms", report_display=malay))[0].title == "Pekerjaan teknologi"
     assert export_pdf(final_state("zh", report_display=translated)).startswith(b"%PDF")
+
+
+def test_every_chart_kind_draws_as_an_image_for_the_downloads():
+    from app.report.static_charts import chart_png
+    line = {"data": [{"type": "scatter", "mode": "lines+markers", "x": ["2020", "2021"], "y": [1, 2]}], "layout": {}}
+    bar = {"data": [{"type": "bar", "x": ["A", "B"], "y": [3, 1]}], "layout": {}}
+    points = {"data": [{"type": "scatter", "mode": "markers+text", "x": [200, 220], "y": [50, 55],
+                        "text": ["2020", "2021"]}], "layout": {"xaxis": {"title": {"text": "Jobs (persons)"}}}}
+    for spec in (line, bar, points):
+        assert chart_png(spec, "A chart").startswith(b"\x89PNG")
+

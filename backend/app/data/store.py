@@ -1,7 +1,9 @@
 """Loads curated datasets in this order: fresh cache -> live source -> stale cache -> committed snapshot.
 
-Every load records where its data came from (provenance), so a source outage shows up in the report as a
-warning instead of being hidden.
+The cache is the dataset tables of the application database (data/database.py): each cleaned table, its quality
+report and provenance, and the raw downloads. Snapshots are files committed to the repository. Every load records
+where its data came from (provenance), so a source outage shows up in the report as a warning instead of being
+hidden.
 """
 import datetime as dt
 import io
@@ -13,14 +15,14 @@ from typing import Literal
 import pandas as pd
 from pydantic import BaseModel
 
-from app.config import REPO_ROOT, Settings, get_settings
+from app.config import Settings, get_settings
 from app.data import catalogue
 from app.data.cleaning import QualityReport
+from app.data.database import DatasetTables
 from app.data.http import SourceUnavailable
 from app.data.registry import CURATED, CuratedDataset
 from app.data.sources import DATA_DIR, SOURCES
 
-CACHE_DIR = REPO_ROOT / "var" / "cache"
 SNAPSHOT_DIR = DATA_DIR / "snapshots"
 
 
@@ -46,22 +48,15 @@ class LoadedDataset:
     provenance: Provenance
 
 
-def raw_extension(data: bytes) -> str:
-    if data[:2] == b"PK":
-        return "xlsx"
-    return "json" if data.lstrip()[:1] in (b"{", b"[") else "csv"
-
-
 def now() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
 
 class DataStore:
-    def __init__(self, settings: Settings | None = None, cache_dir: Path = CACHE_DIR,
+    def __init__(self, settings: Settings | None = None, database: str | None = None,
                  snapshot_dir: Path = SNAPSHOT_DIR, sources: dict | None = None):
         self.settings = settings or get_settings()
-        self.clean_dir = cache_dir / "clean"
-        self.raw_dir = cache_dir / "raw"
+        self.tables = DatasetTables(database)  # default: the application database
         self.snapshot_dir = snapshot_dir
         self.sources = sources or {name: cls() for name, cls in SOURCES.items()}
 
@@ -85,7 +80,7 @@ class DataStore:
 
     def load(self, key: str) -> LoadedDataset:
         dataset = self.describe(key)
-        cached = self._read(self.clean_dir, dataset, "cache")
+        cached = self._read_cache(dataset)
         fresh = cached and self._age_hours(cached) < self.settings.data_max_age_hours
         if fresh and not self.settings.force_source_fail:
             return cached
@@ -103,7 +98,7 @@ class DataStore:
             return fallback
         frame, quality = dataset.clean(raws)
         loaded = LoadedDataset(dataset, frame, quality, self.provenance(dataset, "live", now().isoformat()))
-        self.write(self.clean_dir, loaded)
+        self.tables.write(dataset.key, dataset.title, frame, quality.model_dump(), loaded.provenance.model_dump())
         return loaded
 
     def provenance(self, dataset: CuratedDataset, origin: str, retrieved_at: str) -> Provenance:
@@ -113,12 +108,19 @@ class DataStore:
 
     def _fetch(self, dataset: CuratedDataset, source_id: str) -> bytes:
         data = self.sources[dataset.source].download(source_id)
-        self.raw_dir.mkdir(parents=True, exist_ok=True)  # the raw file is kept for auditing and re-cleaning
-        (self.raw_dir / f"{dataset.source}_{source_id}.{raw_extension(data)}").write_bytes(data)
+        self.tables.save_raw(dataset.source, source_id, data)  # kept for auditing and re-cleaning
         return data
 
+    def _read_cache(self, dataset: CuratedDataset) -> LoadedDataset | None:
+        stored = self.tables.read(dataset.key)
+        if stored is None:
+            return None
+        frame, quality, provenance = stored
+        return LoadedDataset(dataset, frame, QualityReport(**quality),
+                             Provenance(**{**provenance, "origin": "cache", "warning": None}))
+
     @staticmethod
-    def write(directory: Path, loaded: LoadedDataset) -> None:
+    def write_snapshot(directory: Path, loaded: LoadedDataset) -> None:
         directory.mkdir(parents=True, exist_ok=True)
         key = loaded.dataset.key
         # mtime=0 keeps the gzip header fixed, so an unchanged table gives an identical file (no noisy diffs)
@@ -128,6 +130,7 @@ class DataStore:
 
     @staticmethod
     def _read(directory: Path, dataset: CuratedDataset, origin: str) -> LoadedDataset | None:
+        """A committed snapshot (csv.gz with its quality report and provenance in JSON)."""
         data_path, meta_path = directory / f"{dataset.key}.csv.gz", directory / f"{dataset.key}.json"
         if not (data_path.is_file() and meta_path.is_file()):
             return None

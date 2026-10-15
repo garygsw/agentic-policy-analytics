@@ -1,4 +1,5 @@
-"""Plotly chart specs, built from computed series (never from numbers an LLM wrote).
+"""Plotly chart specs, built from computed series (never from numbers an LLM wrote): lines over time, bars for
+groups in one period, and scatter plots of two measures against each other.
 
 A spec is plain JSON ({"data": [...], "layout": {...}}) that plotly.js renders in the browser and in the HTML
 report. Each chart also keeps its data as a table, shown under the chart for accessibility and checking.
@@ -33,6 +34,23 @@ def line_chart(series: list[tuple[str, pd.Series, str]], title: str) -> tuple[di
     table = {"columns": ["period", *[f"{label} ({unit})" for label, _, unit in series]],
              "rows": [[p, *[_cell(values, p) for _, values, _ in series]] for p in periods]}
     return {"data": traces, "layout": layout}, table
+
+
+def scatter_chart(x: tuple[str, pd.Series, str], y: tuple[str, pd.Series, str], title: str,
+                  max_point_labels: int = 12) -> tuple[dict, dict]:
+    """One point per period, for two measures: how they moved together. These are the points a correlation is
+    computed from. Points are labelled with their period when there are few enough to read."""
+    (x_label, x_values, x_unit), (y_label, y_values, y_unit) = x, y
+    both = pd.concat([x_values, y_values], axis=1, join="inner").dropna()
+    periods = [str(p) for p in both.index]
+    trace = {"type": "scatter", "mode": "markers+text" if len(periods) <= max_point_labels else "markers",
+             "x": [round(float(v), 4) for v in both.iloc[:, 0]], "y": [round(float(v), 4) for v in both.iloc[:, 1]],
+             "text": periods, "textposition": "top center", "marker": {"color": PALETTE[0], "size": 9}}
+    layout = {"title": {"text": plain(title)}, "xaxis": {"title": {"text": plain(f"{x_label} ({x_unit})")}},
+              "yaxis": {"title": {"text": plain(f"{y_label} ({y_unit})")}}, "margin": {"t": 60}}
+    table = {"columns": ["period", f"{x_label} ({x_unit})", f"{y_label} ({y_unit})"],
+             "rows": [[p, a, b] for p, a, b in zip(periods, trace["x"], trace["y"], strict=True)]}
+    return {"data": [trace], "layout": layout}, table
 
 
 def bar_chart(values: pd.Series, title: str, unit: str) -> tuple[dict, dict]:

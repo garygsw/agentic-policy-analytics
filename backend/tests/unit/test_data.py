@@ -1,6 +1,7 @@
 """Data layer: parsing, cleaning, quality reports, curated cleaners, the load/fallback order and retries.
 Fixtures are tiny inline samples shaped like the real files; no network."""
 import json
+import sqlite3
 
 import httpx
 import pandas as pd
@@ -10,7 +11,7 @@ from app.config import Settings
 from app.data import catalogue, http
 from app.data.cleaning import normalise_period, tidy, to_number
 from app.data.http import SourceUnavailable
-from app.data.registry import CEA, CURATED, MRT_EXITS, RAIL_PLAN, RETRENCHED
+from app.data.registry import CEA, CURATED, ICT_MANPOWER, MRT_EXITS, RAIL_PLAN, RETRENCHED
 from app.data.sources import DATA_DIR
 from app.data.store import DataStore, DataUnavailable
 
@@ -158,18 +159,23 @@ class FakeSource:
         return f"https://example.org/{source_id}"
 
 
-def store(tmp_path, source, **settings):
-    return DataStore(Settings(_env_file=None, **settings), cache_dir=tmp_path / "cache",
+def store(tmp_path, source, database="app.sqlite", **settings):
+    return DataStore(Settings(_env_file=None, **settings), database=f"sqlite:///{tmp_path / database}",
                      snapshot_dir=tmp_path / "snapshots", sources={"datagovsg": source})
 
 
-def test_live_load_is_cached_then_reused(tmp_path):
+def test_live_load_is_stored_in_the_database_then_reused(tmp_path):
     source = FakeSource()
     first = store(tmp_path, source).load("ict_manpower")
     second = store(tmp_path, source).load("ict_manpower")
     assert (first.provenance.origin, second.provenance.origin, source.calls) == ("live", "cache", 1)
-    assert second.frame.equals(first.frame)
-    assert (tmp_path / "cache" / "raw").glob("datagovsg_*.csv")  # raw kept for auditing
+    assert second.frame.equals(first.frame) and second.quality == first.quality
+    raw = store(tmp_path, source).tables.raw("datagovsg", ICT_MANPOWER)  # the download, kept for auditing
+    assert raw.data == ICT_CSV and raw.format == "csv"
+    with sqlite3.connect(tmp_path / "app.sqlite") as db:  # plain rows, queryable with SQL
+        rows = db.execute("select period, measure, value from dataset_rows where dataset_key = 'ict_manpower' "
+                          "order by id").fetchall()
+    assert len(rows) == len(first.frame) and rows[0][2] == first.frame["value"].iloc[0]
 
 
 def test_source_outage_falls_back_to_stale_cache_with_warning(tmp_path):
@@ -180,10 +186,8 @@ def test_source_outage_falls_back_to_stale_cache_with_warning(tmp_path):
 
 def test_source_outage_without_cache_uses_snapshot(tmp_path):
     live = store(tmp_path, FakeSource()).load("ict_manpower")
-    DataStore.write(tmp_path / "snapshots", live)
-    for cached in (tmp_path / "cache" / "clean").iterdir():
-        cached.unlink()
-    loaded = store(tmp_path, FakeSource(fail=True)).load("ict_manpower")
+    DataStore.write_snapshot(tmp_path / "snapshots", live)
+    loaded = store(tmp_path, FakeSource(fail=True), database="empty.sqlite").load("ict_manpower")
     assert loaded.provenance.origin == "snapshot" and loaded.provenance.warning
 
 
@@ -203,7 +207,7 @@ def test_force_source_fail_skips_live_even_with_fresh_cache(tmp_path):
 
 def test_committed_snapshots_load_for_every_curated_dataset(tmp_path):
     """Every curated dataset must work offline from its committed snapshot."""
-    offline = DataStore(Settings(_env_file=None, force_source_fail=True), cache_dir=tmp_path)
+    offline = DataStore(Settings(_env_file=None, force_source_fail=True), database=f"sqlite:///{tmp_path / 'a.db'}")
     for key in CURATED:
         loaded = offline.load(key)
         assert loaded.provenance.origin == "snapshot" and len(loaded.frame) > 0, key

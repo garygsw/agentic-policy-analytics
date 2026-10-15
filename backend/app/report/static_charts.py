@@ -20,14 +20,28 @@ def _number(value: float, _position=None) -> str:
     return f"{value:,.0f}" if abs(value) >= 100 else f"{value:,.2g}" if abs(value) < 1 else f"{value:,.1f}"
 
 
+def _points_png(ax, trace: dict, layout: dict) -> None:
+    """A scatter chart: one point per period, labelled with the period when Plotly labels it too."""
+    ax.scatter(trace["x"], trace["y"], s=18, color=(trace.get("marker") or {}).get("color"))
+    if "text" in trace.get("mode", ""):
+        for x, y, label in zip(trace["x"], trace["y"], trace.get("text", []), strict=False):
+            ax.annotate(str(label), (x, y), textcoords="offset points", xytext=(0, 5), ha="center", fontsize=6)
+    ax.set_xlabel(_axis_title(layout, "xaxis"), fontsize=8)
+    ax.xaxis.set_major_formatter(FuncFormatter(_number))
+    ax.tick_params(axis="x", labelsize=7)
+
+
 def chart_png(spec: dict, title: str) -> bytes:
-    """One chart (a Plotly spec with line or bar traces) as a PNG image."""
+    """One chart (a Plotly spec with line, bar or scatter traces) as a PNG image."""
     figure = Figure(figsize=(7.5, 3.6), dpi=150)
     ax = figure.subplots()
     second_axis = None
     layout = spec.get("layout", {})
     categories: list[str] = []
-    for trace in spec.get("data", []):
+    points = [t for t in spec.get("data", []) if t.get("type") == "scatter" and "lines" not in t.get("mode", "lines")]
+    for trace in points:
+        _points_png(ax, trace, layout)
+    for trace in [t for t in spec.get("data", []) if t not in points]:
         x = [str(v) for v in trace.get("x", [])]
         y = [float("nan") if v is None else v for v in trace.get("y", [])]
         categories = categories or x
@@ -47,11 +61,12 @@ def chart_png(spec: dict, title: str) -> bytes:
     if second_axis is not None:
         second_axis.set_ylabel(_axis_title(layout, "yaxis2"), fontsize=8)
         second_axis.yaxis.set_major_formatter(FuncFormatter(_number))
-    step = max(1, len(categories) // MAX_X_LABELS)
-    ax.set_xticks(range(0, len(categories), step), [categories[i] for i in range(0, len(categories), step)],
-                  rotation=45, ha="right", fontsize=7)
+    if categories:  # periods or groups along the x-axis (a scatter chart's x-axis is a measure instead)
+        step = max(1, len(categories) // MAX_X_LABELS)
+        ax.set_xticks(range(0, len(categories), step), [categories[i] for i in range(0, len(categories), step)],
+                      rotation=45, ha="right", fontsize=7)
     ax.tick_params(axis="y", labelsize=7)
-    ax.grid(axis="y", alpha=0.3)
+    ax.grid(axis="both" if points else "y", alpha=0.3)
     ax.spines[["top", "right"]].set_visible(second_axis is not None)
     handles = [h for a in (ax, second_axis) if a is not None for h in a.get_legend_handles_labels()[0]]
     if len(handles) > 1:

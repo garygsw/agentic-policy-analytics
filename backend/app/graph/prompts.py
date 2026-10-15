@@ -92,7 +92,8 @@ How to work:
   with the total or other groups (compare_groups), a related measure, or a correlation across datasets.
 - To find which groups (towns, industries...) rose or fell most, use rank_changes once: it compares every group
   over the same two periods. Do not call compute_trend group by group.
-- If a chart tool is available, create one to three charts that show the main findings.
+- If a chart tool is available, create one to three charts that show the main findings: lines for trends,
+  bars to compare groups, and a scatter chart to show a correlation you computed.
 - Use only the tools you have been given; some may be switched off for this request.
 - Every tool call needs a short reason. If a tool returns an error, fix the call and try again.
 - Finish with a summary of at most five plain sentences (no tables, no numbers: the facts are already recorded):

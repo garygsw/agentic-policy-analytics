@@ -11,7 +11,7 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from app.analysis import stats
-from app.analysis.charts import bar_chart, line_chart
+from app.analysis.charts import bar_chart, line_chart, scatter_chart
 from app.analysis.workspace import Workspace, profile
 
 MAX_FACT_POINTS = 20  # series this short get one fact per point, so any year can be cited
@@ -176,9 +176,10 @@ class RecordsArgs(BaseModel):
 
 
 class ChartArgs(BaseModel):
-    kind: Literal["line", "bar"]
+    kind: Literal["line", "bar", "scatter"]
     title: str
-    series: list[SeriesSpec] = Field(description="line: one to four series over time; bar: exactly one series")
+    series: list[SeriesSpec] = Field(description="line: one to four series over time; bar: exactly one series; "
+                                                 "scatter: exactly two (x, then y), one point per shared period")
     group_by: str | None = Field(default=None, description="bar only: the dimension shown as bars")
     period: str | None = Field(default=None, description="bar only: the period shown; default: latest")
     start: str | None = None
@@ -300,17 +301,24 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
                       "excluded_for_missing_data": sorted(excluded)[:25], "ranking": ranked,
                       "facts": [f for f in ws.facts if f["id"] in {i for r in ranked for i in r["facts"]}]})
 
-    def compute_correlation(a: SeriesSpec, b: SeriesSpec, start: str | None = None, end: str | None = None,
-                            reason: str = "") -> str:
+    def paired(a: SeriesSpec, b: SeriesSpec, start: str | None, end: str | None) -> tuple[list, bool]:
+        """Two series on the same periods, for a correlation or a scatter chart: matching periods, or calendar
+        years when one is yearly and the other is not. Returns (spec, source_id, values, unit) for each, and
+        whether the series were put on calendar years."""
         series = []
         for spec in (a, b):
             spec, loaded, source_id = load(spec)
             values, unit, _ = stats.select_series(loaded.frame, loaded.dataset, spec.measure, spec.filters, start, end)
             summable = bool(loaded.dataset.summable.get(spec.measure))
-            series.append((spec, source_id, values, stats.to_annual(values, summable)))
+            series.append((spec, source_id, values, stats.to_annual(values, summable), unit))
         needs_annual = stats.is_yearly(series[0][2]) != stats.is_yearly(series[1][2])
-        x, y = ((series[0][3], series[1][3]) if needs_annual else (series[0][2], series[1][2]))
-        r = stats.correlation(x, y)
+        return [(spec, sid, annual if needs_annual else values, unit)
+                for spec, sid, values, annual, unit in series], needs_annual
+
+    def compute_correlation(a: SeriesSpec, b: SeriesSpec, start: str | None = None, end: str | None = None,
+                            reason: str = "") -> str:
+        series, needs_annual = paired(a, b, start, end)
+        r = stats.correlation(series[0][2], series[1][2])
         label = f"{series[0][0].label} vs {series[1][0].label}, {r['from']} to {r['to']} (n={r['n']})"
         sources = [series[0][1], series[1][1]]
         if r["r_levels"] is None:
@@ -342,6 +350,15 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
     def create_chart(kind: str, title: str, series: list[SeriesSpec], group_by: str | None = None,
                      period: str | None = None, start: str | None = None, end: str | None = None,
                      reason: str = "") -> str:
+        if kind == "scatter":
+            if len(series) != 2:
+                raise stats.AnalysisError("a scatter chart needs exactly two series: x, then y")
+            (sx, source_x, x, unit_x), (sy, source_y, y, unit_y) = paired(series[0], series[1], start, end)[0]
+            chart, table = scatter_chart((sx.label, x, unit_x), (sy.label, y, unit_y), title)
+            if len(table["rows"]) < 2:
+                raise stats.AnalysisError("the two series share fewer than two periods, so there is nothing to plot")
+            chart_id = ws.add_chart(title, chart, table, list(dict.fromkeys([source_x, source_y])))
+            return _json({"chart_id": chart_id, "title": title, "points": len(table["rows"])})
         specs = [load(s) for s in series]
         sources = list(dict.fromkeys(source_id for _, _, source_id in specs))
         if kind == "line":
@@ -390,6 +407,7 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
                                      description="Only for tables without a time dimension (e.g. rail stations): "
                                                  "list and count the records matching filters."),
         StructuredTool.from_function(create_chart, name="create_chart", args_schema=ChartArgs,
-                                     description="Draw a line chart (series over time) or bar chart (groups in one "
-                                                 "period) from the data. Returns a chart ID to cite."),
+                                     description="Draw a line chart (series over time), a bar chart (groups in one "
+                                                 "period) or a scatter chart (two measures against each other, e.g. "
+                                                 "to show a correlation) from the data. Returns a chart ID to cite."),
     ]

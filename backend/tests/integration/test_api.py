@@ -1,4 +1,5 @@
 """The API with the real graph, database and run manager; LLMs are scripted chat models (no network)."""
+import threading
 import time
 
 import pytest
@@ -36,15 +37,15 @@ class Script:
         return chat(tier, schema=schema, models=(model, model))
 
 
-def client_for(replies: dict, tmp_path, llm=None) -> TestClient:
+def client_for(replies: dict, tmp_path, llm=None, workers=None, store=None) -> TestClient:
     llm = llm or Script(replies)
-    graph = build_graph(Deps(llm=llm, workers=FakeWorkers(), decide=llm_decider(llm)),
+    graph = build_graph(Deps(llm=llm, workers=workers or FakeWorkers(), decide=llm_decider(llm)),
                         checkpointer=InMemorySaver(serde=serializer()))
     index = make_index(tmp_path)
     add(index, "https://mom.gov.sg/a", "Tech workforce", "Information and communications employment grew in 2024.")
     retriever = Retriever(index, HashEmbedder(), OverlapReranker())
     app = create_app(graph=graph, sessions=make_session_factory(f"sqlite:///{tmp_path / 'app.sqlite'}"),
-                     retriever=retriever, preload_models=False, llm=llm)
+                     retriever=retriever, store=store, preload_models=False, llm=llm)
     return TestClient(app)
 
 
@@ -351,4 +352,58 @@ def test_stop_closes_a_run_whose_worker_is_gone(answered):
         session.commit()
     assert client.post(f"/api/runs/{run_id}/cancel").json()["status"] == "cancelled"
     assert client.get(f"/api/runs/{run_id}").json()["status"] == "cancelled"
+
+
+class BlockingWorkers(FakeWorkers):
+    """Extraction waits until the test lets it finish, so the run is still working when it is stopped."""
+
+    def __init__(self):
+        super().__init__()
+        self.started, self.go_on = threading.Event(), threading.Event()
+
+    def extract(self, *args, **kwargs):
+        self.started.set()
+        self.go_on.wait(10)
+        return super().extract(*args, **kwargs)
+
+
+def test_a_working_run_stops_after_its_current_step(tmp_path):
+    workers = BlockingWorkers()
+    with client_for(ANSWERED, tmp_path, workers=workers) as client:
+        thread = client.post("/api/threads").json()["id"]
+        run_id = client.post(f"/api/threads/{thread}/messages", json={"text": QUESTION}).json()["run_id"]
+        assert workers.started.wait(10)
+        assert client.post(f"/api/runs/{run_id}/cancel").json()["status"] == "cancelling"
+        workers.go_on.set()
+        run = wait(client, run_id)
+        assert (run["status"], run["outcome"], workers.calls) == ("cancelled", None, ["extract"])
+        assert client.get(f"/api/runs/{run_id}/events").json()[-1]["content"] == "Cancelled by the user"
+        assert client.post(f"/api/runs/{run_id}/cancel").status_code == 409  # already over
+
+
+def test_readiness_reports_each_dependency(tmp_path, monkeypatch):
+    from app.config import Settings
+
+    def settings(**keys):
+        monkeypatch.setattr("app.api.main.get_settings", lambda: Settings(_env_file=None, **keys))
+    with client_for({}, tmp_path) as client:
+        settings(openai_api_key="k", anthropic_api_key="k")
+        ready = client.get("/api/health/ready")
+        assert ready.status_code == 200
+        assert (ready.json()["database"], ready.json()["llm_keys"], ready.json()["web_search"]) == (
+            "ok", "ok", "not configured")
+        settings(openai_api_key="k", tavily_api_key="k")  # one provider key missing: not ready
+        missing = client.get("/api/health/ready")
+        assert missing.status_code == 503 and missing.json()["detail"]["llm_keys"] == "missing"
+
+
+def test_a_dataset_profile_shows_its_quality_and_provenance(tmp_path):
+    from app.config import Settings
+    from app.data.store import DataStore
+    offline = DataStore(Settings(_env_file=None, force_source_fail=True), database=f"sqlite:///{tmp_path / 'd.db'}")
+    with client_for({}, tmp_path, store=offline) as client:
+        profile = client.get("/api/datasets/ict_manpower").json()
+        assert profile["quality"]["rows_out"] > 0 and profile["provenance"]["origin"] == "snapshot"
+        assert "Live source unavailable" in profile["provenance"]["warning"]
+        assert client.get("/api/datasets/not_a_dataset").status_code == 404
 

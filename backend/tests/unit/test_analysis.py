@@ -194,6 +194,27 @@ def test_correlation_tool_records_levels_and_changes():
     assert out["facts"][0]["unit"] == "Pearson r" and out["facts"][0]["value"] == 1.0
 
 
+def test_scatter_chart_plots_the_points_its_correlation_uses():
+    ws, t = tools()
+    gdp = {"dataset_id": "gdp", "measure": "gdp", "filters": {}, "label": "ICT GDP"}
+    out = call(t["create_chart"], kind="scatter", title="Jobs and output", series=[ICT, gdp])
+    chart = ws.charts[0]
+    trace = chart["spec"]["data"][0]
+    assert out["points"] == 5 and trace["x"] == [200.0, 220.0, 240.0, 260.0, 280.0] and trace["y"][0] == 50.0
+    assert trace["text"] == YEARS and trace["mode"] == "markers+text"  # few points: each labelled with its year
+    assert chart["spec"]["layout"]["xaxis"]["title"]["text"] == "ICT (persons)" and chart["sources"] == ["S1", "S2"]
+    assert chart["table"]["rows"][-1] == ["2024", 280.0, 70.0]
+    # A quarterly series against a yearly one is put on calendar years, as compute_correlation does.
+    retrench = {"dataset_id": "retrenchment", "measure": "retrench", "filters": {"industry": "ict"}, "label": "Cuts"}
+    call(t["create_chart"], kind="scatter", title="Jobs and cuts", series=[ICT, retrench])
+    assert [row[0] for row in ws.charts[1]["table"]["rows"]] == ["2023", "2024"]
+    with pytest.raises(stats.AnalysisError, match="fewer than two periods"):  # from 2024 on, they share one year
+        t["create_chart"].invoke({"kind": "scatter", "title": "x", "series": [ICT, retrench], "start": "2024",
+                                  "reason": "x"})
+    with pytest.raises(stats.AnalysisError, match="exactly two series"):
+        t["create_chart"].invoke({"kind": "scatter", "title": "x", "series": [ICT], "reason": "x"})
+
+
 def test_list_records_refuses_time_series_and_counts_tables():
     _, t = tools()
     with pytest.raises(stats.AnalysisError, match="time series"):
@@ -211,6 +232,18 @@ def test_line_chart_with_two_units_gets_two_axes_and_a_data_table():
     assert chart["spec"]["data"][1]["yaxis"] == "y2"
     assert chart["spec"]["layout"]["yaxis2"]["title"]["text"] == "S$ million"
     assert chart["table"]["rows"][0] == ["2020", 200.0, 50.0] and chart["sources"] == ["S1", "S2"]
+
+
+def test_bar_chart_ranks_groups_in_one_period_and_skips_groups_without_a_value():
+    ws, t = tools()
+    price = {"dataset_id": "prices", "measure": "price", "filters": {}, "label": "Price"}
+    out = call(t["create_chart"], kind="bar", title="Prices by town", series=[price], group_by="town")
+    latest = ws.charts[0]  # the latest period, 2020-Q3: C has no value then and D none at all, so both are left out
+    assert out == {"chart_id": "C1", "title": "Prices by town", "points": 2}
+    assert latest["spec"]["data"][0]["x"] == ["B", "A"] and latest["spec"]["data"][0]["y"] == [220.0, 150.0]
+    assert latest["table"] == {"columns": ["group", "S$"], "rows": [["B", 220.0], ["A", 150.0]]}
+    call(t["create_chart"], kind="bar", title="Prices, 2020-Q2", series=[price], group_by="town", period="2020-Q2")
+    assert ws.charts[1]["spec"]["data"][0]["x"] == ["C", "B", "A"] and ws.charts[1]["sources"] == ["S1"]
 
 
 def test_bar_chart_needs_a_group():
