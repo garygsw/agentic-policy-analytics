@@ -36,7 +36,7 @@ from app.evals.metrics import citation_coverage, groundedness, mean_pairwise_jac
 from app.evals.retrieval import EVAL_DIR
 from app.graph.build import build_graph
 from app.graph.checkpoint import serializer
-from app.graph.nodes.reporting import citable_text, facts_of, sources_of
+from app.graph.nodes.reporting import charts_of, citable_text, facts_of, sources_of
 from app.graph.options import FALLBACK_FOR, RunOptions
 from app.llm.ledger import Ledger
 from app.llm.providers import chat, make_model
@@ -106,13 +106,19 @@ def judge_material(values: dict) -> dict:
             entry["text"] = s.get("text", "")[:1500]
         sources.append(entry)
     facts = [{k: f.get(k) for k in ("id", "label", "value", "unit", "sources", "method")} for f in facts_of(values)]
-    return {"question": values["question"], "report": report.model_dump(), "facts": facts, "sources": sources}
+    analytics = (values.get("findings") or {}).get("analytics") or {}
+    charts = [{"id": c["id"], "title": c["title"], "columns": c["table"]["columns"], "rows": len(c["table"]["rows"])}
+              for c in charts_of(values)]
+    return {"question": values["question"], "report": report.model_dump(), "facts": facts, "sources": sources,
+            "charts": charts, "analysis": analytics.get("summary", "")}
 
 
 def judge(judge_llm, material: dict) -> dict:
     content = (f"Question: {material['question']}\n\nFacts computed by the analysis:\n"
                f"{json.dumps(material['facts'], ensure_ascii=False)}\n\nSources (with caveats and cited passages):\n"
-               f"{json.dumps(material['sources'], ensure_ascii=False)}\n\nReport:\n"
+               f"{json.dumps(material['sources'], ensure_ascii=False)}\n\nCharts:\n"
+               f"{json.dumps(material.get('charts', []), ensure_ascii=False)}\n\nAnalysis performed:\n"
+               f"{material.get('analysis', '')}\n\nReport:\n"
                f"{json.dumps(material['report'], ensure_ascii=False)}")
     try:
         verdict = judge_llm.invoke([SystemMessage(JUDGE), HumanMessage(content)])

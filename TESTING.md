@@ -5,16 +5,16 @@ re-run from `backend/` (and `frontend/` for the UI tests). Results are saved in 
 
 | Level | What it checks | Count | Command | Cost |
 |---|---|---|---|---|
-| Unit tests | agents, tools, statistics, data cleaning, guardrails, LLM layer, RAG, report check | 175 | `uv run pytest tests/unit` | free (fake models) |
-| Integration tests | the whole graph and API: background runs, pauses, streaming, replay, concurrency | 12 | `uv run pytest tests/integration` | free (scripted models) |
+| Unit tests | agents, tools, statistics, data cleaning, guardrails, LLM layer, RAG, report check, downloads | 183 | `uv run pytest tests/unit` | free (fake models) |
+| Integration tests | the whole graph and API: background runs, pauses, streaming, replay, concurrency, downloads | 14 | `uv run pytest tests/integration` | free (scripted models) |
 | Frontend tests | the event reducer behind the live view, formatting | 7 | `npm test` (in `frontend/`) | free |
 | Live provider tests | real calls to both providers, structured output, fallback | 3 | `uv run pytest -m live` | cents |
 | Retrieval evaluation | recall@k and MRR for each search mode | 50 questions | `uv run python -m app.evals.retrieval run` | free |
 | Triage evaluation | accuracy, F1, latency and cost of each classifier | 84 questions | `uv run python scripts/triage_trial.py` | cents |
-| Answer evaluation | outcomes, groundedness, citations, LLM-as-judge, consistency | 12 questions | `uv run python -m app.evals.answers` | about $2 |
+| Answer evaluation | outcomes, groundedness, citations, LLM-as-judge, consistency | 12 questions | `uv run python -m app.evals.answers` | about $4 |
 | Load test | latency and throughput under concurrent clients | 20 clients | `uv run python scripts/load_test.py` | free |
 
-`uv run pytest` runs the unit and integration tests together (187), with no network access and no API keys. CI
+`uv run pytest` runs the unit and integration tests together (197), with no network access and no API keys. CI
 runs them on every push (section 7).
 
 ## 1. Test plan
@@ -93,14 +93,16 @@ the English report is shown instead.
 
 | Measure | How | Latest result |
 |---|---|---|
-| Groundedness | the share of numbers in final reports that pass the check | 494 of 494 |
-| What the check caught | drafts rejected by the check | 1 of 14: a gap the writer computed itself (section 5) |
-| Faithfulness of prose | LLM-as-judge from the other provider, given exactly what the writer saw | 4.33 of 5 (3.62 before citations on caveats and the no-background-knowledge rule) |
-| Consistency | overlap of the numbers stated by three runs of the same question | 0.80 and 0.60 |
+| Groundedness | the share of numbers in final reports that pass the check | 460 of 460 |
+| What the checks caught | drafts sent back | number check: 0 of 21; claim checker: about 7 rewrites (section 5) |
+| Faithfulness of prose | LLM-as-judge from the other provider, given what the writer saw | 4.00 of 5 (3.62 before citations on caveats; see section 5 for the judge's blind spots) |
+| Consistency | overlap of the numbers stated by three runs of the same question | 0.66 and 0.38 |
 
-What the code cannot check is meaning: a sentence can cite the right fact and still overstate it, or call a
-fall a rise. The reviewer, and the judge in evaluation, cover meaning, and their scores are reported rather than
-assumed.
+What the code cannot check is meaning: a sentence can cite the right fact and still overstate it, rank it
+wrongly, or call a fall a rise. That is the claim checker's job (D-035). The reviewer, a model from the other
+provider, checks each statement against what it cites and sends unsupported ones back to the writer. A
+statement still unsupported after two fixes is shown flagged ⚠, never dropped. Its effect is measured by the
+judge (section 5); the results so far are mixed.
 
 **Tests that pin this behaviour down:**
 - `test_ungrounded_numbers_are_sent_back_then_fall_back_to_template`
@@ -113,7 +115,7 @@ assumed.
 
 ## 4. Coverage
 
-Line coverage of the backend is **79%** (`uv run pytest --cov=app`, 3,536 statements):
+Line coverage of the backend is **80%** (`uv run pytest --cov=app`, 3,865 statements):
 
 | Area | Coverage | Note |
 |---|---|---|
@@ -208,39 +210,39 @@ tools. The two consistency questions run three times each.
   its metadata, and the cited passages.
 - **Consistency.** The average overlap (Jaccard) of the numbers stated by repeated runs of the same question.
 
-**Results** (15 Oct 2026; `answers_results.json`):
+**Results** (15 Oct 2026, with the claim checker; `answers_results.json`):
 
 | Question | Expected | Outcome | Time | LLM calls | Cost | Numbers grounded | Statements cited | Judge: rel / comp / faith / clarity / caveats |
 |---|---|---|---|---|---|---|---|---|
-| tech-employment | answered | answered | 46 s | 10 | $0.14 | 64/64 | 100% | 5 / 5 / 5 / 5 / 5 |
-| hdb-towns | answered | answered | 67 s | 13 | $0.29 | 54/54 | 100% | 5 / 5 / **1** / 5 / 5 |
-| coe | answered | answered | 36 s | 10 | $0.11 | 34/34 | 100% | 5 / 5 / 5 / 5 / 5 |
-| life-expectancy | answered | answered | 50 s | 12 | $0.16 | 48/48 | 100% | 5 / 4 / 5 / 5 / 4 |
-| retrenchment-gdp | answered | answered | 68 s | 19 | $0.24 | 30/30 | 100% | 5 / 5 / 4 / 4 / 5 |
-| mrt-stations | answered or partial | answered | 42 s | 10 | $0.15 | 29/29 | 100% | 4 / 4 / 5 / 4 / 5 |
-| internal-programmes | answered | answered | 39 s | 11 | $0.13 | 88/88 | 100% | 5 / 5 / 5 / 4 / 5 |
-| chinese (in Chinese) | answered | answered | 55 s | 11 | $0.17 | 111/111 | 100% | 5 / 5 / 5 / 5 / 5 |
-| future-policy | answered | answered | 56 s | 10 | $0.17 | 36/36 | 100% | 4 / 4 / 4 / 4 / 4 |
-| forecast | declined or answered | declined (after a search) | 16 s | 4 | $0.05 | | | |
+| tech-employment | answered | answered | 59 s | 11 | $0.21 | 66/66 | 100% | 5 / 5 / 5 / 5 / 5 |
+| hdb-towns | answered | answered | 100 s | 14 | $0.54 | 50/50 | 100% | 5 / 4 / **1** / 5 / 4 |
+| coe | answered | answered | 88 s | 20 | $0.23 | 42/42 | 100% | 5 / 4 / **1** / 4 / 4 |
+| life-expectancy | answered | answered | 47 s | 11 | $0.14 | 56/56 | 100% | 5 / 4 / 5 / 5 / 5 |
+| retrenchment-gdp | answered | answered | 132 s | 25 | $0.33 | 37/37 | 100% | 5 / 5 / 4 / 5 / 5 |
+| mrt-stations | answered or partial | answered | 51 s | 9 | $0.16 | 24/24 | 100% | 5 / 5 / 5 / 4 / 5 |
+| internal-programmes | answered | answered | 52 s | 11 | $0.16 | 79/79 | 100% | 5 / 5 / 5 / 4 / 4 |
+| chinese (in Chinese) | answered | answered | 55 s | 11 | $0.14 | 57/57 | 100% | 5 / 5 / 5 / 5 / 5 |
+| future-policy | answered | answered | 132 s | 21 | $0.43 | 49/49 | 100% | 4 / 4 / 5 / 4 / 4 |
+| forecast | declined or answered | declined (after a search) | 17 s | 4 | $0.05 | | | |
 | off-topic | off_topic | off_topic | 0 s | 0 | $0.00 | | | |
-| vague | clarification | clarification | 5 s | 1 | $0.00 | | | |
+| vague | clarification | clarification | 2 s | 1 | $0.00 | | | |
 
 "Statements cited" counts findings and caveats.
 
-**Across the three configurations** (each a full run of the set):
+**Across the configurations** (each a full run of the set):
 
-| | GPT 6.1 Sol, first run | GPT 6.1 Sol, after D-031 | Claude Sonnet 5.5, after D-034 |
-|---|---|---|---|
-| Outcomes as expected | 11 of 11 | 10 of 11 | **12 of 12** |
-| Numbers grounded | 227 of 227 | 257 of 257 | 494 of 494 |
-| Drafts rejected by the report check | 1 of 13 | 3 of 16 | 1 of 14 |
-| Judge: faithfulness | 3.62 | 4.38 | 4.33 |
-| Judge: relevance / completeness / clarity / caveats | 4.88 / 4.12 / 4.62 / 3.88 | 4.75 / 4.12 / 4.62 / 4.75 | 4.78 / 4.67 / 4.56 / 4.78 |
-| Consistency (tech-employment / hdb-towns) | 0.79 / 0.80 | 0.77 / 0.44 | 0.80 / 0.60 |
-| Median time for an answered question | 104 s | 115 s | **51 s** |
-| Cost of a full run | $1.94 | $1.91 | $2.60 (12 questions) |
+| | GPT 6.1 Sol, first run | GPT 6.1 Sol, after D-031 | Claude Sonnet 5.5, after D-034 | + claim checker (D-035) |
+|---|---|---|---|---|
+| Outcomes as expected | 11 of 11 | 10 of 11 | **12 of 12** | **12 of 12** |
+| Numbers grounded | 227 of 227 | 257 of 257 | 494 of 494 | 460 of 460 |
+| Drafts rejected by the number check | 1 of 13 | 3 of 16 | 1 of 14 | 0 of 21 |
+| Judge: faithfulness | 3.62 | 4.38 | 4.33 | 4.00 |
+| Judge: relevance / completeness / clarity / caveats | 4.88 / 4.12 / 4.62 / 3.88 | 4.75 / 4.12 / 4.62 / 4.75 | 4.78 / 4.67 / 4.56 / 4.78 | 4.89 / 4.56 / 4.56 / 4.56 |
+| Consistency (tech-employment / hdb-towns) | 0.79 / 0.80 | 0.77 / 0.44 | 0.80 / 0.60 | 0.66 / 0.38 |
+| Median time for an answered question | 104 s | 115 s | **51 s** | 59 s |
+| Cost of a full run | $1.94 | $1.91 | $2.60 (12 questions) | $3.77 (12 questions) |
 
-The judge was Claude Sonnet 5.5 for the first two columns and GPT 6.1 Sol for the third, so the faithfulness
+The judge was Claude Sonnet 5.5 for the first two columns and GPT 6.1 Sol for the last two, so the faithfulness
 scores are close but not strictly comparable.
 
 **What each round changed:**
@@ -271,7 +273,17 @@ scores are close but not strictly comparable.
   The judge now receives exactly the writer's material. Without this fix, the third run scored faithfulness
   1.89; with it, 4.33.
 
-**What the checks caught in the latest run:**
+- **The claim checker (D-035), measured.** The reviewer, a model from the other provider, now checks each
+  statement against what it cites and sends unsupported ones back.
+  - **What it did:** it rewrote statements in about seven drafts (21 drafts, against 14), and the number check
+    then had nothing to reject.
+  - **What it cost:** about 45% more per run, and 8 s more per question.
+  - **What the judge saw:** faithfulness did not rise (4.33 to 4.00, within noise for nine reports). Both of the
+    judge's 1-scores were about claims it could not check: what chart C1 shows, and what the analysis did. The
+    judge was not given the charts or the analysis summary, though the writer and reviewer were. It now is, so
+    the next run will measure the claim checker more fairly.
+
+**What the checks caught in an earlier run (D-034 column):**
 - **The number check.** In the life-expectancy report, the writer computed a gap of "4.44 years" between men and
   women itself. The check rejected it, since 4.44 is not a computed fact, and the revised draft passed.
 - **The judge.** The HDB report claimed that Bukit Batok "alone" ranks in the top six for three flat types,
@@ -286,7 +298,7 @@ scores are close but not strictly comparable.
 - **Variation between runs.** Results vary: consistency is 0.6–0.8. An open question such as the HDB ranking
   picks different flat types and periods on each run.
 
-Re-run everything: `uv run python -m app.evals.answers` (about $2.60). Re-run some questions and merge them into
+Re-run everything: `uv run python -m app.evals.answers` (about $3.80). Re-run some questions and merge them into
 the saved results: `--only id1,id2`. Score the saved reports again with a different rubric: `--rejudge`.
 
 ## 6. Performance and load
@@ -327,7 +339,7 @@ Most of the time is model latency. The live view shows elapsed time, tokens and 
 
 `.github/workflows/ci.yml` runs on every push and pull request:
 
-1. **Backend:** `ruff` lint, then all 187 tests with coverage.
+1. **Backend:** `ruff` lint, then all 197 tests with coverage.
 2. **Frontend:** type check, unit tests and a production build.
 3. **Images:** build both images, start the API and web UI with Docker Compose, then smoke-test:
    - API health

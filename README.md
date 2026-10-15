@@ -164,12 +164,12 @@ From `backend/`:
 
 | What | Command |
 |---|---|
-| All unit and integration tests (187) | `uv run pytest` |
-| With line coverage (79%) | `uv run pytest --cov=app` |
+| All unit and integration tests (197) | `uv run pytest` |
+| With line coverage (80%) | `uv run pytest --cov=app` |
 | Lint | `uv run ruff check app tests scripts` |
 | Real provider calls (costs cents) | `uv run pytest -m live` |
 | Retrieval evaluation (free) | `uv run python -m app.evals.retrieval run` |
-| Answer evaluation (real models, about $2) | `uv run python -m app.evals.answers` |
+| Answer evaluation (real models, about $4) | `uv run python -m app.evals.answers` |
 | HTTP load test (needs the API running) | `uv run python scripts/load_test.py` |
 
 From `frontend/`:
