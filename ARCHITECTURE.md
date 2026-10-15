@@ -83,7 +83,7 @@ flowchart TD
 | `clarify` / `ask_user` | Writes one clarifying question with two to four answers to pick from, then pauses the run (LangGraph `interrupt`) until the user picks one or writes their own ("Other"). At most 2 per question. |
 | `redirect` | Explains the scope in the user's language. No LLM call. |
 | `coordinator` | A ReAct agent: each step returns a `thought`, an `action` (extract, analyse, clarify, decline, report) and `instructions`. At most 6 steps. It sees the curated dataset list, the agents' summaries, and what the state records as loaded and computed. A decline before any search is turned into a search of documents and the web, so an announced policy is found rather than declined. |
-| `approve_plan` | Optional (Plan mode; Auto is the default): pauses before any data is fetched. The user approves, or rejects with or without feedback, which sends the coordinator back to plan again and pause again. Cancel stops the run through the API. |
+| `approve_plan` | Optional (Plan mode; Auto is the default): pauses before any data is fetched. The user approves; or submits what should change, which sends the coordinator back to plan again (the rejected step is taken off its list, and it is told what was rejected and why) and pause again; or rejects, which stops the run through the API without resuming the graph, so the plan can be reopened and approved or revised later. |
 | `extraction` | A tool-using agent (at most 6 tool calls) that loads datasets and searches documents and the web. |
 | `analytics` | A tool-using agent (at most 12 tool calls) that computes statistics and charts. Every number is recorded as a fact F1, F2… |
 | `report_writer` | Writes a structured report (title, summary, findings, caveats, charts). Every finding and caveat cites its facts and sources. |
@@ -231,7 +231,8 @@ Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
 | PATCH, DELETE | `/api/threads/{id}` | rename or pin a conversation; delete it (a soft delete: hidden from every route, kept for `python -m app.admin restore`; 409 while a run is working) |
 | GET | `/api/threads/{id}` | a conversation's messages and runs |
 | POST | `/api/threads/{id}/messages` | ask a question: **202** with a run ID; 400 if it contains personal data; 409 if a run is active |
-| POST | `/api/runs/{id}/resume` | answer a clarifying question, or approve or revise a plan |
+| POST | `/api/runs/{id}/resume` | answer a clarifying question, or approve or revise a plan (also a rejected one, while it is the conversation's latest run) |
+| POST | `/api/runs/{id}/reject` | reject a proposed plan: the run stops, keeping the plan to reopen |
 | POST | `/api/runs/{id}/cancel` | stop a run |
 | GET | `/api/runs/{id}`, `/api/runs/{id}/events?after=N` | status, answer, totals and LLM call log; stored events |
 | WS | `/api/runs/{id}/stream?after=N` | replay events after N, then follow the run live |
@@ -363,7 +364,7 @@ erDiagram
 ```
 
 `run_events` has a unique `(run_id, seq)`. Run status is one of `running`, `awaiting_input`, `completed`,
-`failed` or `cancelled`. Each dataset is replaced as a whole when it is fetched again; its rows can be queried
+`failed`, `cancelled` or `rejected` (a plan the user turned down). Each dataset is replaced as a whole when it is fetched again; its rows can be queried
 with SQL (for example `json_extract(dimensions, '$.town')`), though the agents read whole tables into pandas.
 
 **`var/checkpoints.sqlite`**: LangGraph's checkpointer holds each thread's conversation state. That includes the
@@ -403,7 +404,7 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
 - **Controls.**
   - The model menu, with an Effort submenu, sits beside the send button.
   - The + menu has a switch per tool.
-  - The mode is Auto, or Plan (pause for plan approval).
+  - The mode is Auto, or Plan (pause for plan approval: Approve, Reject, or a change to Submit).
   - The sidebar can be hidden. It has a search box (titles and questions, searched by the API), and each
     conversation's ⋮ menu pins, renames or deletes it (keys P, R, D). ⌘⇧O or Ctrl+Shift+O starts a new one,
     and ⌘K or Ctrl+K focuses the search. The list loads 15 conversations at a time ("View more"), and the

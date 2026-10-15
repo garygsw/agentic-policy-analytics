@@ -264,12 +264,21 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
         return {"run_id": run_id, "thread_id": thread_id}
 
     # -- runs ---------------------------------------------------------------------------------------------------
+    def is_latest(session, run: Run) -> bool:
+        latest = session.scalars(select(Run).where(Run.thread_id == run.thread_id)
+                                 .order_by(Run.started_at.desc()).limit(1)).first()
+        return latest is not None and latest.id == run.id
+
     @app.post("/api/runs/{run_id}/resume", status_code=202)
     async def resume(run_id: str, body: ResumeIn):
+        """Answer a clarifying question, or decide on a plan. A rejected plan can still be approved or revised
+        later, as long as no newer question was asked in the conversation."""
         reject_personal_data(body.answer, body.feedback)
         with db() as session:
             run = get_run(session, run_id)
-            if run.status != "awaiting_input":
+            if run.status == "rejected" and not is_latest(session, run):
+                raise HTTPException(409, "a newer question was asked since this plan was rejected")
+            if run.status not in ("awaiting_input", "rejected"):
                 raise HTTPException(409, "this run is not waiting for an answer")
             kind = (run.pending or {}).get("kind")
             if kind == "clarification" and not body.answer:
@@ -282,10 +291,29 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
         manager: RunManager = app.state.manager
         # The user's reply is part of the run's record, so a replay shows the question and its answer.
         reply = body.answer if kind == "clarification" else (
-            "Plan approved" if body.approved else f"Plan rejected{': ' + body.feedback if body.feedback else ''}")
+            "Plan approved" if body.approved else (f"Revise the plan: {body.feedback}" if body.feedback
+                                                   else "Plan rejected"))
         manager.append(run_id, {"node": "user", "kind": "reply", "level": 1, "content": reply, "ts": time.time()})
         manager.start(run_id, thread_id, manager.resume_payload(value), body.options.model_dump())
         return {"run_id": run_id, "thread_id": thread_id}
+
+    @app.post("/api/runs/{run_id}/reject")
+    def reject_plan(run_id: str):
+        """Reject a proposed plan: the run stops, but keeps its plan and its place in the graph, so the plan can be
+        reopened and approved or revised later (through resume)."""
+        with db() as session:
+            run = get_run(session, run_id)
+            if run.status != "awaiting_input" or (run.pending or {}).get("kind") != "plan_approval":
+                raise HTTPException(409, "this run is not waiting for a plan decision")
+            run.status, run.finished_at = "rejected", utcnow()
+            pending = run.pending
+            session.commit()
+        manager: RunManager = app.state.manager
+        manager.append(run_id, {"node": "user", "kind": "reply", "level": 1, "content": "Plan rejected",
+                                "ts": time.time()})
+        manager.append(run_id, {"node": "run", "kind": "end", "level": 1, "status": "rejected", "pending": pending,
+                                "content": "Plan rejected", "ts": time.time()})
+        return {"run_id": run_id, "status": "rejected"}
 
     @app.post("/api/runs/{run_id}/cancel", status_code=202)
     def cancel(run_id: str):

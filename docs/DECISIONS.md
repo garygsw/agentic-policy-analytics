@@ -535,3 +535,13 @@ Changes from the first round of hands-on testing.
   - The sidebar's right edge can be dragged between 200 and 480 px. Double-click resets it, and the arrow keys move it when it has focus. The width is remembered in the browser. Narrow screens keep the slide-over sidebar at a fixed width.
   - The top bar keeps the open conversation's title even when it is not on the loaded page.
 - **Alternatives:** infinite scroll (less predictable in a short demo); loading every conversation and truncating in the browser (simpler, but the list grows without bound).
+
+## D-047 · 2026-10-15 · Plan approval: Approve, Reject (reopenable), and Submit a change
+- **Decision:** this replaces the plan card of D-037.
+  - **Approve** runs the plan.
+  - **Reject** stops the run there. The run gets the status `rejected`, keeps its plan, and the graph is not resumed, so its checkpoint still waits at the plan. **Review plan** reopens the card with Approve and Reject, and approving or revising it resumes the run. This works while the run is the conversation's latest: a new question can be asked straight after a rejection (a rejected run does not block the thread), and after that the old plan can no longer be resumed (409).
+  - **Submit** appears beside the text box once something is typed. It sends the change as feedback, and the coordinator drafts a revised plan, which pauses again for approval.
+- **Fixed on the way:**
+  - A revised plan's reasoning claimed the first extraction had "reported loading but returned no data", because the rejected step stayed in the coordinator's list of steps as if it had run. The rejected step is now removed, and the coordinator is told what was rejected and why.
+  - One plan ended in a run of filler ("...Thanks. ...End. ...Done."), a model glitch shown to the user. A validator cuts a tail of three or more such fragments, and the schema asks for at most five sentences.
+- **Why:** in testing, a rejection should stop the analysis, not start another plan. Changing the plan is a separate, explicit action.

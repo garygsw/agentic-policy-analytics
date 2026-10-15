@@ -100,7 +100,7 @@ export default function Home() {
   // While the agents wait on the user, the answer is given in the run (choices, plan buttons), not here.
   const placeholder = running ? "The agents are working…"
     : pending?.kind === "clarification" ? "Answer the question above, or cancel it"
-      : pending?.kind === "plan_approval" ? "Approve or revise the plan above"
+      : pending?.kind === "plan_approval" ? "Approve or reject the plan above"
         : runs.length ? "Ask a follow-up question…" : "Ask about Singapore's public data…";
   const title = conversation.title;
 
@@ -169,7 +169,8 @@ export default function Home() {
                   onInspect={() => setInspecting(run.id)}
                   onAnswer={(answer) => conversation.answer(run.id, answer, options)}
                   onPlan={(approved, feedback) => void conversation.decidePlan(run.id, approved, feedback, options)}
-                  onCancel={() => void cancel(run.id)} />
+                  onRejectPlan={() => void conversation.rejectPlan(run.id)}
+                  onCancel={() => void cancel(run.id)} latest={run.id === runs.at(-1)?.id} />
               ))
             )}
           </div>

@@ -81,12 +81,16 @@ def approve_plan(state: AgentState) -> dict:
     if decision.get("approved"):
         emit("approve_plan", "observation", "Plan approved by the user")
         return {"plan_approved": True}
-    # A rejection asks for another plan, shown again for approval; stopping is the user's Cancel (the API).
+    # Not approved: draft another plan, shown again for approval. (Rejecting outright, which stops the run, is
+    # handled by the API without resuming the graph.) The rejected step never ran, so it is taken off the list of
+    # steps, and the next plan is told what was rejected and why.
     feedback = (decision.get("feedback") or "").strip()
-    findings["plan_feedback"] = feedback or ("The user rejected this plan without comment: "
-                                             "propose a clearly different approach.")
-    emit("approve_plan", "observation", f"Plan rejected{': ' + feedback if feedback else ''}. Drafting another plan")
-    return {"plan_approved": False, "findings": findings}
+    findings["plan_feedback"] = (f'The user did not approve this plan (it was not carried out): "{step.instructions}". '
+                                 + (f"Their request: {feedback}" if feedback
+                                    else "Propose a clearly different approach."))
+    emit("approve_plan", "observation", f"Revising the plan: {feedback}" if feedback
+         else "Plan rejected. Drafting another plan")
+    return {"plan_approved": False, "findings": findings, "coordinator_steps": state["coordinator_steps"][:-1]}
 
 
 def decline(state: AgentState) -> dict:

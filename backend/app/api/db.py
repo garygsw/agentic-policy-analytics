@@ -51,7 +51,9 @@ class Run(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     thread_id: Mapped[str] = mapped_column(ForeignKey("threads.id"), index=True)
     question: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(20))   # running | awaiting_input | completed | failed | cancelled
+    # running | awaiting_input | completed | failed | cancelled | rejected (a plan the user turned down; it can be
+    # reopened while it is the conversation's latest run)
+    status: Mapped[str] = mapped_column(String(20))
     # answered | partial | off_topic | declined | fallback | cancelled
     outcome: Mapped[str | None] = mapped_column(String(20))
     options: Mapped[dict] = mapped_column(JSON, default=dict)

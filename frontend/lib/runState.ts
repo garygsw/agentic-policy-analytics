@@ -114,6 +114,12 @@ export function pendingOf(view: RunView): Pending | null {
   return runStatus(view, "running") === "awaiting_input" ? view.end?.pending ?? null : null;
 }
 
+/** The plan of a run whose plan the user rejected, so it can be reopened; null otherwise. */
+export function rejectedPlanOf(view: RunView): Extract<Pending, { kind: "plan_approval" }> | null {
+  const pending = view.end?.pending;
+  return runStatus(view, "running") === "rejected" && pending?.kind === "plan_approval" ? pending : null;
+}
+
 /** Seconds spent working, excluding time the run waited for the user. */
 export function elapsedSeconds(view: RunView, nowSeconds: number): number {
   const current = view.partStart === null ? 0 : Math.max(0, nowSeconds - view.partStart);

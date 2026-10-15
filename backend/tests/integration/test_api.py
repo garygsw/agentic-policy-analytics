@@ -413,3 +413,43 @@ def test_a_dataset_profile_shows_its_quality_and_provenance(tmp_path):
         assert "Live source unavailable" in profile["provenance"]["warning"]
         assert client.get("/api/datasets/not_a_dataset").status_code == 404
 
+
+def ask_with_plan(client: TestClient, thread: str) -> str:
+    run_id = client.post(f"/api/threads/{thread}/messages",
+                         json={"text": QUESTION, "require_plan_approval": True}).json()["run_id"]
+    paused = wait(client, run_id)
+    assert (paused["status"], paused["pending"]["kind"]) == ("awaiting_input", "plan_approval")
+    return run_id
+
+
+def test_a_rejected_plan_stops_the_run_and_can_be_approved_later(tmp_path):
+    with client_for(ANSWERED, tmp_path) as client:
+        thread = client.post("/api/threads").json()["id"]
+        run_id = ask_with_plan(client, thread)
+        assert client.post(f"/api/runs/{run_id}/reject").json()["status"] == "rejected"
+        rejected = client.get(f"/api/runs/{run_id}").json()
+        assert rejected["status"] == "rejected" and rejected["pending"]["kind"] == "plan_approval"  # kept to reopen
+        end = client.get(f"/api/runs/{run_id}/events").json()[-1]
+        assert (end["kind"], end["status"], end["pending"]["plan"]) == ("end", "rejected", "please extract")
+        assert client.post(f"/api/runs/{run_id}/reject").status_code == 409  # already rejected
+        # Reopened and approved: the run continues from the plan.
+        assert client.post(f"/api/runs/{run_id}/resume", json={"approved": True}).status_code == 202
+        assert (wait(client, run_id)["status"], wait(client, run_id)["outcome"]) == ("completed", "answered")
+        replies = [e["content"] for e in client.get(f"/api/runs/{run_id}/events").json() if e["kind"] == "reply"]
+        assert replies == ["Plan rejected", "Plan approved"]
+
+
+def test_after_a_rejected_plan_a_new_question_can_be_asked_and_the_old_plan_is_closed(tmp_path):
+    replies = {**ANSWERED, "TriageDecision": [IN_SCOPE, IN_SCOPE],
+               "CoordinatorStep": steps("extract", "extract", "analyse", "report"),
+               "StandaloneQuestion": [StandaloneQuestion(question=QUESTION)]}  # the second message is a follow-up
+    with client_for(replies, tmp_path) as client:
+        thread = client.post("/api/threads").json()["id"]
+        run_id = ask_with_plan(client, thread)
+        client.post(f"/api/runs/{run_id}/reject")
+        new_run = client.post(f"/api/threads/{thread}/messages", json={"text": QUESTION}).json()["run_id"]
+        assert wait(client, new_run)["outcome"] == "answered"  # not busy: a rejected plan does not block the thread
+        stale = client.post(f"/api/runs/{run_id}/resume", json={"approved": True})
+        assert stale.status_code == 409 and "newer question" in stale.json()["detail"]
+        assert client.post(f"/api/runs/{new_run}/reject").status_code == 409  # not waiting for a plan
+

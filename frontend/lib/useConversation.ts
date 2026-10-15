@@ -15,7 +15,7 @@ export interface RunEntry {
   detail: RunDetail | null; // the answer and LLM call log, loaded when the run ends or pauses
 }
 
-const FINISHED = new Set<RunStatus>(["completed", "failed", "cancelled"]);
+const FINISHED = new Set<RunStatus>(["completed", "failed", "cancelled", "rejected"]);
 
 export function displayedStatus(run: RunEntry): RunStatus {
   if (run.live) return "running";
@@ -178,6 +178,19 @@ export function useConversation() {
     }
   }, [resumed]);
 
+  /** Turn a proposed plan down: the run stops, keeping the plan so it can be reopened. */
+  const rejectPlan = useCallback(async (runId: string) => {
+    setError(null);
+    try {
+      await api.rejectPlan(runId);
+      const events = await api.events(runId);
+      update(runId, (run) => ({ ...run, status: "rejected", view: applyEvents(run.view, events) }));
+      loadDetail(runId);
+    } catch (e) {
+      setError(messageOf(e));
+    }
+  }, [update, loadDetail]);
+
   const cancel = useCallback(async (runId: string) => {
     try {
       const result = await api.cancel(runId);
@@ -197,6 +210,6 @@ export function useConversation() {
 
   return {
     title, threads, hasMore, showMore, threadId, runs, error, setError, search, setSearch, openThread, newThread,
-    updateThread, deleteThread, ask, answer, decidePlan, cancel, onEvent,
+    updateThread, deleteThread, ask, answer, decidePlan, rejectPlan, cancel, onEvent,
   };
 }

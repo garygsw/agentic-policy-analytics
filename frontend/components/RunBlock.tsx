@@ -4,7 +4,7 @@ import Markdown from "react-markdown";
 
 import { markdownUrl, pdfUrl } from "@/lib/api";
 import { formatCost, formatElapsed, formatTokens } from "@/lib/format";
-import { checkLabel, draftStage, elapsedSeconds, pendingOf, visibleSteps } from "@/lib/runState";
+import { checkLabel, draftStage, elapsedSeconds, pendingOf, rejectedPlanOf, visibleSteps } from "@/lib/runState";
 import type { RunDetail } from "@/lib/types";
 import { displayedStatus, type RunEntry } from "@/lib/useConversation";
 
@@ -18,18 +18,21 @@ interface Props {
   now: number;
   onInspect: () => void;
   onAnswer: (answer: string) => Promise<boolean>; // reply to a clarifying question; false: refused
-  onPlan: (approved: boolean, feedback: string) => void;
+  onPlan: (approved: boolean, feedback: string) => void; // approve, or ask for a plan revised by the feedback
+  onRejectPlan: () => void; // turn the plan down: the run stops, and the plan can be reopened
   onCancel: () => void;
+  latest: boolean; // the conversation's latest run: only its rejected plan can be reopened
 }
 
 /** One question and everything the agents did for it. */
-export function RunBlock({ run, verbosity, now, onInspect, onAnswer, onPlan, onCancel }: Props) {
+export function RunBlock({ run, verbosity, now, onInspect, onAnswer, onPlan, onRejectPlan, onCancel, latest }: Props) {
   const status = displayedStatus(run);
   const working = status === "running";
   const [stepsOpen, setStepsOpen] = useState<boolean | null>(null); // null: open while working, closed after
   const open = stepsOpen ?? working;
   const steps = visibleSteps(run.view, verbosity);
   const pending = pendingOf(run.view);
+  const rejectedPlan = rejectedPlanOf(run.view);
   const draft = run.view.drafts.at(-1);
   const usage = run.view.usage;
   const finished = status === "completed" || status === "failed" || status === "cancelled";
@@ -54,7 +57,11 @@ export function RunBlock({ run, verbosity, now, onInspect, onAnswer, onPlan, onC
           onCancel={onCancel} />
       )}
       {pending?.kind === "plan_approval" && (
-        <PlanApproval plan={pending.plan} reasoning={pending.reasoning} onDecide={onPlan} onCancel={onCancel} />
+        <PlanApproval plan={pending.plan} reasoning={pending.reasoning} onDecide={onPlan} onReject={onRejectPlan} />
+      )}
+      {rejectedPlan && (
+        <RejectedPlan plan={rejectedPlan.plan} reasoning={rejectedPlan.reasoning} canReopen={latest}
+          onDecide={onPlan} />
       )}
 
       {working && draft && (
@@ -150,9 +157,10 @@ function ClarifyingQuestion({ question, choices, onAnswer, onCancel }: {
   );
 }
 
-/** Approve the plan, ask for a revised or different one (it comes back here for approval), or cancel. */
-function PlanApproval({ plan, reasoning, onDecide, onCancel }: {
-  plan: string; reasoning: string; onDecide: (approved: boolean, feedback: string) => void; onCancel: () => void;
+/** A proposed plan: approve it, reject it (the run stops; the plan can be reopened), or say what should change and
+ * submit, which brings a revised plan back here for approval. */
+function PlanApproval({ plan, reasoning, onDecide, onReject }: {
+  plan: string; reasoning: string; onDecide: (approved: boolean, feedback: string) => void; onReject: () => void;
 }) {
   const [feedback, setFeedback] = useState("");
   return (
@@ -160,20 +168,42 @@ function PlanApproval({ plan, reasoning, onDecide, onCancel }: {
       <p className="plan-title">Approve this plan before any data is fetched?</p>
       <p>{plan}</p>
       {reasoning && <p className="muted small">{reasoning}</p>}
-      <textarea
-        aria-label="What should change"
-        placeholder="Optional: what should change?"
-        value={feedback}
-        onChange={(e) => setFeedback(e.target.value)}
-        rows={2}
-      />
       <div className="row">
         <button className="primary" onClick={() => onDecide(true, "")}>Approve</button>
-        <button onClick={() => onDecide(false, feedback.trim())}>
-          {feedback.trim() ? "Revise the plan" : "Suggest another plan"}
-        </button>
-        <button className="quiet" onClick={onCancel}>Cancel</button>
+        <button onClick={onReject}>Reject</button>
       </div>
+      <form className="plan-change" onSubmit={(e) => {
+        e.preventDefault();
+        if (feedback.trim()) onDecide(false, feedback.trim());
+      }}>
+        <textarea aria-label="What should change" placeholder="Or say what should change, to get a revised plan"
+          value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={2}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              e.currentTarget.form?.requestSubmit();
+            }
+          }} />
+        {feedback.trim() && <button type="submit" className="primary">Submit</button>}
+      </form>
+    </div>
+  );
+}
+
+/** A plan the user rejected. The run stopped there; the plan can be reviewed again and approved or revised, as long
+ * as no newer question was asked in the conversation. */
+function RejectedPlan({ plan, reasoning, canReopen, onDecide }: {
+  plan: string; reasoning: string; canReopen: boolean; onDecide: (approved: boolean, feedback: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (open && canReopen) {
+    return <PlanApproval plan={plan} reasoning={reasoning} onDecide={onDecide} onReject={() => setOpen(false)} />;
+  }
+  return (
+    <div className="plan rejected">
+      <span className="badge">Plan rejected</span>
+      <span className="muted small">{canReopen ? "The analysis stopped here." : "A newer question was asked since."}</span>
+      {canReopen && <button className="link" onClick={() => setOpen(true)}>Review plan</button>}
     </div>
   );
 }

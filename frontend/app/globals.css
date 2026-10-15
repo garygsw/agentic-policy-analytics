@@ -200,7 +200,11 @@ select { background: var(--panel); border: 1px solid var(--border); border-radiu
 
 .plan { border: 1px solid var(--accent); border-radius: 12px; padding: 0.75rem 1rem; margin: 0.75rem 0; background: var(--panel); }
 .plan-title { font-weight: 600; margin-top: 0; }
-.plan textarea { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem; background: var(--bg); resize: vertical; }
+.plan-change { display: flex; align-items: flex-end; gap: 0.5rem; margin-top: 0.6rem; }
+.plan-change textarea { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem; background: var(--bg); resize: vertical; }
+.plan-change textarea:focus { outline: 0; border-color: var(--accent); }
+.plan-change .primary { padding: 0.35rem 0.9rem; border-radius: 8px; }
+.plan.rejected { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; border-color: var(--border); }
 .row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
 .row button, .primary { padding: 0.35rem 0.9rem; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); }
 /* .row button would otherwise win (it is more specific) and paint the primary button white on white. */

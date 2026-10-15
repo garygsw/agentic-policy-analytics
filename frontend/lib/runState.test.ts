@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { formatCost, formatElapsed, formatTokens, percent } from "./format";
 import {
-  applyEvents, checkLabel, draftStage, elapsedSeconds, emptyRun, pendingOf, runStatus, visibleSteps,
+  applyEvents, checkLabel, draftStage, elapsedSeconds, emptyRun, pendingOf, rejectedPlanOf, runStatus, visibleSteps,
 } from "./runState";
 import type { TraceEvent } from "./types";
 
@@ -63,6 +63,21 @@ describe("run view", () => {
     expect(runStatus(resumed, "awaiting_input")).toBe("running");
     expect(pendingOf(resumed)).toBeNull();
     expect(runStatus(emptyRun(), "running")).toBe("running");
+  });
+
+  it("keeps a rejected plan to reopen, until the run carries on", () => {
+    seq = 0;
+    const plan = { kind: "plan_approval" as const, plan: "Load ICT employment", reasoning: "" };
+    const paused = applyEvents(emptyRun(), [ev("end", { status: "awaiting_input", pending: plan })]);
+    expect(rejectedPlanOf(paused)).toBeNull();
+    const rejected = applyEvents(paused, [ev("reply", { node: "user", content: "Plan rejected" }),
+      ev("end", { status: "rejected", pending: plan })]);
+    expect(runStatus(rejected, "awaiting_input")).toBe("rejected");
+    expect(pendingOf(rejected)).toBeNull(); // no longer waiting: the chat bar is free
+    expect(rejectedPlanOf(rejected)).toEqual(plan);
+    const approved = applyEvents(rejected, [ev("reply", { node: "user", content: "Plan approved" })]);
+    expect(rejectedPlanOf(approved)).toBeNull();
+    expect(runStatus(approved, "rejected")).toBe("running");
   });
 
   it("counts working time only, not the time spent waiting for the user", () => {

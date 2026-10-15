@@ -1,5 +1,6 @@
 """Graph state shared by all agents. It is checkpointed per conversation thread, so any API request can
 resume a conversation from its last checkpoint."""
+import re
 from typing import Annotated, Any, Literal, TypedDict
 
 from langchain_core.messages import AnyMessage
@@ -31,14 +32,25 @@ class TriageResult(TriageDecision):
     decided_by: str = "llm"  # set by our code, never by the model: local | jev | llm
 
 
+# Three or more trailing fragments of one to four words, each after an ellipsis: "...Thanks. ...End. ...Done."
+FILLER_TAIL = re.compile(r"(?:\s*\.{3}\s*[A-Za-z]+(?: [A-Za-z]+){0,3}[.!]?){3,}\s*$")
+
+
 class CoordinatorStep(BaseModel):
     """One ReAct step of the coordinator: reason about progress, then choose the next action."""
     headline: str = Field(default="", description="Five to eight words for a live status line, e.g. "
                                                   "'Loading tech employment and GDP data'.")
     thought: str = Field(description="Reasoning about what is known so far and what is missing.")
     action: Literal["extract", "analyse", "clarify", "decline", "report"]
-    instructions: str = Field(description="Task for the chosen agent. For clarify: what is unclear. For decline: "
-                                          "the explanation addressed to the user.")
+    instructions: str = Field(description="Task for the chosen agent, in at most five sentences. For clarify: what "
+                                          "is unclear. For decline: the explanation addressed to the user.")
+
+    @field_validator("thought", "instructions")
+    @classmethod
+    def _drop_filler_tail(cls, text: str) -> str:
+        """A model occasionally runs on after its text with filler ("...Done. ...OK. ...End."). The plan is shown
+        to the user, so a tail of three or more such fragments is cut."""
+        return FILLER_TAIL.sub("", text).rstrip()
 
 
 class Claim(BaseModel):

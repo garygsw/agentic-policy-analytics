@@ -330,7 +330,8 @@ def test_rejecting_the_plan_brings_another_plan_to_approve():
     again = resume(graph, {"approved": False})  # rejected without a comment
     assert again.interrupts[0].value["kind"] == "plan_approval" and workers.calls == []  # a new plan, paused
     replanning = [m for key, m in llm.calls if key == "CoordinatorStep"][1][0].content
-    assert "propose a clearly different approach" in replanning
+    assert "Propose a clearly different approach" in replanning and "not carried out" in replanning
+    assert "1. extract: please extract" not in replanning  # the rejected step is not reported as done
     state = resume(graph, {"approved": True}).values
     assert state["outcome"] == "answered" and workers.calls == ["extract", "analyse"]
 
@@ -409,4 +410,17 @@ def test_short_answers_are_translated_unless_a_number_changes():
     failed = make_localize(FakeLLMs({"text": [RuntimeError("provider down")]}))(english)["answer"]
     assert failed.startswith("Prices rose 3.5%") and "Translation unavailable" in failed
     assert make_localize(FakeLLMs({}))({"language": "en", "answer": "Prices rose."}) == {}  # nothing to do
+
+
+def test_filler_after_a_plan_is_cut():
+    """A model sometimes runs on with filler; the plan is shown to the user, so the tail is cut and the rest kept."""
+    rambling = ("Load ICT employment for 2019 onwards. ...Period: 2019 to latest year. ...Leave other choices to you. "
+                "...Thanks. ...End. ...Done. ...OK. ...End of instructions. ...Done.")
+    step = CoordinatorStep(thought="Nothing loaded yet. ...Go. ...Proceed. ...Now.", action="extract",
+                           instructions=rambling)
+    assert step.instructions == ("Load ICT employment for 2019 onwards. ...Period: 2019 to latest year. "
+                                 "...Leave other choices to you.")
+    assert step.thought == "Nothing loaded yet."
+    plain = "Compare ICT employment with GDP. ...Use 2020 to 2024."  # fewer than three fragments: kept as written
+    assert CoordinatorStep(thought="t", action="analyse", instructions=plain).instructions == plain
 

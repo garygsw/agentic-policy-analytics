@@ -162,7 +162,8 @@ Questions that show the error handling:
 In the chat bar:
 - The **+** menu has a switch for each optional tool.
 - **Mode** is **Auto** (the default) or **Plan**, which pauses for your approval before any data is fetched.
-  Rejecting a plan brings back a different one, revised to your feedback if you gave any. Cancel stops the run.
+  The plan card has **Approve** and **Reject**. Reject stops the run, and **Review plan** reopens it later, with
+  both buttons again. Typing what should change shows **Submit**, which brings back a revised plan to approve.
 - The model menu beside the send button sets the model and its effort.
 
 **Detail** sets how much of the trace you see: Normal, Thinking or Verbose. In a report, clicking a citation

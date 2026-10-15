@@ -56,6 +56,7 @@ export const api = {
     request<{ run_id: string }>(`/api/runs/${runId}/resume`, post({ answer, options })),
   decidePlan: (runId: string, approved: boolean, feedback: string, options: RunOptions) =>
     request<{ run_id: string }>(`/api/runs/${runId}/resume`, post({ approved, feedback, options })),
+  rejectPlan: (runId: string) => request<{ status: string }>(`/api/runs/${runId}/reject`, post()),
   cancel: (runId: string) => request<{ status: string }>(`/api/runs/${runId}/cancel`, post()),
   run: (runId: string) => request<RunDetail>(`/api/runs/${runId}`),
   events: (runId: string, after = 0) => request<TraceEvent[]>(`/api/runs/${runId}/events?after=${after}`),

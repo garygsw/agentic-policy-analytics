@@ -38,7 +38,8 @@ export interface ContextMessage {
   truncated?: number; // characters left out of `content`
 }
 
-export type RunStatus = "running" | "awaiting_input" | "completed" | "failed" | "cancelled";
+// "rejected": the user turned the plan down; it can be reopened while it is the conversation's latest run.
+export type RunStatus = "running" | "awaiting_input" | "completed" | "failed" | "cancelled" | "rejected";
 
 export type Pending =
   | { kind: "clarification"; question: string; choices?: string[] } // answers the user can pick, or write their own
