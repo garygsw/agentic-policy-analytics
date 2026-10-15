@@ -314,7 +314,7 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Raising the step limit: this makes runs slower and costlier without fixing the cause.
 
 ## D-030 · 2026-10-14 · Evaluations: retrieval, answers and LLM-as-judge
-- **Decision:** The evaluations are implemented in the project itself (`app/evals/`), using standard metrics. Results are saved in `backend/data/eval/`, and method and results are described in `docs/EVALUATION.md`.
+- **Decision:** The evaluations are implemented in the project itself (`app/evals/`), using standard metrics. Results are saved in `backend/data/eval/`, and method and results are described in `TESTING.md` (first written as `docs/EVALUATION.md`).
   - **Retrieval** is scored with recall@1, @5 and @10 and MRR@10, on a golden set of 50 questions generated from sampled passages. The source document is the relevant result.
   - **Answers** are scored end to end on 11 questions:
     - outcome against the expected one
@@ -344,7 +344,7 @@ Each entry records the date, the decision, the alternatives considered and the r
   - **Report check rules.** The check scales a fact by its unit ("S$5,845.3 million" for a fact of 5,845.3 in S$ million), ignores the sign ("fell 6.8%" for −6.8), and accepts chart IDs as citations.
   - **Coordinator's view of progress.** The coordinator's progress view now includes what is recorded in the state: the datasets loaded and the number of facts computed. Both prompts say that extraction never returns figures.
   - **Reranker.** Cross-encoder reranking is off by default (`RAG_RERANK=false`; available per search with `/api/search?rerank=true`).
-- **Measured** (answer evaluation, before and after): judge faithfulness 3.62 → 4.38 and caveats 3.88 → 4.75. Outcomes as expected 11/11 → 10/11; the miss was COE ending "partial" on reviewer feedback, after it answered in the two previous runs. Numbers grounded: 100% in both. Cost per run: unchanged. Reranking: MRR 0.74 without it versus 0.64 with it, and 0.5 s less per search (`docs/EVALUATION.md`).
+- **Measured** (answer evaluation, before and after): judge faithfulness 3.62 → 4.38 and caveats 3.88 → 4.75. Outcomes as expected 11/11 → 10/11; the miss was COE ending "partial" on reviewer feedback, after it answered in the two previous runs. Numbers grounded: 100% in both. Cost per run: unchanged. Reranking: MRR 0.74 without it versus 0.64 with it, and 0.5 s less per search (`TESTING.md`).
 - **Why:** numbers were already guaranteed by code; prose was not. Requiring citations on every statement and checking them in code extends the same guarantee to caveats. The prompt rule covers what code cannot check: whether a sentence means what its sources say.
 - **Alternatives:**
   - A claim-by-claim LLM verifier: deferred. It adds a call to every question, and the cheaper changes closed most of the gap.
@@ -365,4 +365,12 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Running ingestion inside the API process: one container fewer, but a crawl would compete with live requests. A separate service also matches D-006.
   - Third-party actions for building and publishing images: the plain `docker` CLI does the same with fewer dependencies to trust.
 - **Limit:** the web image fixes the API address when it is built (`NEXT_PUBLIC_API_URL`, default `http://localhost:8000`), so it suits running on one machine. Hosting it elsewhere means rebuilding with the right address.
+
+## D-033 · 2026-10-15 · The internal source is a synthetic Excel workbook, not a mock JSON API
+- **Decision:** The "internal system" is the synthetic workbook `backend/data/internal/tech_talent_programmes.xlsx`, read through the same source interface as the public APIs. This revises D-005 and D-014, which planned a mock JSON API.
+- **Why:**
+  - The brief's formats are already covered: CSV (data.gov.sg downloads), Excel (the workbook) and JSON APIs (data.gov.sg, SingStat).
+  - The workbook carries the problems an internal export typically has (a duplicate, a missing value, a non-numeric value, total rows), and the cleaner reports them.
+  - If the file is missing, the source fails like a live API and the same fallback applies.
+- **Alternatives:** A small JSON API serving the same data, with a failure switch. It is closer to a real internal system, but adds code without showing anything new, and the time went to documentation.
 

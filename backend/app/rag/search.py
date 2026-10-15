@@ -6,7 +6,7 @@ optionally reranked by a cross-encoder.
 Keyword search finds exact terms (scheme names, acronyms, figures); vector search finds paraphrases. Reciprocal
 rank fusion combines the two rank lists without having to compare their incompatible scores. The cross-encoder
 reranker reads query and passage together; it is off by default because, on the retrieval evaluation, it ranked
-worse than the fused lists and added half a second per search (docs/EVALUATION.md).
+worse than the fused lists and added half a second per search (TESTING.md).
 """
 import argparse
 from dataclasses import dataclass, field

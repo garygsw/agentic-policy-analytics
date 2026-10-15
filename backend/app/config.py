@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     ingest_limit_per_source: int = 500
 
     # Cross-encoder reranking of search results. Off: on the retrieval evaluation it ranked worse than hybrid
-    # search alone and added about half a second per search (see docs/EVALUATION.md).
+    # search alone and added about half a second per search (see TESTING.md).
     rag_rerank: bool = False
 
 
