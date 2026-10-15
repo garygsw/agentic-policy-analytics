@@ -241,6 +241,12 @@ Interactive documentation is at `http://localhost:8000/docs` when the API runs.
 streams trace events, each stored with a per-run sequence number before it is sent. So a browser that connects
 late, reconnects or reopens history replays the same events and sees the same view.
 
+**Runs survive a restart.** A run's worker thread dies if the API stops. When the API starts, any run still marked
+"running" continues from its last checkpoint (LangGraph saves one after every step), so only the step that was cut
+off runs again; the trace notes "Server restarted: continuing from the last saved step". A run is continued once:
+if it is cut off again, or nothing is left to run, it ends as failed and asks the user to try again. Stop also
+closes a run whose worker is gone.
+
 **Trace events** (`graph/events.py`) have a level: 1 Normal, 2 Thinking, 3 Verbose. The UI filters them by the user's
 chosen verbosity.
 
@@ -409,7 +415,9 @@ What this design would need in order to serve many users:
   database.
 - **Background runs.** These are threads inside the API process. At scale, a job queue (e.g. Celery or Arq on
   Redis) with separate workers would replace them, and the WebSocket would follow events from the database or
-  Redis pub/sub. The event model would not change.
+  Redis pub/sub. The event model would not change. Restart recovery assumes one API process; with several, each
+  run would need a lease (a heartbeat the owning worker renews) so a process only continues runs whose owner
+  has stopped.
 - **Cost control:**
   - a fast model for small tasks
   - the local triage classifier

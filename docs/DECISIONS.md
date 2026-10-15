@@ -484,3 +484,15 @@ Changes from the first round of hands-on testing.
   - **A shared access key** behind a login screen, setting a cookie (2–3 hours). It stops strangers from spending the LLM budget, but there is no notion of users.
   - **Local accounts** with hashed passwords, per-user conversations and an admin role (about a day). It is real authentication and authorisation, but with passwords stored here rather than single sign-on.
   - **Single sign-on** through an identity server (Keycloak in Compose, or a cloud directory). This is the production answer, but too heavy for reviewers to run.
+
+## D-041 · 2026-10-15 · Runs cut off by a restart continue from their last step
+- **What happened:** during QA the API container was rebuilt while a run was searching the web. Runs execute in worker threads inside the API process, so the run died. The database still said "running", nothing ever closed it, and the page waited for events that never came. Stop could not end it either: it sets a flag that only a live worker reads.
+- **Decision:**
+  - When the API starts, every run still marked "running" continues from its last LangGraph checkpoint. The step that was cut off runs again from its start; earlier steps do not. The trace records "Server restarted: continuing from the last saved step".
+  - A run is continued once. If it is cut off again, or its checkpoint has nothing left to run, it ends as failed with "The server restarted while this analysis was running. Please ask again." A run that kills the server cannot loop.
+  - Stop closes a running run directly when no worker in this process is executing it.
+  - Verified on the stuck run: after the API restarted, it continued from its extraction step and finished with a report about two and a half minutes later.
+- **Alternatives:**
+  - **End such runs as failed** (simplest), and the user asks again: all the work done before the restart is lost.
+  - **Mark them interrupted, with a Continue button:** nothing spends money without the user, but it needs more UI, and in practice the user wants the answer.
+- **Limits:** this assumes one API process, which runs every run. With several processes or separate workers, each run would need a lease renewed by its worker, so another process continues only runs whose owner has stopped. The usage of the part of a run that was cut off is in the LLM call log but not in the run's totals.

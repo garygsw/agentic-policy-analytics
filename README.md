@@ -203,7 +203,7 @@ method and all results are in [TESTING.md](TESTING.md).
 
 | Choice | Why |
 |---|---|
-| **LangGraph** for the agents | An explicit graph you can draw and test route by route. Checkpoints make requests stateless and let a run pause for the user (clarifying questions, plan approval) and resume later, even after a restart. |
+| **LangGraph** for the agents | An explicit graph you can draw and test route by route. Checkpoints make requests stateless and let a run pause for the user (clarifying questions, plan approval) and resume later, even after a restart. A run cut off by a restart continues from its last step. |
 | **ReAct coordinator and tool-using agents** | The coordinator decides each step from what has been found, so it can retry, change approach, ask, or decline. A fixed pipeline cannot. |
 | **pandas computes; the model never does** | Numbers are the part users must be able to trust. Every number is a computed fact with an ID, and the report check enforces it in code. |
 | **OpenAI primary, Anthropic fallback** | Two independent providers at the same price tier, behind one interface. Each request can pick the model and its reasoning effort. |

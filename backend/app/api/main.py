@@ -94,6 +94,7 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
         app.state.graph = graph or build_graph(checkpointer=sqlite_checkpointer(CHECKPOINTS))
         app.state.manager = RunManager(app.state.graph, app.state.sessions)
         app.state.background = set()  # title tasks, kept referenced until they finish
+        app.state.manager.recover()  # runs cut off when the server last stopped carry on from their last step
         if preload_models:
             threading.Thread(target=warm_up, daemon=True).start()
             threading.Thread(target=retitle_old_threads, args=(app.state.sessions, title_llm), daemon=True).start()
@@ -285,7 +286,8 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
     def cancel(run_id: str):
         with db() as session:
             run = get_run(session, run_id)
-            if run.status == "awaiting_input":  # nothing is executing: close the run directly
+            # Nothing is executing (the run is paused, or its worker is gone): close the run directly.
+            if run.status == "awaiting_input" or (run.status == "running" and run_id not in app.state.manager.tasks):
                 run.status, run.finished_at = "cancelled", utcnow()
                 session.commit()
                 app.state.manager.append(run_id, {"node": "run", "kind": "end", "level": 1, "status": "cancelled",
@@ -343,7 +345,7 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
             return
         try:
             await ws.close()
-        except RuntimeError:
+        except (RuntimeError, WebSocketDisconnect):
             pass  # the browser closed it first
 
     @app.get("/api/runs/{run_id}/report.html", response_class=HTMLResponse)

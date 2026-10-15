@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from app.admin import deleted_threads, restore
 from app.api.db import LLMCallRecord, Run, RunEvent, make_session_factory
 from app.api.main import create_app, retitle_old_threads
-from app.api.runs import draft_view
+from app.api.runs import RESTART_NOTE, draft_view
 from app.api.titles import Title, short_question, write_title
 from app.graph.build import Deps, build_graph
 from app.graph.checkpoint import serializer
@@ -288,4 +288,67 @@ def test_titles_fall_back_to_the_question_cut_at_a_word():
     def failing(tier, schema=None):
         raise RuntimeError("provider down")
     assert write_title(question, failing) == short_question(question)
+
+
+class Killed(BaseException):
+    """Stands in for the server stopping: not an Exception, so nothing in the run catches it."""
+
+
+class DyingWorkers(FakeWorkers):
+    """Extraction is cut off the first `deaths` times it runs."""
+
+    def __init__(self, deaths: int):
+        super().__init__()
+        self.deaths = deaths
+
+    def extract(self, *args, **kwargs):
+        if self.deaths:
+            self.deaths -= 1
+            self.calls.append("cut off")
+            raise Killed()
+        return super().extract(*args, **kwargs)
+
+
+@pytest.mark.parametrize("deaths", [1, 2])
+def test_a_run_cut_off_by_a_restart_continues_from_its_last_step(tmp_path, deaths):
+    llm, workers = Script(ANSWERED), DyingWorkers(deaths)
+    graph = build_graph(Deps(llm=llm, workers=workers, decide=llm_decider(llm)),
+                        checkpointer=InMemorySaver(serde=serializer()))
+    sessions = make_session_factory(f"sqlite:///{tmp_path / 'app.sqlite'}")
+
+    def server() -> TestClient:  # a new API process on the same databases
+        return TestClient(create_app(graph=graph, sessions=sessions, preload_models=False, llm=llm))
+
+    def until_cut_off(client: TestClient, run_id: str) -> None:
+        deadline = time.time() + 15
+        while run_id in client.app.state.manager.tasks and time.time() < deadline:
+            time.sleep(0.05)
+        assert client.get(f"/api/runs/{run_id}").json()["status"] == "running"  # its worker is gone
+
+    with server() as client:
+        thread = client.post("/api/threads").json()["id"]
+        run_id = client.post(f"/api/threads/{thread}/messages", json={"text": QUESTION}).json()["run_id"]
+        until_cut_off(client, run_id)
+    for _ in range(deaths - 1):  # continued after a restart, then cut off again
+        with server() as client:
+            until_cut_off(client, run_id)
+    with server() as client:
+        run = wait(client, run_id)
+        events = [e for e in client.get(f"/api/runs/{run_id}/events").json() if e["node"] == "run"]
+    if deaths == 1:  # continued from the step that was cut off; the steps before it did not run again
+        assert (run["status"], run["outcome"]) == ("completed", "answered")
+        assert workers.calls == ["cut off", "extract", "analyse"]
+        assert [e["content"] for e in events if e.get("restart")] == [RESTART_NOTE]
+    else:  # cut off again after continuing once: it ends instead of trying forever
+        assert run["status"] == "failed" and workers.calls == ["cut off", "cut off"]
+        assert events[-1]["content"].startswith("The server restarted while this analysis was running")
+
+
+def test_stop_closes_a_run_whose_worker_is_gone(answered):
+    client, _, run_id, _ = answered
+    with client.app.state.sessions() as session:
+        session.get(Run, run_id).status = "running"  # as if its worker had stopped without closing it
+        session.commit()
+    assert client.post(f"/api/runs/{run_id}/cancel").json()["status"] == "cancelled"
+    assert client.get(f"/api/runs/{run_id}").json()["status"] == "cancelled"
 

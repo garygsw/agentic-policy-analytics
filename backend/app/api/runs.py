@@ -23,6 +23,7 @@ from app.llm.ledger import Ledger
 from app.report.export import export_markdown, export_pdf
 
 TERMINAL = {"completed", "failed", "cancelled"}
+RESTART_NOTE = "Server restarted: continuing from the last saved step"
 DRAFT_FLUSH_CHARS = 120  # a draft snapshot is stored after about this many new characters, not every token
 
 
@@ -79,6 +80,32 @@ class RunManager:
                             payload=event, ts=event.get("ts", time.time())))
             db.commit()
         self._notify(run_id)
+
+    # -- after a restart -----------------------------------------------------------------------------------------
+    def recover(self) -> list[str]:
+        """Runs still marked "running" when the API starts lost their worker thread when the server stopped.
+        Each continues from its last checkpoint (LangGraph saves one after every step), so only the step that was
+        cut off runs again. A run is continued once: if it is cut off again, or there is nothing to continue
+        from, it ends as failed. Returns the IDs of the runs continued. (This assumes one API process, which
+        runs every run; several processes would need a lease on each run instead.)"""
+        with self.sessions() as db:
+            orphans = db.scalars(select(Run).where(Run.status == "running")).all()
+            continued_before = {run.id: any(e.payload.get("restart") for e in db.scalars(
+                select(RunEvent).where(RunEvent.run_id == run.id, RunEvent.node == "run"))) for run in orphans}
+        continued = []
+        for run in orphans:
+            pending = self.graph.get_state({"configurable": {"thread_id": run.thread_id}}).next
+            if continued_before[run.id] or not pending:
+                self._finish(run.id, status="failed", ledger=Ledger(), error="Cut off by a server restart")
+                self.append(run.id, {"node": "run", "kind": "end", "level": 1, "status": "failed", "ts": time.time(),
+                                     "content": "The server restarted while this analysis was running. "
+                                                "Please ask again."})
+                continue
+            self.append(run.id, {"node": "run", "kind": "observation", "level": 1, "content": RESTART_NOTE,
+                                 "restart": True, "ts": time.time()})
+            self.start(run.id, run.thread_id, None, run.options or {})  # no input: carry on from the checkpoint
+            continued.append(run.id)
+        return continued
 
     # -- waiting for events (used by WebSockets) --------------------------------------------------------------
     def signal(self, run_id: str) -> asyncio.Event:
