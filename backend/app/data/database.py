@@ -9,8 +9,8 @@ This is the cache in the load order (fresh cache -> live source -> stale cache -
 committed snapshots stay as files in the repository, so a fresh install works offline.
 """
 import datetime as dt
-import functools
 import math
+import threading
 
 import pandas as pd
 from sqlalchemy import JSON, Float, ForeignKey, Integer, LargeBinary, String, delete, insert, select
@@ -56,12 +56,20 @@ class RawDownload(Base):
     retrieved_at: Mapped[dt.datetime] = mapped_column()
 
 
-@functools.cache
+_sessions: dict[str | None, sessionmaker] = {}
+_sessions_lock = threading.Lock()
+
+
 def dataset_sessions(url: str | None = None) -> sessionmaker:
-    """Sessions on the dataset tables (created if missing). One engine per database, shared by every store."""
-    engine = sqlite_engine(url)
-    Base.metadata.create_all(engine)
-    return sessionmaker(engine, expire_on_commit=False)
+    """Sessions on the dataset tables (created if missing). One engine per database, shared by every store.
+    Runs start in parallel threads, so creating the tables is done once, under a lock: two threads creating
+    them at the same moment would both try `CREATE TABLE`."""
+    with _sessions_lock:
+        if url not in _sessions:
+            engine = sqlite_engine(url)
+            Base.metadata.create_all(engine)
+            _sessions[url] = sessionmaker(engine, expire_on_commit=False)
+        return _sessions[url]
 
 
 def raw_format(data: bytes) -> str:

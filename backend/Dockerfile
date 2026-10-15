@@ -3,6 +3,10 @@
 # The code keeps the repository layout (/app/backend), so runtime state lands in /app/var: mount a volume there
 # to keep the document index, caches, models and conversations between runs.
 FROM python:3.12.14-slim-bookworm
+# Links the published image to its repository in the GitHub Container Registry.
+LABEL org.opencontainers.image.source="https://github.com/garygsw/agentic-policy-analytics" \
+      org.opencontainers.image.description="Agentic policy analytics: API and ingest service" \
+      org.opencontainers.image.licenses="MIT"
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.21 /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PYTHONUNBUFFERED=1

@@ -178,6 +178,17 @@ def test_live_load_is_stored_in_the_database_then_reused(tmp_path):
     assert len(rows) == len(first.frame) and rows[0][2] == first.frame["value"].iloc[0]
 
 
+def test_stores_created_at_once_in_parallel_runs_share_one_set_of_tables(tmp_path):
+    """Parallel runs each create a store; the tables must be created once, not by every thread at the same time."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.data.database import DatasetTables
+    url = f"sqlite:///{tmp_path / 'parallel.sqlite'}"
+    with ThreadPoolExecutor(8) as pool:
+        tables = list(pool.map(lambda _: DatasetTables(url), range(16)))
+    assert len({id(t.sessions) for t in tables}) == 1
+
+
 def test_source_outage_falls_back_to_stale_cache_with_warning(tmp_path):
     store(tmp_path, FakeSource()).load("ict_manpower")
     loaded = store(tmp_path, FakeSource(fail=True), data_max_age_hours=0).load("ict_manpower")
