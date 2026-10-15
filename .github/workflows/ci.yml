@@ -1,0 +1,88 @@
+# Tests and builds on every push and pull request. On a version tag (v1.0.0, ...), the two images are also
+# published to the GitHub Container Registry.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.11.21"
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check app tests scripts
+      - name: Unit and integration tests (fake language models, no network)
+        run: uv run pytest --cov=app --cov-report=term
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: "24.20.0"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  images:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Build the images
+        run: docker compose build api web
+      - name: Start the API and web UI (no API keys, so only health and data endpoints are checked)
+        run: |
+          mkdir -p var && chmod 777 var
+          docker compose up --detach --wait api web
+      - name: Smoke test
+        run: |
+          curl --fail --silent http://localhost:8000/api/health
+          curl --fail --silent http://localhost:8000/api/datasets \
+            | python3 -c "import json, sys; assert len(json.load(sys.stdin)) == 19"
+          for attempt in $(seq 1 30); do
+            curl --fail --silent http://localhost:3000 | grep -q "Policy Data Analytics" && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Show logs if anything failed
+        if: failure()
+        run: docker compose logs
+      - name: Publish the images (version tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          for service in api web; do
+            image="ghcr.io/${{ github.repository_owner }}/agentic-policy-analytics-$service"
+            docker tag "policy-analytics-$service" "$image:${{ github.ref_name }}"
+            docker tag "policy-analytics-$service" "$image:latest"
+            docker push "$image:${{ github.ref_name }}"
+            docker push "$image:latest"
+          done

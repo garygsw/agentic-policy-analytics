@@ -351,3 +351,18 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Keeping the reranker, or blending it into the fusion: neither scored better than plain hybrid search on the golden set.
 - **Trade-off:** ignoring signs means a report that says "rose" for a fall still passes the number check. Direction is wording, left to the reviewer and the judge.
 
+## D-032 · 2026-10-15 · Docker images, Compose and CI
+- **Decision:**
+  - **Two images.** The API image (`backend/Dockerfile`) is Python 3.12 slim with uv and the locked dependencies, run as an unprivileged user. It also runs the ingest service, with a different command. The web image (`frontend/Dockerfile`) is Next.js's standalone server on Node 24. Base images and tools are pinned to exact versions at least two weeks old.
+  - **Compose.** `docker-compose.yml` runs three services: `api`, `ingest` (the cron scheduler) and `web`. All three share `./var` with local development, which holds the document index, caches, models, conversations and reports. Keys come from `.env`, which never enters an image: the root `.dockerignore` admits only `backend/`.
+  - **CI.** GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request:
+    - backend lint and tests, with coverage
+    - frontend type check, tests and build
+    - both images built and started together, with a smoke test of the API's health and data endpoints and the web page
+  - **Publishing.** On a version tag (`v*`), the images are pushed to the GitHub Container Registry.
+- **Alternatives:**
+  - Baking the embedding models and document index into the image: a much larger image, and stale until rebuilt. They are created at runtime in the mounted `var/` instead.
+  - Running ingestion inside the API process: one container fewer, but a crawl would compete with live requests. A separate service also matches D-006.
+  - Third-party actions for building and publishing images: the plain `docker` CLI does the same with fewer dependencies to trust.
+- **Limit:** the web image fixes the API address when it is built (`NEXT_PUBLIC_API_URL`, default `http://localhost:8000`), so it suits running on one machine. Hosting it elsewhere means rebuilding with the right address.
+

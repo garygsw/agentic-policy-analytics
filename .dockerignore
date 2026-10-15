@@ -1,0 +1,11 @@
+# The API image is built from the repository root but needs only backend/. Everything else stays out,
+# above all secrets (.env), local state (var/) and assistant files.
+*
+!backend/
+backend/.venv/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/.coverage
+**/.env*
+**/CLAUDE.md
+**/AGENTS.md
