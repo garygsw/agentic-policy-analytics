@@ -94,20 +94,19 @@ def report_numbers(values: dict) -> tuple[int, int]:
 
 
 def judge_material(values: dict) -> dict:
-    """What the judge sees: the same facts and sources the report writer had. Every cited fact is included
-    (long fact lists are otherwise trimmed), with dataset caveats and the text of cited passages."""
+    """What the judge sees: exactly what the report writer had. That is every fact (with its method and sources)
+    and every source with all its metadata (publisher, origin, retrieval date, licence, notes, quality report).
+    Passages carry their text when the report cites them. Anything less makes correct statements look unsupported."""
     report = values["report"]
     cited = {c for claim in [*report.findings, *report.caveats] for c in claim.citations}
-    facts = facts_of(values)
-    shown = [f for f in facts if f["id"] in cited] + [f for f in facts if f["id"] not in cited][:150]
     sources = []
     for s in sources_of(values):
-        entry = {k: s.get(k) for k in ("id", "kind", "title", "notes", "quality") if s.get(k)}
+        entry = {k: v for k, v in s.items() if k not in ("text", "key") and v not in (None, "", [])}
         if s.get("kind") in ("document", "web") and s["id"] in cited:
             entry["text"] = s.get("text", "")[:1500]
         sources.append(entry)
-    return {"question": values["question"], "report": report.model_dump(),
-            "facts": [{k: f.get(k) for k in ("id", "label", "value", "unit")} for f in shown], "sources": sources}
+    facts = [{k: f.get(k) for k in ("id", "label", "value", "unit", "sources", "method")} for f in facts_of(values)]
+    return {"question": values["question"], "report": report.model_dump(), "facts": facts, "sources": sources}
 
 
 def judge(judge_llm, material: dict) -> dict:

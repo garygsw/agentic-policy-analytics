@@ -370,9 +370,9 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
 
 What this design would need in order to serve many users:
 
-- **Throughput is set by the language models, not the server.** A question takes about 1–3 minutes and costs
-  about $0.05–0.40. With scripted models, 20 concurrent runs complete in 0.6 s with no lost events. Read and
-  search endpoints sustain about 290 requests per second on a laptop (TESTING.md).
+- **Throughput is set by the language models, not the server.** With the default model, a question takes
+  about 35–70 seconds and costs about $0.05–0.30. With scripted models, 20 concurrent runs complete in 0.6 s with
+  no lost events. Read and search endpoints sustain about 290 requests per second on a laptop (TESTING.md).
 - **Stateless requests.** Conversation state is in the checkpointer and run history in the database, so API
   processes can be added behind a load balancer. The SQLite files would become PostgreSQL (LangGraph has a
   Postgres checkpointer; SQLAlchemy needs only a new URL). The vector index would move to pgvector or a vector

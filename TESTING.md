@@ -11,7 +11,7 @@ re-run from `backend/` (and `frontend/` for the UI tests). Results are saved in 
 | Live provider tests | real calls to both providers, structured output, fallback | 3 | `uv run pytest -m live` | cents |
 | Retrieval evaluation | recall@k and MRR for each search mode | 50 questions | `uv run python -m app.evals.retrieval run` | free |
 | Triage evaluation | accuracy, F1, latency and cost of each classifier | 84 questions | `uv run python scripts/triage_trial.py` | cents |
-| Answer evaluation | outcomes, groundedness, citations, LLM-as-judge, consistency | 11 questions | `uv run python -m app.evals.answers` | about $2 |
+| Answer evaluation | outcomes, groundedness, citations, LLM-as-judge, consistency | 12 questions | `uv run python -m app.evals.answers` | about $2 |
 | Load test | latency and throughput under concurrent clients | 20 clients | `uv run python scripts/load_test.py` | free |
 
 `uv run pytest` runs the unit and integration tests together (187), with no network access and no API keys. CI
@@ -93,10 +93,10 @@ the English report is shown instead.
 
 | Measure | How | Latest result |
 |---|---|---|
-| Groundedness | the share of numbers in final reports that pass the check | 257 of 257 |
-| What the check caught | drafts rejected by the check | 3 of 16, all four objections now fixed false alarms (section 5) |
-| Faithfulness of prose | LLM-as-judge from the other provider, given exactly what the writer saw | 4.38 of 5 (was 3.62 before citations on caveats and the no-background-knowledge rule) |
-| Consistency | overlap of the numbers stated by three runs of the same question | 0.77 and 0.44 |
+| Groundedness | the share of numbers in final reports that pass the check | 494 of 494 |
+| What the check caught | drafts rejected by the check | 1 of 14: a gap the writer computed itself (section 5) |
+| Faithfulness of prose | LLM-as-judge from the other provider, given exactly what the writer saw | 4.33 of 5 (3.62 before citations on caveats and the no-background-knowledge rule) |
+| Consistency | overlap of the numbers stated by three runs of the same question | 0.80 and 0.60 |
 
 What the code cannot check is meaning: a sentence can cite the right fact and still overstate it, or call a
 fall a rise. The reviewer, and the judge in evaluation, cover meaning, and their scores are reported rather than
@@ -184,90 +184,109 @@ Index: 2,990 agency documents and 4,655 catalogue entries, 14,363 passages (14 O
 
 ### Answers, end to end
 
-**Question set** (`questions.jsonl`, 11 questions). Eight should be answered: employment, housing, COE,
-life expectancy, retrenchment versus GDP, MRT stations, the internal programmes dataset, and one question asked
-in Chinese. One should be declined (a 2030 forecast), one redirected as off-topic, and one should get a
-clarifying question ("How is Singapore doing?"). Each question runs through the whole agent graph with the
-default options (gpt-6.1-sol, low effort, all tools). The two consistency questions run three times each.
+**Question set** (`questions.jsonl`, 12 questions):
+- **Nine should be answered:** employment, housing, COE, life expectancy, retrenchment versus GDP, MRT
+  stations, the internal programmes dataset, a question asked in Chinese, and an announced future policy
+  ("petrol cars phased out by 2030?").
+- **A 2030 price forecast** should be declined, or answered with clearly third-party projections; published
+  sources are searched first.
+- **One is off topic** and should be redirected.
+- **One is vague** and should get a clarifying question ("How is Singapore doing?").
+
+Each question runs through the whole agent graph with the default options: Claude Sonnet 5.5, low effort, all
+tools. The two consistency questions run three times each.
 
 **Measures:**
 - **Outcome.** Did the system answer, decline, redirect or ask, as expected?
-- **Groundedness.** The share of numbers in each final report that match a computed fact, or a passage the same
-  finding cites, within 1%. This uses the same rule as the report check.
+- **Groundedness.** The share of numbers in each final report, including caveats, that match a computed fact or
+  a source the same statement cites, within 1%. This uses the same rule as the report check.
 - **Drafts rejected.** How often the report check sent a draft back.
-- **Citation coverage.** The share of findings that cite a fact or source that exists.
-- **LLM-as-judge.** Each report is scored 1–5 by claude-sonnet-5-5, the other provider, so no model grades its
-  own work. The criteria are relevance, completeness, faithfulness, clarity and caveats. The judge sees only
-  what the report writer saw: every cited fact, the dataset caveats and the cited passages.
+- **Citation coverage.** The share of findings and caveats that cite a fact or source that exists.
+- **LLM-as-judge.** Each report is scored 1–5 by the other provider's model (GPT 6.1 Sol for Claude Sonnet 5.5
+  reports), so no model grades its own work. The criteria are relevance, completeness, faithfulness, clarity
+  and caveats. The judge sees exactly what the report writer saw: every fact with its method, every source with
+  its metadata, and the cited passages.
 - **Consistency.** The average overlap (Jaccard) of the numbers stated by repeated runs of the same question.
 
-**Results** (14 Oct 2026, final run; `answers_results.json`):
+**Results** (15 Oct 2026; `answers_results.json`):
 
 | Question | Expected | Outcome | Time | LLM calls | Cost | Numbers grounded | Statements cited | Judge: rel / comp / faith / clarity / caveats |
 |---|---|---|---|---|---|---|---|---|
-| tech-employment | answered | answered | 104 s | 14 | $0.13 | 32/32 | 100% | 5 / 5 / 5 / 5 / 4 |
-| hdb-towns | answered | answered | 127 s | 15 | $0.23 | 46/46 | 100% | 4 / 4 / 4 / 5 / 5 |
-| coe | answered | partial | 154 s | 16 | $0.17 | 37/37 | 100% | 5 / 4 / 5 / 5 / 5 |
-| life-expectancy | answered | answered | 88 s | 14 | $0.11 | 38/38 | 100% | 5 / 4 / 4 / 5 / 5 |
-| retrenchment-gdp | answered | answered | 138 s | 18 | $0.12 | 21/21 | 100% | 5 / 4 / 4 / 4 / 5 |
-| mrt-stations | answered or partial | answered | 101 s | 15 | $0.10 | 2/2 | 100% | 4 / 3 / 4 / 5 / 4 |
-| internal-programmes | answered | answered | 84 s | 13 | $0.08 | 32/32 | 100% | 5 / 5 / 5 / 4 / 5 |
-| chinese (in Chinese) | answered | answered | 125 s | 18 | $0.38 | 49/49 | 100% | 5 / 4 / 4 / 4 / 5 |
-| forecast | declined | declined | 4 s | 1 | $0.00 | | | |
+| tech-employment | answered | answered | 46 s | 10 | $0.14 | 64/64 | 100% | 5 / 5 / 5 / 5 / 5 |
+| hdb-towns | answered | answered | 67 s | 13 | $0.29 | 54/54 | 100% | 5 / 5 / **1** / 5 / 5 |
+| coe | answered | answered | 36 s | 10 | $0.11 | 34/34 | 100% | 5 / 5 / 5 / 5 / 5 |
+| life-expectancy | answered | answered | 50 s | 12 | $0.16 | 48/48 | 100% | 5 / 4 / 5 / 5 / 4 |
+| retrenchment-gdp | answered | answered | 68 s | 19 | $0.24 | 30/30 | 100% | 5 / 5 / 4 / 4 / 5 |
+| mrt-stations | answered or partial | answered | 42 s | 10 | $0.15 | 29/29 | 100% | 4 / 4 / 5 / 4 / 5 |
+| internal-programmes | answered | answered | 39 s | 11 | $0.13 | 88/88 | 100% | 5 / 5 / 5 / 4 / 5 |
+| chinese (in Chinese) | answered | answered | 55 s | 11 | $0.17 | 111/111 | 100% | 5 / 5 / 5 / 5 / 5 |
+| future-policy | answered | answered | 56 s | 10 | $0.17 | 36/36 | 100% | 4 / 4 / 4 / 4 / 4 |
+| forecast | declined or answered | declined (after a search) | 16 s | 4 | $0.05 | | | |
 | off-topic | off_topic | off_topic | 0 s | 0 | $0.00 | | | |
-| vague | clarification | clarification | 2 s | 1 | $0.00 | | | |
+| vague | clarification | clarification | 5 s | 1 | $0.00 | | | |
 
 "Statements cited" counts findings and caveats.
 
-**Reducing hallucination (D-031).** The first evaluation showed that numbers were always grounded, but sentences
-were not: faithfulness was the lowest judge score. Two changes were made:
-1. **Tighter report prompt.** Every statement must be supported by the facts, source notes or passages, with no
-   background knowledge.
-2. **Caveats checked like findings.** Caveats now carry citations, and the report check covers them as it does
-   findings.
+**Across the three configurations** (each a full run of the set):
 
-Before and after:
+| | GPT 6.1 Sol, first run | GPT 6.1 Sol, after D-031 | Claude Sonnet 5.5, after D-034 |
+|---|---|---|---|
+| Outcomes as expected | 11 of 11 | 10 of 11 | **12 of 12** |
+| Numbers grounded | 227 of 227 | 257 of 257 | 494 of 494 |
+| Drafts rejected by the report check | 1 of 13 | 3 of 16 | 1 of 14 |
+| Judge: faithfulness | 3.62 | 4.38 | 4.33 |
+| Judge: relevance / completeness / clarity / caveats | 4.88 / 4.12 / 4.62 / 3.88 | 4.75 / 4.12 / 4.62 / 4.75 | 4.78 / 4.67 / 4.56 / 4.78 |
+| Consistency (tech-employment / hdb-towns) | 0.79 / 0.80 | 0.77 / 0.44 | 0.80 / 0.60 |
+| Median time for an answered question | 104 s | 115 s | **51 s** |
+| Cost of a full run | $1.94 | $1.91 | $2.60 (12 questions) |
 
-| | Before | After |
-|---|---|---|
-| Outcomes as expected | 11 of 11 | 10 of 11 |
-| Numbers grounded | 227 of 227 | 257 of 257 |
-| Judge: faithfulness | 3.62 | **4.38** |
-| Judge: caveats | 3.88 | **4.75** |
-| Judge: relevance / completeness / clarity | 4.88 / 4.12 / 4.62 | 4.75 / 4.12 / 4.62 |
-| Drafts rejected by the report check | 1 of 13 | 3 of 16 |
-| Consistency (tech-employment / hdb-towns) | 0.79 / 0.80 | 0.77 / 0.44 |
-| Median time for an answered question | 104 s | 115 s |
-| Cost of a full run | $1.94 | $1.91 |
+The judge was Claude Sonnet 5.5 for the first two columns and GPT 6.1 Sol for the third, so the faithfulness
+scores are close but not strictly comparable.
 
-**What the intermediate runs exposed** (three runs between before and after):
-- **Declines.** Some questions were declined when they could have been answered. The extraction agent reported
-  "no annual figures", because loading a dataset returns its profile, not its values, and the coordinator
-  believed it. The coordinator now also sees, recorded by the system, which datasets are loaded and how many
-  facts exist. Both prompts now say that extraction never returns figures.
-- **False alarms in the report check.** The stricter rules made the check fire more often, which exposed four
-  problems with the check itself. All four are fixed and covered by tests:
-  1. A caveat quoting a dataset's quality report ("5,546 values from 12,012 source rows") was rejected. A claim
-     may now use numbers from the notes of the dataset it cites.
-  2. "S$5,845.3 million" was rejected because the fact is stored in millions. Units are now applied.
-  3. "Fell 6.8%" was rejected because the fact is −6.8. Signs are now ignored, and direction is left to the
-     reviewer.
-  4. Citing a chart ID was treated as an unknown citation.
+**What each round changed:**
+- **Prose was not grounded (D-031).** The first run showed every number grounded, but faithfulness was the
+  lowest judge score: caveats made claims nothing supported. Two changes followed:
+  - Caveats now carry citations and are checked like findings.
+  - The writer may use no background knowledge.
 
-  Every objection in the final run was one of the last two, so none was a real error by the writer. The three
-  rejected drafts were all rewritten and passed.
-- **Remaining variation.** COE ended "partial" here, after the reviewer's objection, but answered in the
-  previous two runs. The HDB question is answered every time, but runs pick different flat types and periods to
-  rank, so their numbers overlap less (0.44).
+  Faithfulness rose from 3.62 to 4.38.
+- **False alarms in the check.** The stricter check then exposed five false alarms in the check itself, all
+  fixed and covered by tests:
+  1. A caveat quoting a dataset's quality report.
+  2. "S$5,845.3 million" for a fact stored in millions.
+  3. "Fell 6.8%" for a fact of −6.8.
+  4. A citation of a chart ID.
+  5. A source's retrieval date ("2026-10-14", read as an unmatched 14). Found in hands-on testing; D-034.
+- **Declines.** Some questions were declined when they could have been answered:
+  - The extraction agent reported "no annual figures", because loading a dataset returns its profile, not its
+    values. The coordinator now also sees what the system has recorded as loaded and computed.
+  - An announced future policy was declined without any search. The coordinator now cannot decline before a
+    search (D-034).
+- **The judge's own inputs.** Twice, the judge flagged correct statements as unsupported because it saw less
+  than the writer did:
+  - The first time, facts were trimmed and dataset caveats left out.
+  - The second time, source metadata such as retrieval dates and publishers, and each fact's method, were left
+    out.
+
+  The judge now receives exactly the writer's material. Without this fix, the third run scored faithfulness
+  1.89; with it, 4.33.
+
+**What the checks caught in the latest run:**
+- **The number check.** In the life-expectancy report, the writer computed a gap of "4.44 years" between men and
+  women itself. The check rejected it, since 4.44 is not a computed fact, and the revised draft passed.
+- **The judge.** The HDB report claimed that Bukit Batok "alone" ranks in the top six for three flat types,
+  when Woodlands does too. The number check cannot see ordering or exclusivity claims like this, so the judge
+  rated faithfulness 1. This is the kind of error that remains: wrong words around right numbers.
 
 **Limits.**
-- Eleven questions show the system's behaviour, not its accuracy across all questions.
-- The judge is a single model run, not calibrated against human ratings; same-provider bias is avoided, but
-  model bias is not.
-- Results vary between runs: consistency is about 0.8. One of three COE runs during development fell back to the
-  template report; the runner now records each run's errors, so the next occurrence will show why.
+- **Behaviour, not accuracy.** Twelve questions show the system's behaviour, not its accuracy across all
+  questions.
+- **One uncalibrated judge.** The judge is a single model run, not calibrated against human ratings.
+  Same-provider bias is avoided, but model bias is not.
+- **Variation between runs.** Results vary: consistency is 0.6–0.8. An open question such as the HDB ranking
+  picks different flat types and periods on each run.
 
-Re-run everything: `uv run python -m app.evals.answers` (about $2). Re-run some questions and merge them into
+Re-run everything: `uv run python -m app.evals.answers` (about $2.60). Re-run some questions and merge them into
 the saved results: `--only id1,id2`. Score the saved reports again with a different rubric: `--rejudge`.
 
 ## 6. Performance and load
@@ -298,9 +317,9 @@ about 0.6 s, every run's events are numbered without gaps, and replay still work
 questions run in parallel in the answer evaluation.
 
 **Cost and time per question** (answer evaluation):
-- 1–3 minutes per answered question (median 115 s)
-- $0.05–0.40 each
-- 11–18 LLM calls
+- 35–70 s per answered question (median 51 s, default model Claude Sonnet 5.5)
+- $0.05–0.30 each
+- 10–19 LLM calls
 
 Most of the time is model latency. The live view shows elapsed time, tokens and cost while a run works.
 
