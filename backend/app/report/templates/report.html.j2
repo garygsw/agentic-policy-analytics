@@ -45,6 +45,7 @@
   td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   tr:target, li:target { background: var(--accent-soft); }
   ul.caveats li { margin-bottom: 8px; }
+  .flag { display: block; margin-top: 4px; font-size: 13px; color: var(--warn, #9a5b00); }
   ol.sources li { margin-bottom: 14px; }
   .muted { color: var(--muted); } .small { font-size: 13px; }
   .warning { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 6px 10px; margin-top: 6px; font-size: 14px; }
@@ -59,19 +60,23 @@
     <h1>{{ report.title if report else L.automated }}</h1>
     <p class="question">{{ L.question }}: {{ question }}</p>
     <div class="badges">
-      {% if report %}<span class="badge ok">✓ {{ L.checked }}</span>{% else %}<span class="badge warn">{{ L.automated }}</span>{% endif %}
+      {% if report and warnings %}<span class="badge warn">⚠ {{ L.some_unverified }}</span>
+      {% elif report %}<span class="badge ok">✓ {{ L.checked }}</span>
+      {% else %}<span class="badge warn">{{ L.automated }}</span>{% endif %}
       {% if review_note %}<span class="badge warn">{{ L.reviewer }}: {{ review_note }}</span>{% endif %}
     </div>
   </header>
 
   {% if report %}
-  <section class="card summary"><p>{{ report.summary }}</p></section>
+  <section class="card summary"><p>{{ report.summary }}</p>
+    {% for w in warnings.get("summary", []) %}<p class="flag">⚠ {{ L.unverified }}: {{ w }}</p>{% endfor %}</section>
 
   <section>
     <h2>{{ L.findings }}</h2>
     <ol class="findings">
       {% for finding in report.findings %}
-      <li>{{ finding.text }}{% for anchor, label in finding.citations|citation_groups %}<a class="cite" href="#{{ anchor }}">{{ label }}</a>{% endfor %}</li>
+      <li>{{ finding.text }}{% for anchor, label in finding.citations|citation_groups %}<a class="cite" href="#{{ anchor }}">{{ label }}</a>{% endfor %}
+        {% for w in warnings.get("finding " ~ loop.index, []) %}<span class="flag">⚠ {{ L.unverified }}: {{ w }}</span>{% endfor %}</li>
       {% endfor %}
     </ol>
   </section>
@@ -104,7 +109,8 @@
   {% if report and report.caveats %}
   <section>
     <h2>{{ L.caveats }}</h2>
-    <ul class="caveats">{% for caveat in report.caveats %}<li>{{ caveat.text }}{% for anchor, label in caveat.citations|citation_groups %}<a class="cite" href="#{{ anchor }}">{{ label }}</a>{% endfor %}</li>{% endfor %}</ul>
+    <ul class="caveats">{% for caveat in report.caveats %}<li>{{ caveat.text }}{% for anchor, label in caveat.citations|citation_groups %}<a class="cite" href="#{{ anchor }}">{{ label }}</a>{% endfor %}
+      {% for w in warnings.get("caveat " ~ loop.index, []) %}<span class="flag">⚠ {{ L.unverified }}: {{ w }}</span>{% endfor %}</li>{% endfor %}</ul>
   </section>
   {% endif %}
 

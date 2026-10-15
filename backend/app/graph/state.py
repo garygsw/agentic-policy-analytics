@@ -89,6 +89,8 @@ class AgentState(TypedDict, total=False):
     review: Review | None
     revisions: int
     analysis_reworks: int  # times the reviewer sent the analysis back this turn
+    grounding_flags: list[dict]  # problems the report check found, by statement (shown as warnings)
+    flags: list[str]  # warnings shown with the final report: unverified statements, the reviewer's note
     answer: str
     outcome: str
     failed_node: str | None
@@ -98,6 +100,7 @@ class AgentState(TypedDict, total=False):
 TURN_RESET: dict[str, Any] = {
     "question": "", "clarifications": 0, "pending_question": "", "coordinator_steps": [], "plan_approved": False,
     "findings": {}, "report": None, "report_display": None, "chart_titles": {}, "report_html": "",
-    "grounding_issues": [], "review": None, "revisions": 0, "analysis_reworks": 0, "answer": "",
+    "grounding_issues": [], "grounding_flags": [], "flags": [], "review": None, "revisions": 0,
+    "analysis_reworks": 0, "answer": "",
     "outcome": "", "failed_node": None, "errors": [],
 }

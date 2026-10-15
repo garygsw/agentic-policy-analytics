@@ -138,6 +138,8 @@ export function draftStage(view: RunView): string {
 
 /** The label on a finished report: was it accepted first time, revised, or only partly accepted? */
 export function checkLabel(view: RunView, outcome: string | null): string | null {
+  const flags = view.end?.flags?.length ?? 0;
+  if (outcome === "answered" && flags) return `⚠ ${flags} flagged`;
   if (outcome === "answered") return view.drafts.length > 1 ? "Revised after check" : "✓ Checked";
   if (outcome === "partial") return "Partial: see the reviewer note";
   if (outcome === "fallback") return "Automated summary";

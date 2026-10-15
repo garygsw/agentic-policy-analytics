@@ -68,7 +68,8 @@ export function RunBlock({ run, verbosity, now, onInspect, onPlan }: Props) {
       )}
 
       {finished && run.detail && (
-        <Answer runId={run.id} detail={run.detail} outcome={outcome} check={checkLabel(run.view, outcome)} />
+        <Answer runId={run.id} detail={run.detail} outcome={outcome} check={checkLabel(run.view, outcome)}
+          flags={run.view.end?.flags ?? []} />
       )}
 
       <div className="run-meta">
@@ -82,15 +83,17 @@ export function RunBlock({ run, verbosity, now, onInspect, onPlan }: Props) {
   );
 }
 
-function Answer({ runId, detail, outcome, check }: {
-  runId: string; detail: RunDetail; outcome: string | null; check: string | null;
+function Answer({ runId, detail, outcome, check, flags }: {
+  runId: string; detail: RunDetail; outcome: string | null; check: string | null; flags: string[];
 }) {
   const label = outcome ? OUTCOMES[outcome] : undefined;
   return (
     <div className="answer">
       <div className="answer-head">
         {label && <span className={`badge ${label.tone}`}>{label.label}</span>}
-        {check && outcome === "answered" && <span className="badge ok">{check}</span>}
+        {check && outcome === "answered" && (
+          <span className={`badge ${flags.length ? "warn" : "ok"}`} title={flags.join("\n")}>{check}</span>
+        )}
         {detail.has_report && (
           <span className="actions">
             <a href={reportUrl(runId)} target="_blank" rel="noopener noreferrer">Open report ↗</a>

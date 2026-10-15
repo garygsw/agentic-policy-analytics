@@ -28,7 +28,15 @@ export const TRIAGE_LABELS: Record<string, string> = {
   llm: "Fast LLM",
 };
 
-export const SCOPE_LABELS: Record<string, string> = { gov: "Government sites", any: "Whole web" };
+export const TOOL_NAMES: Record<string, string> = {
+  search_datasets: "Dataset search", search_documents: "Document search", web_search: "Web search",
+  compute_correlation: "Correlation", list_records: "Record lists", create_chart: "Charts",
+  load_dataset: "loading data", describe_dataset: "dataset values", compute_trend: "trends",
+  compare_groups: "comparisons", rank_changes: "rankings",
+};
+
+/** The Detail levels as the UI names them (the API's level 1, 2 and 3). */
+export const DETAIL_LABELS: Record<number, string> = { 1: "Normal", 2: "Thinking", 3: "Verbose" };
 
 export const EXAMPLES = [
   "How has employment in the information and communications sector changed since 2019, and how does it compare with overall employment?",

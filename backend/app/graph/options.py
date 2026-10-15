@@ -16,7 +16,7 @@ Effort = Literal["low", "medium", "high"]
 OPTIONAL_TOOLS: dict[str, str] = {
     "search_datasets": "Search all 4,655 data.gov.sg datasets beyond the curated set",
     "search_documents": "Search agency press releases, speeches and parliamentary replies",
-    "web_search": "Search the web (government sites only, unless widened)",
+    "web_search": "Search the whole web for recent and announced policies",
     "compute_correlation": "Correlate two series, across datasets",
     "list_records": "List and count records in tables that are not time series",
     "create_chart": "Draw charts for the report",
@@ -38,7 +38,6 @@ class RunOptions(BaseModel):
     model: str | None = None              # main model for the coordinator, agents, writer and reviewer
     reasoning_effort: Effort | None = None
     tools: list[str] | None = None        # enabled optional tools; None means all
-    web_scope: Literal["gov", "any"] = "gov"  # web search: Singapore government sites only, or the whole web
     triage: Literal["local", "jev", "llm"] = "local"  # who makes the fast in-scope/off-topic/vague decision
 
     @field_validator("model")
@@ -70,12 +69,21 @@ def current_options() -> RunOptions:
     return raw if isinstance(raw, RunOptions) else RunOptions(**raw)
 
 
+MODEL_NAMES = {"claude-sonnet-5-5": "Claude Sonnet 5.5", "gpt-6.1-sol": "GPT 6.1 Sol", "gpt-6-luna": "GPT 6 Luna",
+               "claude-haiku-5-5": "Claude Haiku 5.5"}
+# The models offered in the UI's menu. Every model in FALLBACK_FOR can still be chosen through the API or CLI.
+MENU_MODELS = {"claude-sonnet-5-5": "Most capable; the default",
+               "gpt-6-luna": "Fastest and cheapest, for simpler questions"}
+
+
 def available_models() -> list[dict]:
-    """What the model dropdown offers: provider, prices and context window of each model."""
-    return [{"id": model, "provider": "anthropic" if model.startswith("claude") else "openai",
-             "fallback": FALLBACK_FOR[model], "context_window": CONTEXT_WINDOWS.get(model),
+    """What the model menu offers: name, provider, fallback, prices and context window of each model."""
+    return [{"id": model, "name": MODEL_NAMES[model], "description": description,
+             "provider": "anthropic" if model.startswith("claude") else "openai",
+             "fallback": FALLBACK_FOR[model], "fallback_name": MODEL_NAMES[FALLBACK_FOR[model]],
+             "context_window": CONTEXT_WINDOWS.get(model),
              "price_per_million": {"input": PRICES[model].input, "output": PRICES[model].output}}
-            for model in FALLBACK_FOR]
+            for model, description in MENU_MODELS.items()]
 
 
 def available_tools() -> list[dict]:

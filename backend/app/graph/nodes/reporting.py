@@ -9,7 +9,7 @@ from app.graph import prompts
 from app.graph.events import STATUS, emit, guarded
 from app.graph.state import AgentState, Report, ReportTexts, Review
 from app.guardrails.language import LANGUAGE_NAMES
-from app.quality.grounding import fact_values, numbers_in, numbers_preserved, ungrounded
+from app.quality.grounding import fact_values, numbers_in, numbers_preserved, quote_around, ungrounded
 from app.report.html import render_html
 
 MAX_REVISIONS = 2  # shared by grounding fixes and reviewer feedback
@@ -56,10 +56,11 @@ def make_report_writer(llm) -> Callable:
 
 def citable_text(sources: list[dict]) -> dict[str, str]:
     """What a finding or caveat may take numbers from when it cites a source: a passage's text, or a dataset's
-    notes and quality report (e.g. "5,546 values from 12,012 source rows")."""
+    notes, quality report and dates (e.g. "5,546 values from 12,012 source rows", "retrieved 2026-10-14")."""
     texts = {}
     for s in sources:
-        keys = ("text",) if s.get("kind") in ("document", "web") else ("notes", "quality", "warning")
+        keys = (("text", "published") if s.get("kind") in ("document", "web")
+                else ("notes", "quality", "warning", "retrieved_at"))
         texts[s["id"]] = " ".join(str(s.get(k) or "") for k in keys)
     return texts
 
@@ -79,25 +80,33 @@ def validate(state: AgentState) -> dict:
         return numbers_in(" ".join(citable[c] for c in citations if c in citable))
 
     cited_anywhere = [c for claim in report.findings for c in claim.citations]
-    issues = [f"summary: {_show(n)} does not match any computed fact or cited passage"
-              for n in ungrounded(report.summary, allowed + quoted(cited_anywhere))]
+    flags: list[dict] = []  # one per problem: which statement, and what could not be verified
+
+    def flag(where: str, problem: str, text: str = "", number: float | None = None) -> None:
+        quote = f' (in "{quote_around(text, number)}")' if number is not None else ""
+        flags.append({"where": where, "problem": problem, "message": f"{where}: {problem}{quote}"})
+
+    for n in ungrounded(report.summary, allowed + quoted(cited_anywhere)):
+        flag("summary", f"{_show(n)} does not match any computed fact or cited passage", report.summary, n)
     # Findings and caveats are checked alike: numbers grounded, citations present and known.
     claims = [("finding", i, c) for i, c in enumerate(report.findings, 1)]
     claims += [("caveat", i, c) for i, c in enumerate(report.caveats, 1)]
     for kind, i, claim in claims:
-        issues += [f"{kind} {i}: {_show(n)} does not match any computed fact or a source this {kind} cites"
-                   for n in ungrounded(claim.text, allowed + quoted(claim.citations))]
+        for n in ungrounded(claim.text, allowed + quoted(claim.citations)):
+            flag(f"{kind} {i}", f"{_show(n)} does not match any computed fact or a source this {kind} cites",
+                 claim.text, n)
         unknown = [c for c in claim.citations if c not in known_ids]
         if unknown:
-            issues.append(f"{kind} {i}: cites unknown IDs {unknown}")
+            flag(f"{kind} {i}", f"cites unknown IDs {unknown}")
         if not claim.citations:
-            issues.append(f"{kind} {i}: has no citation")
+            flag(f"{kind} {i}", "has no citation")
     unknown_charts = [c for c in report.charts if c not in {chart["id"] for chart in charts_of(state)}]
     if unknown_charts:
-        issues.append(f"charts: unknown IDs {unknown_charts}")
+        flag("charts", f"unknown IDs {unknown_charts}")
+    issues = [f["message"] for f in flags]
     emit("validate", "observation", "Grounded: every number matches a computed fact" if not issues
          else f"{len(issues)} problem(s): " + "; ".join(issues), passed=not issues, issues=issues)
-    return {"grounding_issues": issues}
+    return {"grounding_issues": issues, "grounding_flags": flags}
 
 
 def make_reviewer(llm) -> Callable:
@@ -167,9 +176,18 @@ def render(state: AgentState) -> dict:
     review_note = review.reason if review and review.verdict != "pass" else None
     charts = _charts_for_display(state)
     sources = shown_sources(sources_of(state), report)
-    lines = [f"# {report.title}", "", report.summary, "", "## Findings"]
-    lines += [f"- {c.text} [{', '.join(c.citations)}]" for c in report.findings]
-    caveats = [f"{c.text} [{', '.join(c.citations)}]" for c in report.caveats]
+    # Nothing is dropped: a statement the check could not verify is shown with a warning (D-034).
+    warnings: dict[str, list[str]] = {}
+    for f in state.get("grounding_flags") or []:
+        warnings.setdefault(f["where"], []).append(f["problem"])
+
+    def marked(where: str, text: str) -> str:
+        return text + "".join(f" ⚠ Unverified: {w}" for w in warnings.get(where, []))
+
+    lines = [f"# {report.title}", "", marked("summary", report.summary), "", "## Findings"]
+    lines += [marked(f"finding {i}", f"- {c.text} [{', '.join(c.citations)}]")
+              for i, c in enumerate(report.findings, 1)]
+    caveats = [marked(f"caveat {i}", f"{c.text} [{', '.join(c.citations)}]") for i, c in enumerate(report.caveats, 1)]
     caveats += [f"Reviewer note: {review_note}"] if review_note else []
     if caveats:
         lines += ["", "## Caveats", *[f"- {c}" for c in caveats]]
@@ -180,9 +198,12 @@ def render(state: AgentState) -> dict:
         lines += ["", "## Sources", *[f"- [{s['id']}] {s.get('title', '')} ({s.get('agency', '')}) {s.get('url', '')}"
                                       .rstrip() for s in sources]]
     html = render_html(question=state["question"], language=state["language"], report=report,
-                       facts=facts_of(state), sources=sources, charts=charts, review_note=review_note)
-    # "partial": the report is grounded, but the reviewer's last check found it does not fully answer the question.
-    return {"answer": "\n".join(lines), "report_html": html, "outcome": "partial" if review_note else "answered"}
+                       facts=facts_of(state), sources=sources, charts=charts, review_note=review_note,
+                       warnings=warnings)
+    # Every report is an answer; what could not be verified, and the reviewer's note, travel with it as flags.
+    flags = [f["message"] for f in state.get("grounding_flags") or []]
+    flags += [f"Reviewer note: {review_note}"] if review_note else []
+    return {"answer": "\n".join(lines), "report_html": html, "outcome": "answered", "flags": flags}
 
 
 def shown_sources(sources: list[dict], report: Report | None) -> list[dict]:
@@ -198,8 +219,8 @@ def fallback_report(state: AgentState) -> dict:
     facts = facts_of(state)
     if facts:
         lines = ["# Automated summary",
-                 "The report could not be written by the language model, so these are the computed figures "
-                 "without commentary.", ""]
+                 "The language models failed before the report could be written, so these are the computed "
+                 "figures without commentary.", ""]
         lines += [f"- {f.get('label')}: {f.get('value')} {f.get('unit', '')} [{f['id']}]".rstrip() for f in facts]
     else:
         lines = ["The analysis could not be completed. Please try again shortly."]

@@ -7,6 +7,7 @@ from langgraph.types import interrupt
 from app.analysis.workspace import curated_titles
 from app.graph import prompts
 from app.graph.events import emit, guarded
+from app.graph.options import current_options
 from app.graph.state import AgentState, CoordinatorStep
 
 MAX_STEPS = 6
@@ -34,6 +35,22 @@ def describe_progress(state: AgentState) -> str:
     return "\n".join(lines) or "Nothing yet."
 
 
+def search_before_declining(question: str, steps: list[CoordinatorStep], step: CoordinatorStep) -> CoordinatorStep:
+    """A question is declined only after a search. A policy announced to take effect in the future, for example,
+    is in published sources, not in the datasets; so a decline before any search becomes a search."""
+    searched = any(s.action == "extract" for s in steps)
+    options = current_options()
+    can_search = options.tool_enabled("web_search") or options.tool_enabled("search_documents")
+    if step.action != "decline" or searched or not can_search:
+        return step
+    return CoordinatorStep(
+        headline="Searching published sources before deciding",
+        thought=f"Before declining, check published sources. The reason given for declining was: {step.thought}",
+        action="extract",
+        instructions=f"Search agency documents and the web for published information that answers: {question} "
+                     "Report what you find, with its sources, or that nothing relevant was found.")
+
+
 def make_coordinator(llm) -> Callable:
     @guarded("coordinator")
     def coordinator(state: AgentState) -> dict:
@@ -46,6 +63,7 @@ def make_coordinator(llm) -> Callable:
                                                 datasets=curated_titles())
             step = llm("quality", schema=CoordinatorStep).invoke([SystemMessage(system),
                                                                   HumanMessage(state["question"])])
+            step = search_before_declining(state["question"], steps, step)
         emit("coordinator", "status", step.headline or f"Next: {step.action}")
         emit("coordinator", "reasoning", step.thought)
         emit("coordinator", "action", f"{step.action}: {step.instructions}")

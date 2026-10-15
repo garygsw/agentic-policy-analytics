@@ -6,6 +6,7 @@
 {"id": "mrt-stations", "question": "How many new MRT stations are planned, and on which lines?", "expect": ["answered", "partial"], "note": "the stations dataset has no line information; documents may supply it"}
 {"id": "internal-programmes", "question": "How many participants did each internal tech talent programme have each year, and which programme was largest?", "expect": "answered", "note": "the internal dataset has participants and placements, not completions"}
 {"id": "chinese", "question": "自2019年以来，新加坡信息通信业的就业人数有何变化？", "expect": "answered", "language": "zh"}
-{"id": "forecast", "question": "What will the median HDB resale price be in 2030?", "expect": "declined"}
+{"id": "future-policy", "question": "Petrol cars are going to be phased out by 2030? After that all electric cars? How would that affect the COE market?", "expect": "answered", "note": "an announced policy: must be searched, not declined"}
+{"id": "forecast", "question": "What will the median HDB resale price be in 2030?", "expect": ["declined", "answered"], "note": "a search runs first; an answer must present projections as third-party, not as facts"}
 {"id": "off-topic", "question": "What is a good recipe for chicken rice?", "expect": "off_topic"}
 {"id": "vague", "question": "How is Singapore doing?", "expect": "clarification"}

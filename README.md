@@ -15,15 +15,17 @@ given to read.
 
 **What it does**
 - **Answers from official data.** 19 curated datasets from MOM, HDB, URA, LTA, MOH, IMDA and SingStat, plus
-  search over all 4,655 data.gov.sg datasets, about 3,000 agency documents and, optionally, the web.
-- **Grounded reports.** Every number must match a computed fact or a cited source. Reports that fail the check
-  are revised, or replaced by the plain computed figures. Every finding and caveat is cited.
+  search over all 4,655 data.gov.sg datasets, about 3,000 agency documents and the web.
+- **Grounded reports.** Every number must match a computed fact or a cited source, and every finding and caveat
+  is cited. A statement that still fails after two revisions stays in the report, marked ⚠ with what could not
+  be verified. Nothing is dropped.
 - **Agents that plan and recover.**
   - A ReAct coordinator directs an extraction agent and an analytics agent.
   - A reviewer checks the result.
-  - Vague questions get a clarifying question; unanswerable ones are declined; off-topic ones are redirected.
+  - Vague questions get a clarifying question. A question is declined only after searching documents and
+    the web finds nothing. Off-topic questions are redirected.
 - **Resilience.**
-  - **LLM providers:** OpenAI is primary, and Anthropic takes over automatically.
+  - **LLM providers:** Anthropic (Claude Sonnet 5.5) is the default, and OpenAI takes over automatically.
   - **Data sources:** a failing live source falls back to a cache, then to a snapshot.
   - **Messages with personal data** (NRIC, phone numbers and so on) are rejected before any model sees them.
 - **Four languages:** English, Chinese, Malay and Tamil. Reports are translated, with every number checked.
@@ -113,7 +115,7 @@ Requires Python 3.12 with [uv](https://docs.astral.sh/uv/), and Node.js 24 or la
    uv run python -m app.cli "Analyse employment trends in the technology sector from 2020-2024"
    ```
 
-   Useful flags: `--verbosity full` shows every step, `--calls` prints the LLM call log, and `--effort medium`
+   Useful flags: `--verbosity verbose` shows every step, `--calls` prints the LLM call log, and `--effort medium`
    sets the reasoning effort. HTML reports are saved in `var/reports/`.
 
 ## Sample queries
@@ -125,6 +127,7 @@ Requires Python 3.12 with [uv](https://docs.astral.sh/uv/), and Node.js 24 or la
 | Which HDB towns saw the largest rise in median resale prices since 2020? | ranking groups by their change over the same two quarters, flat type by flat type |
 | How have COE premiums for Category A cars moved over the last five years? | monthly series, highs and lows, policy context from documents |
 | Is there a relationship between retrenchments and GDP in the information and communications industry? | correlation of levels and of changes, with the caution that shared trends inflate it |
+| Petrol cars are going to be phased out by 2030? How would that affect the COE market? | an announced policy found by web search, checked against the premise, alongside COE data |
 | How many participants did each internal tech talent programme have each year, and which programme was largest? | the mock internal system, and its data-quality problems reported as caveats |
 | 自2019年以来，新加坡信息通信业的就业人数有何变化？ | a question in Chinese, answered in Chinese with every number checked |
 
@@ -132,15 +135,16 @@ Questions that show the error handling:
 
 | Try | What happens |
 |---|---|
-| What will the median HDB resale price be in 2030? | declined, with an explanation and a question that can be answered |
+| What will the median HDB resale price be in 2030? | published sources are searched first; with nothing official to go on, it declines and suggests a question it can answer |
 | How is Singapore doing? | a clarifying question; the run pauses until you answer |
 | What is a good recipe for chicken rice? | redirected: outside scope, with no agent run |
 | My NRIC is S1234567D, how much CPF do I have? | rejected before any model sees it |
-| Set `FORCE_PRIMARY_FAIL=true` in `.env` and restart | every OpenAI call fails, Anthropic answers, and the call log shows both |
+| Set `FORCE_PRIMARY_FAIL=true` in `.env` and restart | every call to the primary provider fails, the other provider answers, and the call log shows both |
 | Set `FORCE_SOURCE_FAIL=true` in `.env` and restart | live data sources are skipped; reports say cached or snapshot data was used |
 
-The **Approve plan** switch pauses each run for your approval before any data is fetched. **Detail** sets how
-much of the trace you see.
+The **+** menu holds a switch for each optional tool, the **Approve plan** switch (pause for your approval before
+any data is fetched) and the triage method. The model menu beside the send button sets the model and its effort.
+**Detail** sets how much of the trace you see: Normal, Thinking or Verbose.
 
 ## Running the tests
 
@@ -201,7 +205,7 @@ Model selection:
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `LLM_QUALITY_PRIMARY` / `LLM_QUALITY_FALLBACK` | `gpt-6.1-sol` / `claude-sonnet-5-5` | the agents' models |
+| `LLM_QUALITY_PRIMARY` / `LLM_QUALITY_FALLBACK` | `claude-sonnet-5-5` / `gpt-6.1-sol` | the agents' models |
 | `LLM_FAST_PRIMARY` / `LLM_FAST_FALLBACK` | `gpt-6-luna` / `claude-haiku-5-5` | short tasks: triage, translation, rewrites |
 | `LLM_REASONING_EFFORT` | `low` | default effort; each request can override it |
 

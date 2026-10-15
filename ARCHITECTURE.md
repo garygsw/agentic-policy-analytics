@@ -71,7 +71,8 @@ flowchart TD
   rv -- poor report --> rw
   rv -- wrong analysis, once --> co
   rv -- pass or limit reached --> lr[localize_report] --> ren[render<br/>markdown + HTML] --> resp
-  val -- still failing after 2 fixes --> fb[fallback_report<br/>template, no prose] --> loc
+  val -- still failing after 2 fixes:<br/>flag the statements --> rv
+  co -- models fail --> fb[fallback_report<br/>computed figures only] --> loc
 ```
 
 | Node | What it does |
@@ -81,25 +82,31 @@ flowchart TD
 | `triage` | Classifies the question as in scope, vague or off topic. The default is a local classifier (embeddings + logistic regression, 3 ms) that sends uncertain cases (confidence < 0.6) to the fast LLM. Jev or the LLM can be chosen per request. |
 | `clarify` / `ask_user` | Writes one clarifying question, then pauses the run (LangGraph `interrupt`) until the user answers. At most 2 per question. |
 | `redirect` | Explains the scope in the user's language. No LLM call. |
-| `coordinator` | A ReAct agent: each step returns a `thought`, an `action` (extract, analyse, clarify, decline, report) and `instructions`. At most 6 steps. It sees the curated dataset list, the agents' summaries, and what the state records as loaded and computed. |
+| `coordinator` | A ReAct agent: each step returns a `thought`, an `action` (extract, analyse, clarify, decline, report) and `instructions`. At most 6 steps. It sees the curated dataset list, the agents' summaries, and what the state records as loaded and computed. A decline before any search is turned into a search of documents and the web, so an announced policy is found rather than declined. |
 | `approve_plan` | Optional (off by default): pauses before any data is fetched, so the user can approve, reject or revise the plan. |
 | `extraction` | A tool-using agent (at most 6 tool calls) that loads datasets and searches documents and the web. |
 | `analytics` | A tool-using agent (at most 12 tool calls) that computes statistics and charts. Every number is recorded as a fact F1, F2… |
 | `report_writer` | Writes a structured report (title, summary, findings, caveats, charts). Every finding and caveat cites its facts and sources. |
-| `validate` | **Deterministic**: every number must match a computed fact (within 1%) or appear in a source the same statement cites; every citation must exist. Problems go back to the writer (at most 2 fixes). |
-| `reviewer` | An LLM checks that the report answers the question. It may send the analysis back once; a remaining objection is shown with the report, and the run ends as `partial`. |
+| `validate` | **Deterministic**: every number must match a computed fact (within 1%) or appear in a source the same statement cites (its text, notes, quality report or dates); every citation must exist. Problems go back to the writer, quoting the words around each number (at most 2 fixes). What still fails is kept and flagged ⚠, never dropped. |
+| `reviewer` | An LLM checks that the report answers the question. It may send the analysis back once; a remaining objection is shown as a flag on the report. |
 | `localize_report` | Translates the report field by field into the user's language. If any number changes, the English report is kept. |
 | `render` | Writes the answer as markdown, and the report as a self-contained HTML page. |
-| `fallback_report` | When the language models fail or the report cannot be grounded: the computed figures as a template, with no generated prose. |
+| `fallback_report` | Only when the language models fail before a report exists: the computed figures as a template, with no generated prose. |
 
 **ReAct in practice.** The coordinator reasons about the next action, and the two worker agents run their own
 reason, act, observe loops (`agents/tool_loop.py`). Each tool call carries a short `reason`, which the UI shows
 as the live status line. Each tool result is fed back to the model as an observation. A failing tool call
 returns `ERROR: …` with a hint, so the agent can correct itself instead of the run crashing.
 
-**Run outcomes:** `answered`, `partial` (the reviewer's objection is shown), `declined` (no data can answer the
-question, e.g. a forecast), `off_topic`, `fallback` (template report), `cancelled`. A run can also pause as
-`awaiting_input`.
+**Run outcomes:**
+- `answered`: every report, including one with flags. Flags mark what could not be verified and any objection
+  the reviewer still has.
+- `declined`: only after a search of documents and the web finds nothing that answers the question.
+- `off_topic`.
+- `fallback`: the template, used only when the models fail.
+- `cancelled`.
+
+A run can also pause as `awaiting_input`.
 
 ### Tools
 
@@ -108,7 +115,7 @@ question, e.g. a forecast), `off_topic`, `fallback` (template report), `cancelle
 | Extraction | `load_dataset` | Loads a dataset; returns its profile (measures, units, dimensions, coverage, summing rules, quality report). |
 | | `search_datasets` | Hybrid search over the 4,655-dataset data.gov.sg catalogue, for topics the curated set does not cover. |
 | | `search_documents` | Hybrid search over agency documents; returns citable passages D1, D2… At most 3 per task. |
-| | `web_search` | Tavily, limited to government sites by default; returns untrusted passages W1, W2… At most 2 per task. |
+| | `web_search` | Tavily, over the whole web; returns untrusted passages W1, W2… At most 10 per task. |
 | Analytics | `describe_dataset` | Lists a dimension's values, so filters use exact labels. |
 | | `compute_trend` | A series' values, change, compound annual growth, peak and year-on-year changes. |
 | | `compare_groups` | Groups (e.g. industries) in one period, with shares where the measure can be added up. |
@@ -130,7 +137,9 @@ a numbered fact, and the report may only state numbers that match a fact or appe
    source notes and passages it is given, with no background knowledge, and cite every statement.
 2. **Structure.** The report is a pydantic schema in which findings and caveats each carry citations.
 3. **Code.** The `validate` node checks every number and citation (`quality/grounding.py`) and sends problems
-   back to the writer. A report that still fails becomes a template of the computed facts, with no prose.
+   back to the writer, quoting where each one is. A statement that still fails after two fixes is kept, marked
+   ⚠ with what could not be verified, so nothing the agents found is lost and nothing unverified passes as
+   checked.
 4. **Translation guard.** A translated report must keep every number, or the English one is shown.
 5. **Review.** An LLM reviewer checks that the report answers the question. Its remaining objections are shown
    to the user.
@@ -143,14 +152,15 @@ How well this works is measured in [TESTING.md](TESTING.md#hallucination-detecti
 
 | Tier | Used for | Primary | Fallback |
 |---|---|---|---|
-| quality | coordinator, agents, report writer, reviewer | gpt-6.1-sol | claude-sonnet-5-5 |
+| quality | coordinator, agents, report writer, reviewer | Claude Sonnet 5.5 | GPT 6.1 Sol |
 | fast | question rewrite, triage escalation, clarifying questions, translation | gpt-6-luna | claude-haiku-5-5 |
 
 - **Fallback.** Each call tries the primary provider (one retry), then the other provider's model at the same
   price (`llm/providers.py`, LangChain `with_fallbacks`). Structured output uses each provider's native mode.
   `FORCE_PRIMARY_FAIL=true` makes every primary call fail, to demonstrate the fallback.
 - **Per-request options.** The user can choose the main model (its fallback is set automatically), the reasoning
-  effort (default low), the tools, the web scope and the triage method.
+  effort (default low), the tools and the triage method. The UI's menu offers Claude Sonnet 5.5 (default) and
+  GPT 6 Luna (faster and cheaper, with Claude Haiku 5.5 as its fallback); the API and CLI accept all four models.
 - **Ledger.** Every call is recorded (`llm/ledger.py`) with:
   - provider, model and effort
   - latency and success
@@ -201,15 +211,16 @@ Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
 - **Search** (`rag/search.py`): keyword and vector results are merged by reciprocal rank fusion (k = 60), with
   at most 2 passages per document. A local cross-encoder reranker is available but **off by default**: on the
   retrieval evaluation it ranked worse and added 0.5 s per search (D-031).
-- **Web search** (`rag/web.py`): Tavily, restricted to 21 government domains unless the user widens it. Results
-  are de-duplicated by normalised URL.
+- **Web search** (`rag/web.py`): Tavily, over the whole web, with at most 10 searches per extraction task. The
+  agents prefer official sources and say when a source is a third party. Results are de-duplicated by normalised
+  URL.
 
 ## 7. API and live updates
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health`, `/api/health/ready` | liveness; readiness (database, keys, index, web search) |
-| GET | `/api/options` | models, tools, efforts, triage methods, web scopes, verbosity levels, defaults |
+| GET | `/api/options` | models, tools, efforts, triage methods, verbosity levels, defaults |
 | POST, GET | `/api/threads` | start a conversation; list conversations |
 | GET | `/api/threads/{id}` | a conversation's messages and runs |
 | POST | `/api/threads/{id}/messages` | ask a question: **202** with a run ID; 400 if it contains personal data; 409 if a run is active |
@@ -226,14 +237,14 @@ Interactive documentation is at `http://localhost:8000/docs` when the API runs.
 streams trace events, each stored with a per-run sequence number before it is sent. So a browser that connects
 late, reconnects or reopens history replays the same events and sees the same view.
 
-**Trace events** (`graph/events.py`) have a level: 1 brief, 2 standard, 3 full. The UI filters them by the user's
+**Trace events** (`graph/events.py`) have a level: 1 Normal, 2 Thinking, 3 Verbose. The UI filters them by the user's
 chosen verbosity.
 
 | Level | Kinds |
 |---|---|
-| 1 (brief) | `status` (the one-line live status), `action`, `error`, `usage` (running tokens and cost), `draft` (the report so far, readable), `reply` (the user's answers), `end` |
-| 2 (standard) | `reasoning`, `observation` |
-| 3 (full) | `thinking`, `context` (an agent's context window) |
+| 1 (Normal) | `status` (the one-line live status), `action`, `error`, `usage` (running tokens and cost), `draft` (the report so far, readable), `reply` (the user's answers), `end` |
+| 2 (Thinking) | `reasoning`, `observation` |
+| 3 (Verbose) | `thinking`, `context` (an agent's context window) |
 
 **Before anything reaches a model**, the message is screened for personal identifiers by regular expressions
 and a Luhn check: NRIC/FIN, email addresses, phone numbers, unit numbers, bank accounts and card numbers. A match
@@ -340,7 +351,8 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
 - **Report.** The API's HTML page runs in a sandboxed iframe: scripts on, no same-origin access. It posts only
   its height to the parent page.
 - **Inspector.** A side panel shows each agent's context window by category and the LLM call log.
-- **Options.** Model, effort, tools, triage, web scope, plan approval and verbosity, remembered in the browser.
+- **Options.** A model menu (with an Effort submenu) beside the send button, and a + menu with a switch per
+  tool, plan approval and the triage method. These and the Detail level are remembered in the browser.
 
 ## 10. Security and privacy
 

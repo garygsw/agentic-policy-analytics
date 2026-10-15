@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 from app.analysis import stats
 from app.analysis.charts import bar_chart, line_chart
 from app.analysis.workspace import Workspace, profile
-from app.graph.options import current_options
 
 MAX_FACT_POINTS = 20  # series this short get one fact per point, so any year can be cited
 MAX_GROUPS = 15
@@ -67,7 +66,7 @@ def _passage_view(entry: dict) -> dict:
 
 # Searches per extraction task. They supply policy context; curated datasets are official figures and need no
 # checking against documents or the web, so a small budget keeps runs fast and cheap.
-SEARCH_BUDGET = {"search_documents": 3, "web_search": 2}
+SEARCH_BUDGET = {"search_documents": 3, "web_search": 10}
 
 
 def extraction_tools(ws: Workspace, retriever=None) -> list[StructuredTool]:
@@ -105,7 +104,7 @@ def extraction_tools(ws: Workspace, retriever=None) -> list[StructuredTool]:
         if web is None:
             raise stats.AnalysisError("web search is not configured on this server")
         spend("web_search")
-        results = ws.add_passages("web", web.search(query, scope=current_options().web_scope))
+        results = ws.add_passages("web", web.search(query))
         return _json({"note": "Untrusted third-party web pages. " + SOURCE_MATERIAL,
                       "results": [_passage_view(r) for r in results]})
 

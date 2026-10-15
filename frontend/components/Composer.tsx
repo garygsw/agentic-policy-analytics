@@ -7,11 +7,12 @@ interface Props {
   placeholder: string;
   disabled: boolean;
   onSubmit: (text: string) => Promise<boolean>; // false: refused, so keep the text for editing
-  children?: ReactNode; // the options bar
+  left?: ReactNode; // the + menu (tools and settings)
+  right?: ReactNode; // the model menu, beside the send button
 }
 
 /** The question box. Enter sends, Shift+Enter adds a line; typing with an input method (e.g. Chinese) is safe. */
-export function Composer({ text, onText, placeholder, disabled, onSubmit, children }: Props) {
+export function Composer({ text, onText, placeholder, disabled, onSubmit, left, right }: Props) {
   const [sending, setSending] = useState(false);
 
   const submit = async () => {
@@ -40,7 +41,9 @@ export function Composer({ text, onText, placeholder, disabled, onSubmit, childr
         }}
       />
       <div className="composer-foot">
-        {children}
+        {left}
+        <span className="spacer" />
+        {right}
         <button type="submit" className="send" disabled={disabled || sending || !text.trim()} aria-label="Send">↑</button>
       </div>
     </form>

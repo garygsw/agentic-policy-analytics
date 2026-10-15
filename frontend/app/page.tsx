@@ -3,11 +3,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Composer } from "@/components/Composer";
 import { Inspector } from "@/components/Inspector";
-import { EXAMPLES } from "@/components/labels";
-import { OptionsBar } from "@/components/OptionsBar";
+import { DETAIL_LABELS, EXAMPLES } from "@/components/labels";
+import { ModelMenu } from "@/components/ModelMenu";
 import { RunBlock } from "@/components/RunBlock";
 import { Sidebar } from "@/components/Sidebar";
 import { StatusLine } from "@/components/StatusLine";
+import { ToolsMenu } from "@/components/ToolsMenu";
 import { api } from "@/lib/api";
 import { useNow, useStoredState } from "@/lib/hooks";
 import { pendingOf } from "@/lib/runState";
@@ -15,16 +16,16 @@ import type { OptionsResponse, RunOptions, TraceEvent } from "@/lib/types";
 import { displayedStatus, useConversation, type RunEntry } from "@/lib/useConversation";
 import { useRunStream } from "@/lib/useRunStream";
 
-const DEFAULT_OPTIONS: RunOptions = { model: null, reasoning_effort: null, tools: null, web_scope: "gov", triage: "local" };
+const DEFAULT_OPTIONS: RunOptions = { model: null, reasoning_effort: null, tools: null, triage: "local" };
 
 /** Keeps saved options valid against what the server offers now (a model or tool may have been removed). */
 function validOptions(saved: RunOptions, catalog: OptionsResponse): RunOptions {
   const tools = new Set(catalog.tools.map((t) => t.name));
   return {
-    ...DEFAULT_OPTIONS,
-    ...saved,
     model: catalog.models.some((m) => m.id === saved.model) ? saved.model : null,
+    reasoning_effort: saved.reasoning_effort ?? null,
     tools: saved.tools ? saved.tools.filter((t) => tools.has(t)) : null,
+    triage: saved.triage ?? DEFAULT_OPTIONS.triage, // settings saved by older versions (e.g. web scope) are dropped
   };
 }
 
@@ -39,7 +40,7 @@ export default function Home() {
   const { runs, error, cancel, setError } = conversation;
   const [catalog, setCatalog] = useState<OptionsResponse | null>(null);
   const [storedOptions, setOptions] = useStoredState<RunOptions>("run-options", DEFAULT_OPTIONS);
-  const [verbosity, setVerbosity] = useStoredState<number>("verbosity", 2);
+  const [verbosity, setVerbosity] = useStoredState<number>("detail", 1); // Normal by default
   const [planApproval, setPlanApproval] = useStoredState<boolean>("plan-approval", false);
   const [text, setText] = useState("");
   const [inspecting, setInspecting] = useState<string | null>(null);
@@ -67,7 +68,7 @@ export default function Home() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.defaultPrevented) return; // an Escape that closed a menu does nothing else
       if (inspecting) setInspecting(null);
       else if (running) void cancel(running.id);
     };
@@ -102,8 +103,8 @@ export default function Home() {
           <label className="verbosity">
             Detail
             <select value={verbosity} onChange={(e) => setVerbosity(Number(e.target.value))}>
-              {(catalog?.verbosity ?? [{ level: 2, name: "standard", shows: "" }]).map((v) => (
-                <option key={v.level} value={v.level} title={v.shows}>{v.name}</option>
+              {(catalog?.verbosity ?? [{ level: 1, name: "normal", shows: "" }]).map((v) => (
+                <option key={v.level} value={v.level} title={v.shows}>{DETAIL_LABELS[v.level] ?? v.name}</option>
               ))}
             </select>
           </label>
@@ -146,12 +147,10 @@ export default function Home() {
             )}
             {running && <StatusLine view={running.view} now={now} onStop={() => void cancel(running.id)} />}
             <Composer text={text} onText={setText} placeholder={placeholder} onSubmit={submit}
-              disabled={Boolean(running) || pending?.kind === "plan_approval"}>
-              {catalog && (
-                <OptionsBar catalog={catalog} value={options} onChange={setOptions}
-                  planApproval={planApproval} onPlanApproval={setPlanApproval} />
-              )}
-            </Composer>
+              disabled={Boolean(running) || pending?.kind === "plan_approval"}
+              left={catalog && <ToolsMenu catalog={catalog} value={options} onChange={setOptions}
+                planApproval={planApproval} onPlanApproval={setPlanApproval} />}
+              right={catalog && <ModelMenu catalog={catalog} value={options} onChange={setOptions} />} />
           </div>
         </footer>
       </main>

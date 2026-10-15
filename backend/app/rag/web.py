@@ -1,8 +1,7 @@
-"""Web search through Tavily, restricted to Singapore government sites by default.
+"""Web search through Tavily, over the whole web.
 
 Results are third-party text: they are shown to the agents as source material marked untrusted, never as
-instructions. Tavily's domain filter needs exact domains (wildcards such as *.gov.sg match nothing), so the
-government scope is an explicit list.
+instructions. The agents are told to prefer official sources and to say when a source is third-party.
 """
 import re
 from urllib.parse import parse_qsl, urlencode, urlsplit
@@ -12,9 +11,6 @@ import httpx
 from app.config import get_settings
 
 API = "https://api.tavily.com/search"
-GOV_DOMAINS = ["gov.sg", "mom.gov.sg", "imda.gov.sg", "mof.gov.sg", "pmo.gov.sg", "moh.gov.sg", "ura.gov.sg",
-               "hdb.gov.sg", "lta.gov.sg", "singstat.gov.sg", "mti.gov.sg", "mas.gov.sg", "edb.gov.sg", "mddi.gov.sg",
-               "cpf.gov.sg", "msf.gov.sg", "moe.gov.sg", "mse.gov.sg", "mnd.gov.sg", "mot.gov.sg", "parliament.gov.sg"]
 
 
 class WebSearchUnavailable(RuntimeError):
@@ -41,10 +37,8 @@ class TavilySearch:
             raise WebSearchUnavailable("web search is not configured (no TAVILY_API_KEY)")
         self.key, self.timeout_s = key, timeout_s
 
-    def search(self, query: str, scope: str = "gov", max_results: int = 5) -> list[dict]:
+    def search(self, query: str, max_results: int = 5) -> list[dict]:
         body = {"query": query, "search_depth": "basic", "max_results": max_results * 2}
-        if scope == "gov":
-            body["include_domains"] = GOV_DOMAINS
         try:
             response = httpx.post(API, headers={"Authorization": f"Bearer {self.key}"}, json=body,
                                   timeout=self.timeout_s)

@@ -72,8 +72,10 @@ def test_health_and_options(tmp_path):
     with client_for({}, tmp_path) as client:
         assert client.get("/api/health").json() == {"status": "ok"}
         options = client.get("/api/options").json()
-        assert {m["id"] for m in options["models"]} >= {"gpt-6.1-sol", "claude-sonnet-5-5"}
-        assert [v["name"] for v in options["verbosity"]] == ["brief", "standard", "full"]
+        assert [(m["id"], m["name"]) for m in options["models"]] == [("claude-sonnet-5-5", "Claude Sonnet 5.5"),
+                                                                      ("gpt-6-luna", "GPT 6 Luna")]
+        assert options["models"][0]["fallback_name"] == "GPT 6.1 Sol" and "web_scopes" not in options
+        assert [v["name"] for v in options["verbosity"]] == ["normal", "thinking", "verbose"]
         assert options["defaults"]["reasoning_effort"] == "low"
 
 

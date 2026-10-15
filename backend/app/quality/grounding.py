@@ -63,6 +63,16 @@ def ungrounded(text: str, allowed: Iterable[float]) -> list[float]:
     return [v for v in numbers_in(text) if not any(_close(abs(v), a) for a in allowed)]
 
 
+def quote_around(text: str, value: float, width: int = 40) -> str:
+    """The words around the first place `value` appears in `text`, e.g. '…a stored copy retrieved 2026-10-14.'"""
+    for match in NUMBER.finditer(text):
+        found = numbers_in(match.group(0))
+        if found and _close(found[0], value):
+            start, end = max(0, match.start() - width), min(len(text), match.end() + width // 2)
+            return ("…" if start else "") + text[start:end].strip() + ("…" if end < len(text) else "")
+    return text[:width * 2]
+
+
 def numbers_preserved(original: str, translated: str) -> bool:
     """True if the translation contains every number of the original, and no new ones."""
     before, after = numbers_in(original), numbers_in(translated)

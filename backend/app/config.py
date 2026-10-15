@@ -21,10 +21,10 @@ class Settings(BaseSettings):
     llm_openai_base_url: str = "https://api.openai.com/v1"
     llm_anthropic_base_url: str = "https://api.anthropic.com"
 
-    # Two tiers, each with a primary (OpenAI) and a fallback (Anthropic) model.
+    # Two tiers, each with a primary and a fallback model from the other provider.
     # "quality" runs the agents' reasoning; "fast" runs triage, translation and other short calls.
-    llm_quality_primary: str = "gpt-6.1-sol"
-    llm_quality_fallback: str = "claude-sonnet-5-5"
+    llm_quality_primary: str = "claude-sonnet-5-5"
+    llm_quality_fallback: str = "gpt-6.1-sol"
     llm_fast_primary: str = "gpt-6-luna"
     llm_fast_fallback: str = "claude-haiku-5-5"
     # How hard the quality tier reasons. Users can override it per request; lower is faster and cheaper.

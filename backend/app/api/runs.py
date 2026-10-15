@@ -150,7 +150,8 @@ class RunManager:
             else:
                 values = snapshot.values
                 save({"node": "run", "kind": "end", "level": 1, "content": values.get("outcome", ""),
-                      "status": "completed", "outcome": values.get("outcome"), "ts": time.time()})
+                      "status": "completed", "outcome": values.get("outcome"), "flags": values.get("flags") or [],
+                      "ts": time.time()})
                 self._finish(run_id, status="completed", ledger=ledger, values=values)
         except Exception as error:  # noqa: BLE001 - the run fails visibly; the server keeps going
             save({"node": "run", "kind": "end", "level": 1, "content": f"Run failed: {type(error).__name__}",

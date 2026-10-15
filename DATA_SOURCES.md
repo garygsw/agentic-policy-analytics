@@ -8,7 +8,7 @@ Where the data comes from, how it is fetched and cleaned, and what is mock. Four
 | Statistics | SingStat Table Builder (Department of Statistics) | JSON API | live, cached, snapshot fallback |
 | Internal data (mock) | a fictional agency's system | Excel workbook | local file |
 | Documents | MOM, MOF, PMO, MOH and URA websites | HTML pages | crawled by the ingest service into a search index |
-| Recent context | the web, through Tavily (government sites by default) | search API | live, per question |
+| Recent context | the web, through Tavily | search API | live, per question |
 
 ## 1. Curated datasets
 
@@ -59,9 +59,10 @@ measures) is inferred, high-cardinality text columns such as names are dropped, 
 `GET https://tablebuilder.singstat.gov.sg/api/table/tabledata/{table_id}` returns a table as JSON. Series are
 nested by numbered rows (1, 1.1, 1.1.1), and the cleaner turns that numbering into hierarchy levels.
 
-**Tavily** (optional, `TAVILY_API_KEY`): `POST https://api.tavily.com/search`, restricted to 21 government
-domains unless the user widens the scope per request. Tavily's domain filter needs exact domains (`*.gov.sg`
-matches nothing), so the list is explicit (`backend/app/rag/web.py`).
+**Tavily** (optional, `TAVILY_API_KEY`): `POST https://api.tavily.com/search`, over the whole web, at most 10
+searches per extraction task (`backend/app/rag/web.py`). The agents are told to prefer official sources
+(gov.sg sites, statutory boards) and to say when a source is a third party. Web results are labelled untrusted
+and are never treated as instructions.
 
 **Failures.** Every request goes through one client (`backend/app/data/http.py`):
 - **Rate limits and server errors:** HTTP 429 and 5xx are retried with backoff (10, 20 and 40 s).

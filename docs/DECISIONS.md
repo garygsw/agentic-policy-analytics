@@ -374,3 +374,27 @@ Each entry records the date, the decision, the alternatives considered and the r
   - If the file is missing, the source fails like a live API and the same fallback applies.
 - **Alternatives:** A small JSON API serving the same data, with a failure switch. It is closer to a real internal system, but adds code without showing anything new, and the time went to documentation.
 
+## D-034 · 2026-10-15 · Never drop content; search before declining; whole-web search; Claude Sonnet 5.5 default; simpler chat bar
+Changes from the first round of hands-on testing.
+- **Decision:**
+  - **Flag, never drop.**
+    - A statement that still fails the number check after two fixes stays in the report, marked ⚠ with what could not be verified. It is no longer replaced by the template of computed figures.
+    - The reviewer's remaining objection is likewise a flag.
+    - Every report ends as `answered`, with its flags listed. The `partial` outcome (D-027) is removed.
+    - The template is now used only when the models fail before any report exists.
+  - **Check messages quote their context.** Each problem sent back to the writer quotes the words around the number. A statement citing a source may also use that source's dates (when it was published or retrieved).
+  - **Search before declining.** The coordinator cannot decline until at least one extraction step has searched documents and the web. A decline before that is turned into a search. The prompt adds that a policy announced to take effect in the future is not a forecast.
+  - **Web search.** It covers the whole web; the government-only option is removed. The budget is 10 searches per extraction task (was 2), and the extraction agent's step limit is 10 (was 6). The agents are told to prefer official sources and to say when a source is a third party.
+  - **Default model.** Claude Sonnet 5.5 is the default main model, with GPT 6.1 Sol as its fallback. This revises D-002, where OpenAI was primary; the fast tier is unchanged. The UI's model menu offers Claude Sonnet 5.5 and GPT 6 Luna by name. The API and CLI accept all four models.
+  - **Chat bar.**
+    - A + menu on the left holds a switch per optional tool, plan approval and the triage method.
+    - The model menu sits beside the send button, with an Effort submenu.
+    - The Detail levels are named Normal (the default), Thinking and Verbose.
+- **Why, from testing:**
+  - "Will petrol cars be phased out by 2030?" was declined with no search at all. One search finds the announced policy.
+  - A follow-up asking the system to check the internet fell back to the template. One caveat said the data was "retrieved 2026-10-14", and the check read the 14 as an unmatched number. So every finding about the policy was discarded over a date.
+- **Trade-offs:**
+  - **Flags.** They put the judgement on the reader. A flagged statement is visibly unverified, and the report's header says so.
+  - **Searches.** A search before every decline costs one extraction step, roughly $0.02–0.05, on questions that will be declined anyway.
+  - **Whole-web results.** They can come from weaker sources. They stay labelled untrusted, and the writer must cite them.
+

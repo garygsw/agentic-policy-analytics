@@ -43,7 +43,8 @@ _env.filters["citation_groups"] = citation_groups
 
 
 def render_html(*, question: str, language: str, report: Report | None, facts: list[dict], sources: list[dict],
-                charts: list[dict], review_note: str | None = None, generated: dt.datetime | None = None) -> str:
+                charts: list[dict], review_note: str | None = None, generated: dt.datetime | None = None,
+                warnings: dict[str, list[str]] | None = None) -> str:
     """The report page. With report=None (the fallback path) it shows the computed facts without prose."""
     labels = LABELS.get(language, LABELS["en"])
     shown = [c for c in charts if report is None or c["id"] in report.charts] if charts else []
@@ -53,5 +54,6 @@ def render_html(*, question: str, language: str, report: Report | None, facts: l
     specs = {c["id"]: c["spec"] for c in shown}
     return _env.get_template("report.html.j2").render(
         lang=language, L=labels, question=question, report=report, facts=facts, sources=sources, charts=shown,
-        chart_specs=specs, review_note=review_note, generated=generated.strftime("%d %b %Y, %H:%M SGT"),
+        chart_specs=specs, review_note=review_note, warnings=warnings or {},
+        generated=generated.strftime("%d %b %Y, %H:%M SGT"),
         plotly_url=PLOTLY_URL, plotly_sri=PLOTLY_SRI)

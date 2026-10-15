@@ -31,7 +31,7 @@ class AgentWorkers:
             task += "\n\nAlready loaded (no need to load again): " + "; ".join(
                 f"{d['source_id']} {d['title']}" for d in previous["datasets"])
         summary = run_tool_loop(self.llm, node="extraction", tools=enabled(extraction_tools(ws, self.retriever)),
-                                max_steps=6, system=prompts.EXTRACTION.format(catalogue=curated_catalogue()),
+                                max_steps=10, system=prompts.EXTRACTION.format(catalogue=curated_catalogue()),
                                 task=task)
         new = ws.profiles()
         kept = [d for d in previous.get("datasets", []) if d["dataset_id"] not in {n["dataset_id"] for n in new}]

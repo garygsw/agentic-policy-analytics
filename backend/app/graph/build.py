@@ -77,7 +77,8 @@ def route_plan(state: AgentState) -> str:
 def route_validate(state: AgentState) -> str:
     if not state.get("grounding_issues"):
         return "reviewer"
-    return "report_writer" if state.get("revisions", 0) < reporting.MAX_REVISIONS else "fallback_report"
+    # Out of fixes: nothing is dropped. The report goes on, and its unverified statements are flagged (D-034).
+    return "report_writer" if state.get("revisions", 0) < reporting.MAX_REVISIONS else "reviewer"
 
 
 def route_review(state: AgentState) -> str:
@@ -129,7 +130,7 @@ def build_graph(deps: Deps | None = None, checkpointer=None):
     g.add_conditional_edges("extraction", route_after("coordinator"), ["coordinator", "fallback_report"])
     g.add_conditional_edges("analytics", route_after("coordinator"), ["coordinator", "fallback_report"])
     g.add_conditional_edges("report_writer", route_after("validate"), ["validate", "fallback_report"])
-    g.add_conditional_edges("validate", route_validate, ["reviewer", "report_writer", "fallback_report"])
+    g.add_conditional_edges("validate", route_validate, ["reviewer", "report_writer"])
     g.add_conditional_edges("reviewer", route_review, ["localize_report", "coordinator", "report_writer"])
     g.add_edge("localize_report", "render")
     g.add_edge("render", "respond")  # rendered in the user's language already

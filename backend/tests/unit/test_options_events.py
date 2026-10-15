@@ -42,8 +42,8 @@ def test_required_tools_cannot_be_switched_off():
 def test_defaults_outside_a_run():
     assert current_options() == RunOptions()
     primary, fallback = build_models("quality", SETTINGS)
-    assert (primary.model_name, primary.reasoning_effort) == ("gpt-6.1-sol", "low")  # default effort is low
-    assert (fallback.model, fallback.reasoning_effort) == ("claude-sonnet-5-5", "low")
+    assert (primary.model, primary.reasoning_effort) == ("claude-sonnet-5-5", "low")  # default effort is low
+    assert (fallback.model_name, fallback.reasoning_effort) == ("gpt-6.1-sol", "low")
 
 
 def test_effort_and_model_come_from_the_request():
@@ -101,7 +101,7 @@ def test_run_emits_status_usage_and_context_events():
 
 
 def test_display_filters_by_verbosity_and_tracks_totals(capsys):
-    display = Display("brief")
+    display = Display("normal")
     display.show({"node": "x", "kind": "usage", "level": 1, "content": "", "ts": 0, "input_total": 1500,
                   "output": 500, "cost_usd": 0.0123})
     display.show({"node": "coordinator", "kind": "status", "level": 1, "content": "Planning", "ts": display.started})

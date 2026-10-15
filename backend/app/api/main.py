@@ -31,9 +31,9 @@ CHECKPOINTS = REPO_ROOT / "var" / "checkpoints.sqlite"
 # The report page runs only its own inline script and plotly.js from cdnjs; it can load nothing else.
 REPORT_CSP = ("default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; "
               "style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; base-uri 'none'")
-VERBOSITY = [{"level": 1, "name": "brief", "shows": "status lines, actions and errors"},
-             {"level": 2, "name": "standard", "shows": "plus reasoning and tool results"},
-             {"level": 3, "name": "full", "shows": "plus model thinking and each agent's context"}]
+VERBOSITY = [{"level": 1, "name": "normal", "shows": "status lines, actions and errors"},
+             {"level": 2, "name": "thinking", "shows": "plus reasoning and tool results"},
+             {"level": 3, "name": "verbose", "shows": "plus model thinking and each agent's context"}]
 
 
 class MessageIn(BaseModel):
@@ -117,7 +117,7 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
     @app.get("/api/options")
     def options():
         return {"models": available_models(), "tools": available_tools(), "efforts": ["low", "medium", "high"],
-                "triage": ["local", "jev", "llm"], "web_scopes": ["gov", "any"], "verbosity": VERBOSITY,
+                "triage": ["local", "jev", "llm"], "verbosity": VERBOSITY,
                 "defaults": RunOptions().model_dump() | {"reasoning_effort": get_settings().llm_reasoning_effort,
                                                          "model": get_settings().llm_quality_primary}}
 

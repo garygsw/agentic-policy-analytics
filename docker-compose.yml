@@ -31,6 +31,7 @@ services:
   # The scheduled document ingestion (cron, see INGEST_CRON), as its own service.
   ingest:
     <<: *backend
+    image: policy-analytics-ingest  # same build as the API; its own name, so the two builds never race
     command: ["python", "-m", "app.rag.scheduler"]
     healthcheck:
       disable: true

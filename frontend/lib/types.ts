@@ -27,6 +27,7 @@ export interface TraceEvent {
   status?: RunStatus;
   outcome?: string;
   pending?: Pending;
+  flags?: string[]; // unverified statements and the reviewer's note, shown with the report
 }
 
 export interface ContextMessage {
@@ -45,8 +46,11 @@ export type Pending =
 
 export interface ModelInfo {
   id: string;
+  name: string; // e.g. "Claude Sonnet 5.5"
+  description: string;
   provider: string;
   fallback: string;
+  fallback_name: string;
   context_window: number;
 }
 
@@ -60,7 +64,6 @@ export interface RunOptions {
   model: string | null;
   reasoning_effort: "low" | "medium" | "high" | null;
   tools: string[] | null; // null: every tool
-  web_scope: "gov" | "any";
   triage: "local" | "jev" | "llm";
 }
 
@@ -69,7 +72,6 @@ export interface OptionsResponse {
   tools: ToolInfo[];
   efforts: string[];
   triage: string[];
-  web_scopes: string[];
   verbosity: { level: number; name: string; shows: string }[];
   defaults: RunOptions;
 }

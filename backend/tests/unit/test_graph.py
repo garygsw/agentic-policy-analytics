@@ -111,16 +111,18 @@ def test_vague_question_pauses_for_a_clarifying_answer_then_resumes():
                                                        "employment in tech, 2020 to 2024"]
 
 
-def test_ungrounded_numbers_are_sent_back_then_fall_back_to_template():
+def test_numbers_still_ungrounded_after_two_fixes_are_flagged_not_dropped():
     graph, llm, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
-                          "Report": [BAD, BAD, BAD]})
+                          "Report": [BAD, BAD, BAD], "Review": [PASS]})
     state = ask(graph, QUESTION).values
     assert llm.keys().count("Report") == 3  # first draft + MAX_REVISIONS fixes
-    revision_request = llm.calls[-1][1][-1].content
+    revision_request = llm.calls[-2][1][-1].content
     assert "31 does not match any computed fact" in revision_request
-    assert state["outcome"] == "fallback" and "Automated summary" in state["answer"]
-    assert "ICT employment, 2024: 125000 persons [F2]" in state["answer"]
-
+    assert '(in "ICT employment rose 31% between' in revision_request  # the writer sees where
+    assert state["outcome"] == "answered" and "Automated summary" not in state["answer"]
+    assert "Employment reached 131,000 persons. [F2] ⚠ Unverified: 131,000 does not match" in state["answer"]
+    assert any(f.startswith("finding 1: 131,000 does not match") for f in state["flags"])
+    assert "Some statements could not be verified" in state["report_html"]
 
 def test_caveats_are_checked_like_findings():
     uncited = GOOD.model_copy(update={"caveats": [Claim(text="Figures are June snapshots.", citations=[])]})
@@ -144,7 +146,15 @@ def test_a_caveat_may_quote_the_quality_report_of_the_dataset_it_cites():
     assert reporting.validate(state)["grounding_issues"] == []
     wrong_source = report.model_copy(update={"caveats": [Claim(text="5,546 values remained.", citations=["S2"])]})
     assert reporting.validate({**state, "report": wrong_source})["grounding_issues"] == [
-        "caveat 1: 5,546 does not match any computed fact or a source this caveat cites"]
+        'caveat 1: 5,546 does not match any computed fact or a source this caveat cites (in "5,546 values remained.")']
+
+
+def test_a_statement_may_use_the_dates_of_the_source_it_cites():
+    sources = [{"id": "S1", "kind": "dataset", "title": "COE", "retrieved_at": "2026-10-14"}]
+    report = Report(title="t", summary="s", findings=[Claim(text="Premiums rose.", citations=["S1"])],
+                    caveats=[Claim(text="Data from a stored copy retrieved 2026-10-14.", citations=["S1"])])
+    state = {"question": "q", "report": report, "findings": {"extraction": {"sources": sources}}}
+    assert reporting.validate(state)["grounding_issues"] == []  # 14 is the day the data was retrieved
 
 
 def test_reports_saved_with_plain_caveats_still_load():
@@ -180,16 +190,19 @@ def test_the_reviewer_sends_the_analysis_back_only_once():
                               "Report": [GOOD, GOOD], "Review": [wrong, wrong]})
     state = ask(graph, QUESTION).values
     assert workers.calls == ["extract", "analyse", "analyse"]  # one rework, not a loop until the step limit
-    assert state["outcome"] == "partial" and "Reviewer note: compare all flat types" in state["answer"]
+    # The remaining objection is a flag on an answered report, never a reason to drop it.
+    assert state["outcome"] == "answered" and "Reviewer note: compare all flat types" in state["answer"]
+    assert state["flags"] == ["Reviewer note: compare all flat types"]
 
 
-def test_a_report_the_reviewer_still_rejects_is_partial():
+def test_a_report_the_reviewer_still_rejects_is_answered_with_its_note():
     poor = Review(verdict="poor_report", reason="does not compare with overall employment")
     graph, _, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
                         "Report": [GOOD, GOOD, GOOD], "Review": [poor, poor, poor]})
     state = ask(graph, QUESTION).values
-    assert state["outcome"] == "partial" and state["revisions"] == 2
+    assert state["outcome"] == "answered" and state["revisions"] == 2
     assert "Reviewer note: does not compare with overall employment" in state["answer"]
+    assert state["flags"] == ["Reviewer note: does not compare with overall employment"]
 
 
 def test_only_cited_passages_are_listed_as_sources():
@@ -238,11 +251,13 @@ def test_translation_that_changes_a_number_falls_back_to_english():
 def test_second_turn_keeps_history_and_resets_working_state():
     graph, llm, _ = make({
         "TriageDecision": [IN_SCOPE, IN_SCOPE], "StandaloneQuestion": [StandaloneQuestion(question="Same for 2019")],
-        "CoordinatorStep": steps("extract", "analyse", "report", "decline"), "Report": [GOOD], "Review": [PASS]})
+        "CoordinatorStep": steps("extract", "analyse", "report", "decline", "decline"), "Report": [GOOD],
+        "Review": [PASS]})
     ask(graph, QUESTION)
     state = ask(graph, "what about 2019?").values
     assert len(state["messages"]) == 4 and state["outcome"] == "declined"
-    assert [s.action for s in state["coordinator_steps"]] == ["decline"]  # turn 1's steps were cleared
+    # Turn 1's steps were cleared; turn 2 searched before it could decline.
+    assert [s.action for s in state["coordinator_steps"]] == ["extract", "decline"]
     assert "StandaloneQuestion" in llm.keys()  # follow-ups are rewritten with the conversation history
 
 
@@ -262,11 +277,24 @@ def test_rejecting_the_plan_without_feedback_cancels():
     assert state["outcome"] == "cancelled" and workers.calls == []
 
 
-def test_coordinator_can_decline_unanswerable_questions():
-    graph, _, workers = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": [CoordinatorStep(
-        thought="This asks for a forecast", action="decline", instructions="Official data does not forecast 2030.")]})
+DECLINE = CoordinatorStep(thought="This asks for a forecast", action="decline",
+                         instructions="Official data does not forecast 2030.")
+
+
+def test_coordinator_searches_before_it_can_decline():
+    graph, _, workers = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": [DECLINE, DECLINE]})
     state = ask(graph, "What will HDB prices be in 2030?").values
-    assert state["outcome"] == "declined" and "does not forecast 2030" in state["answer"] and workers.calls == []
+    first = state["coordinator_steps"][0]
+    assert (first.action, workers.calls) == ("extract", ["extract"])  # the first decline became a search
+    assert "What will HDB prices be in 2030?" in first.instructions and "This asks for a forecast" in first.thought
+    assert state["outcome"] == "declined" and "does not forecast 2030" in state["answer"]
+
+
+def test_without_search_tools_a_decline_stands():
+    graph, _, workers = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": [DECLINE]})
+    config = {"configurable": {"thread_id": "t1", "options": {"tools": []}}}  # every optional tool switched off
+    graph.invoke({"messages": [HumanMessage("What will HDB prices be in 2030?")]}, config)
+    assert graph.get_state(config).values["outcome"] == "declined" and workers.calls == []
 
 
 def test_ledger_attributes_each_llm_call_to_its_agent():

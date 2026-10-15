@@ -47,7 +47,9 @@ describe("run view", () => {
     expect(draftStage(revised)).toBe("Revising…");
     expect(checkLabel(revised, "answered")).toBe("Revised after check");
     expect(checkLabel(view, "answered")).toBe("✓ Checked");
-    expect(checkLabel(view, "partial")).toMatch(/Partial/);
+    expect(checkLabel(view, "partial")).toMatch(/Partial/); // older runs
+    const flagged = applyEvents(view, [ev("end", { status: "completed", outcome: "answered", flags: ["finding 2: 14 does not match"] })]);
+    expect(checkLabel(flagged, "answered")).toBe("⚠ 1 flagged");
   });
 
   it("follows the status through a pause and a resume", () => {

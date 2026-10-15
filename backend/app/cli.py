@@ -49,7 +49,7 @@ def plan_decision(text: str) -> dict:
     return {"approved": False, "feedback": "" if text.lower() in ("", "n", "no") else text}
 
 
-VERBOSITY = {"brief": 1, "standard": 2, "full": 3}
+VERBOSITY = {"normal": 1, "thinking": 2, "verbose": 3}
 
 
 class Display:
@@ -169,7 +169,7 @@ def main() -> None:
     parser.add_argument("--thread", help="conversation ID to continue")
     parser.add_argument("--plan-approval", action="store_true", help="pause for approval before fetching data")
     parser.add_argument("--calls", action="store_true", help="print the LLM call log after each answer")
-    parser.add_argument("--verbosity", choices=list(VERBOSITY), default="standard",
+    parser.add_argument("--verbosity", choices=list(VERBOSITY), default="thinking",
                         help="brief: status and actions; standard: plus reasoning; full: plus thinking and context")
     parser.add_argument("--model", help="main model (see --options)")
     parser.add_argument("--effort", choices=["low", "medium", "high"], help="reasoning effort (default: low)")
