@@ -12,7 +12,13 @@ communications sector changed since 2019?". A team of AI agents answers it:
 You can watch the agents work live: each step, the reasoning behind it, tokens and cost, and what each agent was
 given to read.
 
-> Demo video: *to be added.*
+**Demo video** (4 minutes, narrated, with captions): Plan mode and the plan approval, the agents at work, a report and
+its Detail levels, triage of an off-topic question, then HDB prices, COE premiums, the 2025 general election and the
+haze, each on real data. Waiting for the agents is shown sped up.
+
+[![A frame from the demo video: a report's map of fire hotspots across Southeast Asia in 2015, with Singapore marked.](docs/demo-poster.jpg)](https://github.com/garygsw/agentic-policy-analytics/releases/download/v1.0.3/policy-demo.mp4)
+
+[Watch the demo video (MP4, 17 MB)](https://github.com/garygsw/agentic-policy-analytics/releases/download/v1.0.3/policy-demo.mp4)
 
 **What it does**
 - **Answers from official data.** 22 curated datasets from MOM, HDB, URA, LTA, MOH, NEA, ELD, IMDA, SingStat and
@@ -355,7 +361,7 @@ to the GitHub Container Registry.
 **On one machine, from the published images.** Nothing is built:
 
 ```bash
-VERSION=v1.0.2 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+VERSION=v1.0.3 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
 ```
 
 The published web image calls the API at `http://localhost:8000`, so the browser must be on the same machine.
