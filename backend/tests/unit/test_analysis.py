@@ -10,6 +10,7 @@ from app.agents.tool_loop import run_tool_loop
 from app.agents.tools import analytics_tools, extraction_tools
 from app.agents.workers import AgentWorkers
 from app.analysis import stats
+from app.analysis.charts import line_chart, period_date
 from app.analysis.workspace import Workspace, round_value
 from app.data.cleaning import QualityReport
 from app.data.registry import CuratedDataset
@@ -359,6 +360,20 @@ def test_line_chart_with_two_units_gets_two_axes_and_a_data_table():
     assert chart["spec"]["data"][1]["yaxis"] == "y2"
     assert chart["spec"]["layout"]["yaxis2"]["title"]["text"] == "S$ million"
     assert chart["table"]["rows"][0] == ["2020", 200.0, 50.0] and chart["sources"] == ["S1", "S2"]
+    assert chart["spec"]["layout"]["xaxis"]["type"] == "date" and chart["spec"]["data"][0]["text"][0] == "2020"
+
+
+def test_periods_sit_in_the_middle_so_yearly_and_monthly_lines_line_up():
+    assert [period_date(p) for p in ["2024", "2024-Q1", "2024-Q4", "2024-03", "FY2024", "Ang Mo Kio"]] == [
+        "2024-07-01", "2024-02-15", "2024-11-15", "2024-03-15", "2024-10-01", None]
+    yearly = pd.Series([153267.0], index=["2015"])
+    monthly = pd.Series([88.0, 322.0], index=["2015-08", "2015-09"])
+    spec, table = line_chart([("Hotspots", yearly, "hotspots"), ("PSI", monthly, "PSI")], "Haze")
+    assert [t["x"] for t in spec["data"]] == [["2015-07-01"], ["2015-08-15", "2015-09-15"]]
+    assert spec["layout"]["yaxis2"]["tickmode"] == "auto" and spec["layout"]["legend"]["yanchor"] == "bottom"
+    assert [row[0] for row in table["rows"]] == ["2015", "2015-08", "2015-09"]  # the table keeps the periods
+    spec, _ = line_chart([("Price", pd.Series([1.0, 2.0], index=["North", "South"]), "S$")], "Not periods")
+    assert spec["layout"]["xaxis"]["type"] == "category" and spec["data"][0]["x"] == ["North", "South"]
 
 
 def test_bar_chart_ranks_groups_in_one_period_and_skips_groups_without_a_value():

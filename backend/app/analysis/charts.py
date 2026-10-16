@@ -6,6 +6,8 @@ over time); and maps.
 A spec is plain JSON ({"data": [...], "layout": {...}}) that plotly.js renders in the browser and in the HTML
 report. Each chart also keeps its data as a table, shown under the chart for accessibility and checking.
 """
+import re
+
 import pandas as pd
 
 PALETTE = ["#c96442", "#3b6ea8", "#5b8a5a", "#9a6fb0", "#b58a2b", "#6b7280"]
@@ -20,23 +22,48 @@ def plain(text: str) -> str:
     return text.replace("<", "").replace(">", "")
 
 
+def period_date(period: str) -> str | None:
+    """The middle of a period, as a date a time axis can place: "2024" is 1 July, "2024-Q1" 15 February, "2024-03"
+    15 March and "FY2024" (April 2024 to March 2025) 1 October 2024. With every point in the middle of its period,
+    series of different frequencies line up: a year's total sits among that year's months. None if not a period."""
+    if match := re.fullmatch(r"(\d{4})", period):
+        return f"{match[1]}-07-01"
+    if match := re.fullmatch(r"(\d{4})-Q([1-4])", period):
+        return f"{match[1]}-{3 * int(match[2]) - 1:02d}-15"
+    if match := re.fullmatch(r"(\d{4})-(\d{2})", period):
+        return f"{match[1]}-{match[2]}-15"
+    if match := re.fullmatch(r"FY(\d{4})", period):
+        return f"{match[1]}-10-01"
+    return None
+
+
 def line_chart(series: list[tuple[str, pd.Series, str]], title: str) -> tuple[dict, dict]:
-    """Lines over time. Two units get two y-axes; more than two units cannot share a chart."""
+    """Lines over time, on a time axis (short labels such as years, never rotated). Two units get two y-axes; more
+    than two units cannot share a chart."""
     units = list(dict.fromkeys(unit for _, _, unit in series))
     if len(units) > 2:
         raise ValueError(f"a chart can show at most two units; got {units}")
+    periods = sorted({p for _, values, _ in series for p in values.index})
+    dates = {p: period_date(str(p)) for p in periods}
+    on_time_axis = all(dates.values())
     traces = []
     for i, (label, values, unit) in enumerate(series):
         trace = {"type": "scatter", "mode": "lines+markers", "name": plain(label), "x": list(values.index),
                  "y": [round(float(v), 4) for v in values], "line": {"color": PALETTE[i % len(PALETTE)]}}
+        if on_time_axis:  # placed by date; hovering still shows the period as the data has it
+            trace |= {"x": [dates[p] for p in values.index], "text": [str(p) for p in values.index],
+                      "hovertemplate": "%{text}: %{y:,}"}
         if unit != units[0]:
             trace["yaxis"] = "y2"
         traces.append(trace)
-    layout = {"title": {"text": plain(title)}, "xaxis": {"type": "category"}, "yaxis": {"title": {"text": units[0]}},
-              "legend": {"orientation": "h"}, "margin": {"t": 60, "r": 60}}
-    if len(units) == 2:
-        layout["yaxis2"] = {"title": {"text": units[1]}, "overlaying": "y", "side": "right"}
-    periods = sorted({p for _, values, _ in series for p in values.index})
+    layout = {"title": {"text": plain(title)},
+              "xaxis": {"type": "date"} if on_time_axis else {"type": "category", "automargin": True},
+              "yaxis": {"title": {"text": units[0]}}, "margin": {"t": 60, "r": 60},
+              # above the plot, where the x-axis labels cannot run into it
+              "legend": {"orientation": "h", "x": 0, "y": 1.02, "xanchor": "left", "yanchor": "bottom"}}
+    if len(units) == 2:  # round ticks of its own (Plotly's default lines them up with the left axis, at odd values)
+        layout["yaxis2"] = {"title": {"text": units[1]}, "overlaying": "y", "side": "right", "tickmode": "auto",
+                            "showgrid": False}
     table = {"columns": ["period", *[f"{label} ({unit})" for label, _, unit in series]],
              "rows": [[p, *[_cell(values, p) for _, values, _ in series]] for p in periods]}
     return {"data": traces, "layout": layout}, table

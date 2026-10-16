@@ -5,11 +5,13 @@ data. matplotlib's Figure API is used directly (not pyplot), because runs finish
 pyplot keeps global state.
 """
 import io
+from datetime import date
 
 import numpy as np
 from matplotlib.cm import ScalarMappable
 from matplotlib.collections import PolyCollection
 from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.dates import AutoDateLocator, ConciseDateFormatter
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
@@ -25,7 +27,9 @@ def _axis_title(layout: dict, axis: str) -> str:
 
 
 def _number(value: float, _position=None) -> str:
-    return f"{value:,.0f}" if abs(value) >= 100 else f"{value:,.2g}" if abs(value) < 1 else f"{value:,.1f}"
+    if abs(value) >= 100 or value == int(value):
+        return f"{value:,.0f}"
+    return f"{value:,.2g}" if abs(value) < 1 else f"{value:,.1f}"
 
 
 def _points_png(ax, trace: dict, layout: dict) -> None:
@@ -162,10 +166,11 @@ def chart_png(spec: dict, title: str) -> bytes:
     bars = [t for t in traces if t.get("type") == "bar"]
     if bars:
         categories = _bars_png(ax, bars, stacked=layout.get("barmode") == "stack")
+    on_dates = (layout.get("xaxis") or {}).get("type") == "date"
     for trace in [t for t in traces if t not in points and t not in bars]:
-        x = [str(v) for v in trace.get("x", [])]
+        x = [date.fromisoformat(v) for v in trace["x"]] if on_dates else [str(v) for v in trace.get("x", [])]
         y = [float("nan") if v is None else v for v in trace.get("y", [])]
-        categories = categories or x
+        categories = categories or ([] if on_dates else x)
         color = (trace.get("line") or trace.get("marker") or {}).get("color")
         target = ax
         if trace.get("yaxis") == "y2":
@@ -179,7 +184,13 @@ def chart_png(spec: dict, title: str) -> bytes:
     if second_axis is not None:
         second_axis.set_ylabel(_axis_title(layout, "yaxis2"), fontsize=8)
         second_axis.yaxis.set_major_formatter(FuncFormatter(_number))
-    if categories:  # periods or groups along the x-axis (a scatter chart's x-axis is a measure instead)
+        second_axis.tick_params(axis="y", labelsize=7)
+    if on_dates:  # a time axis: a few short labels (years, or months within a year), never rotated
+        locator = AutoDateLocator(maxticks=MAX_X_LABELS)
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(ConciseDateFormatter(locator))
+        ax.tick_params(axis="x", labelsize=7)
+    elif categories:  # groups along the x-axis (a scatter chart's x-axis is a measure instead)
         step = max(1, len(categories) // MAX_X_LABELS)
         ax.set_xticks(range(0, len(categories), step), [categories[i] for i in range(0, len(categories), step)],
                       rotation=45, ha="right", fontsize=7)

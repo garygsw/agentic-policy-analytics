@@ -135,8 +135,15 @@ def test_every_chart_kind_draws_as_an_image_for_the_downloads():
                       {"type": "scatter", "x": [103.8], "y": [1.3], "marker": {"showscale": True, "cmin": 0,
                                                                                 "cmax": 10}}],
              "layout": {"yaxis": {"scaleanchor": "x"}}}
-    for spec in (line, bar, points, pie, boxes, dots, heatmap, stacked, a_map):
+    on_dates, _ = line_chart([("Hotspots", pd.Series([69563.0, 153267.0], index=["2014", "2015"]), "hotspots"),
+                              ("PSI", pd.Series([88.0, 322.0], index=["2015-08", "2015-09"]), "PSI")], "Haze")
+    for spec in (line, on_dates, bar, points, pie, boxes, dots, heatmap, stacked, a_map):
         assert chart_png(spec, "A chart").startswith(b"\x89PNG")
+
+
+def test_axis_numbers_drop_a_needless_decimal_point():
+    from app.report.static_charts import _number
+    assert [_number(v) for v in (50.0, 2.5, 0.25, 160000.0)] == ["50", "2.5", "0.25", "160,000"]
 
 
 def test_a_chart_table_with_text_in_any_column_renders():
