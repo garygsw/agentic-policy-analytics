@@ -14,6 +14,8 @@ PALETTE = ["#c96442", "#3b6ea8", "#5b8a5a", "#9a6fb0", "#b58a2b", "#6b7280"]
 # Light to dark, for heatmaps and maps. Spelled out, because Plotly's and matplotlib's "YlOrRd" run in opposite
 # directions; the PNG downloads use the same list.
 SEQUENTIAL = [[0.0, "#ffffcc"], [0.25, "#fed976"], [0.5, "#fd8d3c"], [0.75, "#e31a1c"], [1.0, "#800026"]]
+# Numbers on axes and colour bars as in the report's tables: 150,000 and 2.5 (not Plotly's 150k, or 9000).
+NUMBERS = {"tickformat": ",~f"}
 MAX_SLICES = 8  # a pie with more slices is unreadable: the smallest are combined into "Other"
 
 
@@ -58,12 +60,12 @@ def line_chart(series: list[tuple[str, pd.Series, str]], title: str) -> tuple[di
         traces.append(trace)
     layout = {"title": {"text": plain(title)},
               "xaxis": {"type": "date"} if on_time_axis else {"type": "category", "automargin": True},
-              "yaxis": {"title": {"text": units[0]}}, "margin": {"t": 60, "r": 60},
+              "yaxis": {"title": {"text": units[0]}, **NUMBERS}, "margin": {"t": 60, "r": 60},
               # above the plot, where the x-axis labels cannot run into it
               "legend": {"orientation": "h", "x": 0, "y": 1.02, "xanchor": "left", "yanchor": "bottom"}}
     if len(units) == 2:  # round ticks of its own (Plotly's default lines them up with the left axis, at odd values)
         layout["yaxis2"] = {"title": {"text": units[1]}, "overlaying": "y", "side": "right", "tickmode": "auto",
-                            "showgrid": False}
+                            "showgrid": False, "automargin": True, **NUMBERS}
     table = {"columns": ["period", *[f"{label} ({unit})" for label, _, unit in series]],
              "rows": [[p, *[_cell(values, p) for _, values, _ in series]] for p in periods]}
     return {"data": traces, "layout": layout}, table
@@ -79,8 +81,8 @@ def scatter_chart(x: tuple[str, pd.Series, str], y: tuple[str, pd.Series, str], 
     trace = {"type": "scatter", "mode": "markers+text" if len(periods) <= max_point_labels else "markers",
              "x": [round(float(v), 4) for v in both.iloc[:, 0]], "y": [round(float(v), 4) for v in both.iloc[:, 1]],
              "text": periods, "textposition": "top center", "marker": {"color": PALETTE[0], "size": 9}}
-    layout = {"title": {"text": plain(title)}, "xaxis": {"title": {"text": plain(f"{x_label} ({x_unit})")}},
-              "yaxis": {"title": {"text": plain(f"{y_label} ({y_unit})")}}, "margin": {"t": 60}}
+    layout = {"title": {"text": plain(title)}, "xaxis": {"title": {"text": plain(f"{x_label} ({x_unit})")}, **NUMBERS},
+              "yaxis": {"title": {"text": plain(f"{y_label} ({y_unit})")}, **NUMBERS}, "margin": {"t": 60}}
     table = {"columns": ["period", f"{x_label} ({x_unit})", f"{y_label} ({y_unit})"],
              "rows": [[p, a, b] for p, a, b in zip(periods, trace["x"], trace["y"], strict=True)]}
     return {"data": [trace], "layout": layout}, table
@@ -89,7 +91,8 @@ def scatter_chart(x: tuple[str, pd.Series, str], y: tuple[str, pd.Series, str], 
 def bar_chart(values: pd.Series, title: str, unit: str) -> tuple[dict, dict]:
     spec = {"data": [{"type": "bar", "x": list(values.index), "y": [round(float(v), 4) for v in values],
                       "marker": {"color": PALETTE[0]}}],
-            "layout": {"title": {"text": plain(title)}, "yaxis": {"title": {"text": unit}}, "margin": {"t": 60}}}
+            "layout": {"title": {"text": plain(title)}, "yaxis": {"title": {"text": unit}, **NUMBERS},
+                       "margin": {"t": 60}}}
     table = {"columns": ["group", unit], "rows": [[k, round(float(v), 4)] for k, v in values.items()]}
     return spec, table
 
@@ -121,7 +124,7 @@ def box_chart(stats: dict[str, dict], title: str, unit: str) -> tuple[dict, dict
                "median": [round(d["median"], 4)], "q3": [round(d["q3"], 4)],
                "lowerfence": [round(d["lower_whisker"], 4)], "upperfence": [round(d["upper_whisker"], 4)],
                "marker": {"color": PALETTE[0]}, "showlegend": False} for group, d in stats.items()]
-    layout = {"title": {"text": plain(title)}, "yaxis": {"title": {"text": unit}},
+    layout = {"title": {"text": plain(title)}, "yaxis": {"title": {"text": unit}, **NUMBERS},
               "xaxis": {"type": "category", "automargin": True}, "margin": {"t": 60}}
     table = {"columns": ["group", "values", "min", "lower quartile", "median", "upper quartile", "max"],
              "rows": [[g, d["n"], *(round(d[k], 4) for k in ("min", "q1", "median", "q3", "max"))]
@@ -135,7 +138,7 @@ def dot_chart(groups: dict[str, pd.Series], title: str, unit: str) -> tuple[dict
                "jitter": 0.5, "pointpos": 0, "fillcolor": "rgba(0,0,0,0)", "line": {"color": "rgba(0,0,0,0)"},
                "marker": {"color": PALETTE[i % len(PALETTE)], "size": 6, "opacity": 0.75}, "showlegend": False}
               for i, (group, values) in enumerate(groups.items())]
-    layout = {"title": {"text": plain(title)}, "yaxis": {"title": {"text": unit}},
+    layout = {"title": {"text": plain(title)}, "yaxis": {"title": {"text": unit}, **NUMBERS},
               "xaxis": {"type": "category", "automargin": True}, "margin": {"t": 60}}
     table = {"columns": ["group", "values", "min", "median", "max"],
              "rows": [[g, len(v), round(float(v.min()), 4), round(float(v.median()), 4), round(float(v.max()), 4)]
@@ -149,7 +152,7 @@ def heatmap_chart(matrix: pd.DataFrame, title: str, unit: str) -> tuple[dict, di
     z = [[None if pd.isna(v) else round(float(v), 4) for v in row] for row in matrix.to_numpy()]
     columns = [plain(str(c)) for c in matrix.columns]
     trace = {"type": "heatmap", "z": z, "x": columns, "y": [plain(str(r)) for r in matrix.index],
-             "colorscale": SEQUENTIAL, "hoverongaps": False, "colorbar": {"title": {"text": unit}}}
+             "colorscale": SEQUENTIAL, "hoverongaps": False, "colorbar": {"title": {"text": unit}, **NUMBERS}}
     xaxis = {"type": "category", "automargin": True}
     dates = [period_date(c) for c in columns]
     if all(dates):  # columns are periods: a time axis, as for lines (short labels, never rotated)
@@ -219,7 +222,8 @@ def map_chart(values: pd.Series, shapes: dict[str, list], points: dict[str, tupl
                                   "line": {"color": "#ffffff", "width": 1}}})
     traces.append({"type": "scatter", "x": [base_x[0]], "y": [base_y[0]], "mode": "markers", "hoverinfo": "skip",
                    "marker": {"size": 0.1, "opacity": 0, "color": [low, high], "colorscale": SEQUENTIAL,
-                              "cmin": low, "cmax": high, "showscale": True, "colorbar": {"title": {"text": unit}}}})
+                              "cmin": low, "cmax": high, "showscale": True,
+                              "colorbar": {"title": {"text": unit}, **NUMBERS}}})
     layout = {"title": {"text": plain(title)}, "showlegend": False, "hovermode": "closest", "height": 460,
               "xaxis": {"visible": False}, "yaxis": {"visible": False, "scaleanchor": "x", "scaleratio": 1},
               "margin": {"t": 60}}
@@ -234,7 +238,7 @@ def multi_bar_chart(matrix: pd.DataFrame, title: str, unit: str, stacked: bool) 
                "y": [None if pd.isna(v) else round(float(v), 4) for v in matrix[part]],
                "marker": {"color": PALETTE[i % len(PALETTE)]}} for i, part in enumerate(matrix.columns)]
     layout = {"title": {"text": plain(title)}, "barmode": "stack" if stacked else "group",
-              "yaxis": {"title": {"text": unit}}, "xaxis": {"type": "category", "automargin": True},
+              "yaxis": {"title": {"text": unit}, **NUMBERS}, "xaxis": {"type": "category", "automargin": True},
               "legend": {"orientation": "h"}, "margin": {"t": 60}}
     table = {"columns": ["group", *[str(c) for c in matrix.columns]],
              "rows": [[str(r), *[None if pd.isna(v) else round(float(v), 4) for v in row]]

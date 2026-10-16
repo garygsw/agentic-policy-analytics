@@ -11,6 +11,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.graph.state import Report
+from app.report.numbers import readable
 
 PLOTLY_URL = "https://cdnjs.cloudflare.com/ajax/libs/plotly.js/4.1.2/plotly.min.js"
 PLOTLY_SRI = "sha512-Bl2PHPN4LtlyZe5999ZzrfZOVxEqJjir/Sa8trGcjybS8Mn1EfjOaF6j4V/Cyq5VZUacnI3va+/SCth4UPwHNg=="
@@ -23,15 +24,7 @@ _env = Environment(loader=FileSystemLoader(Path(__file__).parent / "templates"),
                    autoescape=select_autoescape(["html", "j2"]), trim_blocks=True, lstrip_blocks=True)
 
 
-def _number(value) -> str:
-    """A table cell: numbers with thousands separators (at most two decimals); text (a heatmap's column name, for
-    example) as it is."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return str(value)
-    return f"{value:,}" if isinstance(value, int) else f"{value:,.2f}".rstrip("0").rstrip(".")
-
-
-_env.filters["number"] = _number
+_env.filters["number"] = readable
 
 
 def citation_groups(ids: list[str]) -> list[tuple[str, str]]:

@@ -22,6 +22,7 @@ from app.graph.nodes.reporting import (
     sources_of,
 )
 from app.report.html import LABELS, SGT
+from app.report.numbers import readable
 from app.report.static_charts import chart_png
 
 FONTS = Path(matplotlib.get_data_path()) / "fonts" / "ttf"  # DejaVu, shipped with matplotlib
@@ -34,13 +35,6 @@ def _charts(values: dict, report) -> list[tuple[dict, dict]]:
     order = report.charts or [c["id"] for c in shown]
     by_id = {c["id"]: c for c in shown}
     return [(by_id[cid], english[cid]) for cid in order if cid in by_id]
-
-
-def _value(value) -> str:
-    """A fact's value as people read it: 18502.0 -> '18,502', 602.6 -> '602.6'."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return str(value)
-    return f"{value:,.0f}" if float(value).is_integer() else f"{value:,}"
 
 
 def _cites(ids: list[str]) -> str:
@@ -71,7 +65,7 @@ def export_markdown(values: dict) -> str:
                       f"![{shown['title']}](data:image/png;base64,{image})", "",
                       f"<details><summary>{labels['data']}</summary>", "",
                       "| " + " | ".join(table["columns"]) + " |", "|" + "---|" * len(table["columns"]),
-                      *["| " + " | ".join("" if v is None else str(v) for v in row) + " |" for row in table["rows"]],
+                      *["| " + " | ".join(readable(v) for v in row) + " |" for row in table["rows"]],
                       "", "</details>"]
     if report.caveats or (review and review.verdict != "pass"):
         lines += ["", f"## {labels['caveats']}", ""]
@@ -88,7 +82,7 @@ def export_markdown(values: dict) -> str:
     if facts:
         lines += ["", f"## {labels['facts']}", "", f"| ID | {labels['fact']} | {labels['value']} | {labels['unit']} "
                   f"| {labels['source']} |", "|---|---|---|---|---|"]
-        lines += [f"| {f['id']} | {f.get('label', '')} | {_value(f.get('value', ''))} | {f.get('unit', '')} | "
+        lines += [f"| {f['id']} | {f.get('label', '')} | {readable(f.get('value', ''))} | {f.get('unit', '')} | "
                   f"{', '.join(f.get('sources', []))} |" for f in facts]
     lines += ["", "---", "", labels["footer"], "", labels["attribution"]]
     return "\n".join(lines) + "\n"
@@ -203,7 +197,7 @@ def export_pdf(values: dict) -> bytes:
         heading(labels["facts"])
         for f in facts:
             pdf.set_link(targets[f["id"]], y=pdf.get_y(), page=pdf.page_no())
-            text(8, f"{f['id']}  {f.get('label', '')}: {_value(f.get('value', ''))} {f.get('unit', '')}"
+            text(8, f"{f['id']}  {f.get('label', '')}: {readable(f.get('value', ''))} {f.get('unit', '')}"
                     f"  [{', '.join(f.get('sources', []))}]", height=4.5)
 
     pdf.ln(4)

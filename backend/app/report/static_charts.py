@@ -16,6 +16,7 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
 from app.analysis.charts import SEQUENTIAL
+from app.report.numbers import tick
 
 SEQUENTIAL_MAP = LinearSegmentedColormap.from_list("sequential", [(stop, colour) for stop, colour in SEQUENTIAL])
 
@@ -26,12 +27,6 @@ def _axis_title(layout: dict, axis: str) -> str:
     return ((layout.get(axis) or {}).get("title") or {}).get("text", "")
 
 
-def _number(value: float, _position=None) -> str:
-    if abs(value) >= 100 or value == int(value):
-        return f"{value:,.0f}"
-    return f"{value:,.2g}" if abs(value) < 1 else f"{value:,.1f}"
-
-
 def _points_png(ax, trace: dict, layout: dict) -> None:
     """A scatter chart: one point per period, labelled with the period when Plotly labels it too."""
     ax.scatter(trace["x"], trace["y"], s=18, color=(trace.get("marker") or {}).get("color"))
@@ -39,7 +34,7 @@ def _points_png(ax, trace: dict, layout: dict) -> None:
         for x, y, label in zip(trace["x"], trace["y"], trace.get("text", []), strict=False):
             ax.annotate(str(label), (x, y), textcoords="offset points", xytext=(0, 5), ha="center", fontsize=6)
     ax.set_xlabel(_axis_title(layout, "xaxis"), fontsize=8)
-    ax.xaxis.set_major_formatter(FuncFormatter(_number))
+    ax.xaxis.set_major_formatter(FuncFormatter(tick))
     ax.tick_params(axis="x", labelsize=7)
 
 
@@ -66,7 +61,7 @@ def _boxes_png(ax, traces: list[dict], layout: dict) -> None:
         ax.set_xticks(range(1, len(names) + 1), names)
     ax.tick_params(axis="x", labelsize=7, rotation=45)
     ax.set_ylabel(_axis_title(layout, "yaxis"), fontsize=8)
-    ax.yaxis.set_major_formatter(FuncFormatter(_number))
+    ax.yaxis.set_major_formatter(FuncFormatter(tick))
     ax.tick_params(axis="y", labelsize=7)
     ax.grid(axis="y", alpha=0.3)
 
@@ -85,7 +80,7 @@ def _heatmap_png(figure, ax, trace: dict) -> None:
         step = max(1, len(columns) // MAX_X_LABELS)
         ax.set_xticks(range(0, len(columns), step), columns[::step], rotation=45, ha="right", fontsize=7)
     ax.set_yticks(range(len(trace["y"])), trace["y"], fontsize=7)
-    bar = figure.colorbar(image, ax=ax)
+    bar = figure.colorbar(image, ax=ax, format=FuncFormatter(tick))
     bar.set_label(((trace.get("colorbar") or {}).get("title") or {}).get("text", ""), fontsize=8)
     bar.ax.tick_params(labelsize=7)
 
@@ -110,7 +105,7 @@ def _map_png(figure, ax, traces: list[dict]) -> None:
                                              linewidths=0.4))
         elif marker.get("showscale"):
             scale = ScalarMappable(Normalize(marker["cmin"], marker["cmax"]), SEQUENTIAL_MAP)
-            bar = figure.colorbar(scale, ax=ax, shrink=0.8, format=FuncFormatter(_number))
+            bar = figure.colorbar(scale, ax=ax, shrink=0.8, format=FuncFormatter(tick))
             bar.set_label(((marker.get("colorbar") or {}).get("title") or {}).get("text", ""), fontsize=8)
             bar.ax.tick_params(labelsize=7)
         elif "markers" in trace.get("mode", ""):  # points, labelled when the chart labels them
@@ -186,10 +181,10 @@ def chart_png(spec: dict, title: str) -> bytes:
 
     ax.set_title(title, loc="left", fontsize=10)
     ax.set_ylabel(_axis_title(layout, "yaxis"), fontsize=8)
-    ax.yaxis.set_major_formatter(FuncFormatter(_number))
+    ax.yaxis.set_major_formatter(FuncFormatter(tick))
     if second_axis is not None:
         second_axis.set_ylabel(_axis_title(layout, "yaxis2"), fontsize=8)
-        second_axis.yaxis.set_major_formatter(FuncFormatter(_number))
+        second_axis.yaxis.set_major_formatter(FuncFormatter(tick))
         second_axis.tick_params(axis="y", labelsize=7)
     if on_dates:  # a time axis: a few short labels (years, or months within a year), never rotated
         locator = AutoDateLocator(maxticks=MAX_X_LABELS)

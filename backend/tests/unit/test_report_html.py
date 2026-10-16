@@ -2,6 +2,7 @@
 import json
 import re
 
+import numpy as np
 import pandas as pd
 
 from app.analysis.charts import heatmap_chart, line_chart
@@ -86,7 +87,7 @@ def test_markdown_download_embeds_the_charts_and_their_data():
     md = export_markdown(final_state())
     assert md.startswith("# Tech employment grew") and "1. Employment reached 139,200. [F1, S1]" in md
     assert "![ICT jobs](data:image/png;base64," in md  # the chart, as an image
-    assert "| period | ICT (persons) |" in md and "| 2024 | 139200.0 |" in md  # and its data
+    assert "| period | ICT (persons) |" in md and "| 2024 | 139,200 |" in md  # and its data, readable
     assert "| F1 | ICT employment, 2024 | 139,200 | persons | S1 |" in md  # every cited fact is listed
     assert "- **[S1]** Employed Residents by Industry (Ministry of Manpower). https://data.gov.sg" in md
 
@@ -144,9 +145,12 @@ def test_every_chart_kind_draws_as_an_image_for_the_downloads():
         assert chart_png(spec, "A chart").startswith(b"\x89PNG")
 
 
-def test_axis_numbers_drop_a_needless_decimal_point():
-    from app.report.static_charts import _number
-    assert [_number(v) for v in (50.0, 2.5, 0.25, 160000.0)] == ["50", "2.5", "0.25", "160,000"]
+def test_numbers_read_the_same_in_every_table_and_chart_image():
+    from app.report.numbers import readable
+    values = (69563.0, 602.6, 1234.567, 0.9634, 0.00421, 1.5e-05, -0.0, -6.8, np.int64(5), None, np.nan, "2015-Q1")
+    assert [readable(v) for v in values] == ["69,563", "602.6", "1,234.57", "0.96", "0.0042", "0.000015", "0",
+                                             "-6.8", "5", "", "", "2015-Q1"]
+    assert SPEC["layout"]["yaxis"]["tickformat"] == ",~f"  # the interactive charts' axes: 150,000, not 150k
 
 
 def test_a_chart_table_with_text_in_any_column_renders():
