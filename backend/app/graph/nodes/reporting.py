@@ -52,7 +52,10 @@ def make_report_writer(llm) -> Callable:
                              "the cited facts and sources show, or cite what supports them:\n- "
                              + "\n- ".join(f"{p.where}: {p.problem}" for p in review.unsupported))
             feedback = "\n\n".join(notes)
-        charts = [{"id": c["id"], "title": c["title"]} for c in charts_of(state)]
+        # What each chart is and shows, so the writer can describe it ("a map of 24 towns") without guessing.
+        charts = [{"id": c["id"], "title": c["title"], "kind": c.get("kind", ""),
+                   "data rows": len(c.get("table", {}).get("rows", [])),
+                   **({"note": c["note"]} if c.get("note") else {})} for c in charts_of(state)]
         content = (f"Question: {state['question']}\n\nFacts:\n{json.dumps(facts_of(state), ensure_ascii=False)}\n\n"
                    f"Charts:\n{json.dumps(charts, ensure_ascii=False)}\n\n"
                    f"Sources:\n{json.dumps(sources_of(state), ensure_ascii=False)}\n\n{feedback}").strip()

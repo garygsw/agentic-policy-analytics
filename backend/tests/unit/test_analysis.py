@@ -75,6 +75,8 @@ DATASETS = {
     "psi_months": (PSI_MONTHS, dataset("psi_months", frequency="monthly",
                                        over_time={"highest_psi": "max", "unhealthy_days": "sum"})),
     "fire_years": (FIRE_YEARS, dataset("fire_years")),
+    "many_towns": (pd.DataFrame([{"period": "2024", "town": f"T{i:02d}", "measure": "price", "unit": "S$",
+                                  "value": float(i)} for i in range(45)]), dataset("many_towns")),
     "fires": (pd.DataFrame([{"period": "2015", "country": c, "cell": "", "measure": "hotspots", "unit": "hotspots",
                              "value": v} for c, v in (("Indonesia", 9000.0), ("Malaysia", 700.0), ("Brunei", 20.0))]),
               dataset("fires", {"hotspots": ("country", "cell")})),
@@ -248,6 +250,18 @@ def test_compare_groups_gives_shares_that_add_to_100():
     out = call(t["compare_groups"], dataset_id="employment", measure="employed", group_by="industry", period="2024")
     shares = [f["value"] for f in out["facts"] if f["unit"] == "%"]
     assert sum(shares) == pytest.approx(100, abs=0.2) and out["groups_total"] == 2
+
+
+def test_compare_groups_lists_up_to_40_groups_and_records_the_counts_as_facts():
+    _, t = tools()
+    out = call(t["compare_groups"], dataset_id="towns", measure="price", group_by="town", period="2024")
+    counts = {f["label"]: f["value"] for f in out["facts"] if f["unit"] == "count"}
+    assert counts == {"number of town values in the dataset": 5, "number of town values with price, 2024": 5}
+    assert out["groups_shown"] == 5  # every town listed, so the lowest can be named too
+    out = call(t["compare_groups"], dataset_id="many_towns", measure="price", group_by="town", period="2024")
+    assert out["groups_shown"] == 15 and out["facts"][0]["value"] == 44.0
+    assert {f["label"]: f["value"] for f in out["facts"] if f["unit"] == "count"}[
+        "number of town values listed, highest first"] == 15
 
 
 def test_correlation_tool_records_levels_and_changes():

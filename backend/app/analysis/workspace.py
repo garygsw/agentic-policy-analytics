@@ -81,8 +81,10 @@ class Workspace:
         self.facts.append(fact)
         return fact["id"]
 
-    def add_chart(self, title: str, spec: dict, table: dict, sources: list[str]) -> str:
-        chart = {"id": f"C{len(self.charts) + 1}", "title": title, "spec": spec, "table": table, "sources": sources}
+    def add_chart(self, title: str, spec: dict, table: dict, sources: list[str], kind: str = "", note: str = "") -> str:
+        """The kind and the note (e.g. places left off a map) are passed on to the report writer."""
+        chart = {"id": f"C{len(self.charts) + 1}", "title": title, "spec": spec, "table": table, "sources": sources,
+                 "kind": kind, "note": note}
         self.charts.append(chart)
         return chart["id"]
 

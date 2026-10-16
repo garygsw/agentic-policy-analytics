@@ -27,7 +27,8 @@ from app.analysis.workspace import Workspace, profile
 from app.skills import skill_list, skills
 
 MAX_FACT_POINTS = 20  # series this short get one fact per point, so any year can be cited
-MAX_GROUPS = 15
+MAX_GROUPS = 15  # bars in a bar chart, and groups a comparison lists when there are many
+MAX_LISTED = 40  # up to this many groups, a comparison lists them all (every HDB town, constituency or region)
 MAX_RECORDS = 60
 MAX_DISTRIBUTION_GROUPS = 12  # boxes or columns of dots on one chart
 MAX_DOTS = 600  # beyond this, dots hide each other: a box plot shows the spread instead
@@ -378,7 +379,8 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
                     raise
         if not values:
             raise stats.AnalysisError(f"no {measure} values for period {period}")
-        ranked = sorted(values.items(), key=lambda kv: kv[1], reverse=True)[:MAX_GROUPS]
+        ranked = sorted(values.items(), key=lambda kv: kv[1], reverse=True)
+        ranked = ranked if len(ranked) <= MAX_LISTED else ranked[:MAX_GROUPS]
         total = sum(values.values()) if group_by in loaded.dataset.summable.get(measure, ()) else None
         # The label carries every filter, so a fact read on its own says exactly what it counts.
         scope = f" ({', '.join(f'{k} = {v}' for k, v in filters.items())})" if filters else ""
@@ -388,6 +390,13 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
             if total:
                 facts.append(ws.add_fact(f"share of {measure}{scope}, {group_by} = {group}, {period}",
                                          value / total * 100, "%", [source_id], f"share of total across {group_by}"))
+        # The counts are facts too, so a report can say how many there are, have a value, and are listed.
+        counts = {f"{group_by} values in the dataset": frame[group_by].nunique(),
+                  f"{group_by} values with {measure}{scope}, {period}": len(values)}
+        if len(ranked) < len(values):
+            counts[f"{group_by} values listed, highest first"] = len(ranked)
+        for label, count in counts.items():
+            facts.append(ws.add_fact(f"number of {label}", count, "count", [source_id], "counted"))
         return _json({"period": period, "facts": [f for f in ws.facts if f["id"] in facts],
                       "groups_shown": len(ranked), "groups_total": len(values)})
 
@@ -508,7 +517,7 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
             chart, table = scatter_chart((sx.label, x, unit_x), (sy.label, y, unit_y), title)
             if len(table["rows"]) < 2:
                 raise stats.AnalysisError("the two series share fewer than two periods, so there is nothing to plot")
-            chart_id = ws.add_chart(title, chart, table, list(dict.fromkeys([source_x, source_y])))
+            chart_id = ws.add_chart(title, chart, table, list(dict.fromkeys([source_x, source_y])), kind)
             return _json({"chart_id": chart_id, "title": title, "points": len(table["rows"])})
         if kind != "line" and len(series) != 1:
             raise stats.AnalysisError(f"a {kind} chart shows exactly one series")
@@ -572,7 +581,7 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
             matrix, unit, columns = matrix_of(spec, loaded, group_by, column_by, period, start, end)
             chart, table = heatmap_chart(matrix, title, unit)
             note = f"rows: {group_by}; columns: {columns}"
-        chart_id = ws.add_chart(title, chart, table, sources)
+        chart_id = ws.add_chart(title, chart, table, sources, kind, note)
         result = {"chart_id": chart_id, "title": title, "points": len(table["rows"])}
         return _json(result | ({"note": note} if note else {}))
 
