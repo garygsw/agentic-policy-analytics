@@ -11,12 +11,16 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from app.analysis import stats
-from app.analysis.charts import bar_chart, line_chart, scatter_chart
+from app.analysis.charts import bar_chart, box_chart, dot_chart, heatmap_chart, line_chart, pie_chart, scatter_chart
 from app.analysis.workspace import Workspace, profile
 
 MAX_FACT_POINTS = 20  # series this short get one fact per point, so any year can be cited
 MAX_GROUPS = 15
 MAX_RECORDS = 60
+MAX_DISTRIBUTION_GROUPS = 12  # boxes or columns of dots on one chart
+MAX_DOTS = 600  # beyond this, dots hide each other: a box plot shows the spread instead
+MAX_HEATMAP_ROWS = 30
+MAX_HEATMAP_COLUMNS = 180  # more periods than this are shown as years
 
 REASON = Field(description="One short sentence: why this call helps answer the question.")
 
@@ -176,16 +180,98 @@ class RecordsArgs(BaseModel):
     reason: str = REASON
 
 
-class ChartArgs(BaseModel):
-    kind: Literal["line", "bar", "scatter"]
-    title: str
-    series: list[SeriesSpec] = Field(description="line: one to four series over time; bar: exactly one series; "
-                                                 "scatter: exactly two (x, then y), one point per shared period")
-    group_by: str | None = Field(default=None, description="bar only: the dimension shown as bars")
-    period: str | None = Field(default=None, description="bar only: the period shown; default: latest")
+class DistributionArgs(BaseModel):
+    series: SeriesSpec
+    group_by: str | None = Field(default=None, description="One distribution per value of this dimension")
     start: str | None = None
     end: str | None = None
     reason: str = REASON
+
+
+class ChartArgs(BaseModel):
+    kind: Literal["line", "bar", "scatter", "pie", "box", "dot", "heatmap"]
+    title: str
+    series: list[SeriesSpec] = Field(description="line: one to four series over time; scatter: exactly two (x, "
+                                                 "then y), one point per shared period; any other kind: one series")
+    group_by: str | None = Field(default=None, description="bar, pie: the dimension shown as bars or slices; box, "
+                                                           "dot: one box or column of dots per value (optional); "
+                                                           "heatmap: the rows")
+    column_by: str | None = Field(default=None, description="heatmap only: a second dimension for the columns, in "
+                                                            "one period; default: the columns are periods")
+    period: str | None = Field(default=None, description="bar, pie, heatmap with column_by: the period shown; "
+                                                         "default: the latest")
+    start: str | None = None
+    end: str | None = None
+    reason: str = REASON
+
+
+def with_filter(spec: SeriesSpec, dimension: str, value: str) -> SeriesSpec:
+    return spec.model_copy(update={"filters": {**spec.filters, dimension: value}})
+
+
+def group_values(spec: SeriesSpec, loaded, group_by: str | None, period: str | None) -> tuple[pd.Series, str, str]:
+    """One value per group in one period (default: the latest), largest first: for bar and pie charts.
+    Returns (values, unit, period)."""
+    frame = loaded.frame
+    if group_by not in stats.dimensions(frame):
+        raise stats.AnalysisError(f"group_by must be one of {stats.dimensions(frame)}")
+    period = period or frame[frame["measure"] == spec.measure]["period"].max()
+    values, unit, problem = {}, "", ""
+    for group in sorted(frame[group_by].unique()):
+        try:
+            series, unit, _ = stats.select_series(frame, loaded.dataset, spec.measure,
+                                                  with_filter(spec, group_by, group).filters, period, period)
+            values[group] = float(series.iloc[-1])
+        except stats.AnalysisError as error:
+            problem = str(error)  # this group has no value in this period
+    if not values:
+        raise stats.AnalysisError(f"no {spec.measure} values by {group_by} in {period}: {problem}")
+    return pd.Series(values).sort_values(ascending=False), unit, period
+
+
+def spread(spec: SeriesSpec, loaded, group_by: str | None, start: str | None,
+           end: str | None) -> tuple[dict[str, pd.Series], str, list[str]]:
+    """Every value by group, for a distribution: the groups with the highest medians, at most
+    MAX_DISTRIBUTION_GROUPS. Returns (values by group, unit, dimensions pooled within each group)."""
+    groups, unit, pooled = stats.observations(loaded.frame, spec.measure, spec.filters, group_by, start, end)
+    ranked = sorted((g for g in groups if len(groups[g])), key=lambda g: groups[g].median(), reverse=True)
+    return {g: groups[g] for g in ranked[:MAX_DISTRIBUTION_GROUPS]}, unit, pooled
+
+
+def matrix_of(spec: SeriesSpec, loaded, group_by: str | None, column_by: str | None, period: str | None,
+              start: str | None, end: str | None) -> tuple[pd.DataFrame, str, str]:
+    """A heatmap's cells: rows are the values of `group_by`; columns are periods, or the values of `column_by` in
+    one period. Returns (rows x columns, unit, a note on how the columns were made)."""
+    frame = loaded.frame
+    if group_by not in stats.dimensions(frame):
+        raise stats.AnalysisError(f"group_by must be one of {stats.dimensions(frame)}")
+    rows, unit, note = {}, "", ""
+    for group in sorted(frame[group_by].unique()):
+        row_spec = with_filter(spec, group_by, group)
+        try:
+            if column_by:
+                rows[group], unit, shown = group_values(row_spec, loaded, column_by, period)
+                note = f"{column_by} in {shown}"
+            else:
+                rows[group], unit, _ = stats.select_series(frame, loaded.dataset, spec.measure, row_spec.filters,
+                                                           start, end)
+        except stats.AnalysisError:
+            continue  # nothing for this row
+    if not rows:
+        raise stats.AnalysisError(f"no {spec.measure} values by {group_by}")
+    if len(rows) > MAX_HEATMAP_ROWS:
+        raise stats.AnalysisError(f"{len(rows)} rows is too many for a heatmap (at most {MAX_HEATMAP_ROWS}): "
+                                  "filter to fewer, or choose another dimension")
+    matrix = pd.DataFrame(rows).T
+    if not column_by:
+        matrix = matrix[sorted(matrix.columns, key=stats.period_key)]
+        note = "periods"
+        if matrix.shape[1] > MAX_HEATMAP_COLUMNS:  # too many periods to read: show years instead
+            summable = bool(loaded.dataset.summable.get(spec.measure))
+            matrix = pd.DataFrame({g: stats.to_annual(row.dropna(), summable) for g, row in matrix.iterrows()}).T
+            note = "years (totals or averages of the periods in each year)"
+    matrix = matrix.loc[matrix.mean(axis=1).sort_values(ascending=False).index]  # highest rows first
+    return matrix, unit, note
 
 
 def analytics_tools(ws: Workspace) -> list[StructuredTool]:
@@ -348,9 +434,23 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
         return _json({"fact": fact, "count": len(records),
                       "records": records.head(MAX_RECORDS).to_dict(orient="records")})
 
+    def compute_distribution(series: SeriesSpec, group_by: str | None = None, start: str | None = None,
+                             end: str | None = None, reason: str = "") -> str:
+        spec, loaded, source_id = load(series)
+        groups, unit, pooled = spread(spec, loaded, group_by, start, end)
+        method = "quartiles of every value" + (f", pooling {', '.join(pooled)}" if pooled else "")
+        facts = []
+        for group, values in groups.items():
+            d = stats.distribution(values)
+            label = spec.label if group == "all" else f"{spec.label}, {group}"
+            for key, name in (("median", "median"), ("q1", "lower quartile"), ("q3", "upper quartile")):
+                facts.append(ws.add_fact(f"{label}: {name} of {d['n']} values", d[key], unit, [source_id], method))
+        return _json({"facts": [f for f in ws.facts if f["id"] in facts], "pooled": pooled,
+                      "note": "Each period, and each value of a pooled dimension, is one value."})
+
     def create_chart(kind: str, title: str, series: list[SeriesSpec], group_by: str | None = None,
-                     period: str | None = None, start: str | None = None, end: str | None = None,
-                     reason: str = "") -> str:
+                     column_by: str | None = None, period: str | None = None, start: str | None = None,
+                     end: str | None = None, reason: str = "") -> str:
         if kind == "scatter":
             if len(series) != 2:
                 raise stats.AnalysisError("a scatter chart needs exactly two series: x, then y")
@@ -360,33 +460,44 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
                 raise stats.AnalysisError("the two series share fewer than two periods, so there is nothing to plot")
             chart_id = ws.add_chart(title, chart, table, list(dict.fromkeys([source_x, source_y])))
             return _json({"chart_id": chart_id, "title": title, "points": len(table["rows"])})
+        if kind != "line" and len(series) != 1:
+            raise stats.AnalysisError(f"a {kind} chart shows exactly one series")
         specs = [load(s) for s in series]
         sources = list(dict.fromkeys(source_id for _, _, source_id in specs))
+        spec, loaded, _ = specs[0]
+        note = ""
         if kind == "line":
             lines = []
-            for spec, loaded, _ in specs[:4]:
-                values, unit, _ = stats.select_series(loaded.frame, loaded.dataset, spec.measure, spec.filters,
-                                                      start, end)
-                lines.append((spec.label, values, unit))
+            for line_spec, line_loaded, _ in specs[:4]:
+                values, unit, _ = stats.select_series(line_loaded.frame, line_loaded.dataset, line_spec.measure,
+                                                      line_spec.filters, start, end)
+                lines.append((line_spec.label, values, unit))
             chart, table = line_chart(lines, title)
-        else:
-            if not group_by:
-                raise stats.AnalysisError("a bar chart needs group_by")
-            spec, loaded, _ = specs[0]
-            frame = loaded.frame
-            period = period or frame[frame["measure"] == spec.measure]["period"].max()
-            values, unit = {}, ""
-            for group in sorted(frame[group_by].unique()):
-                try:
-                    s, unit, _ = stats.select_series(frame, loaded.dataset, spec.measure,
-                                                     {**spec.filters, group_by: group}, period, period)
-                    values[group] = float(s.iloc[-1])
-                except stats.AnalysisError:
-                    continue
-            ranked = pd.Series(values).sort_values(ascending=False).head(MAX_GROUPS)
-            chart, table = bar_chart(ranked, title, unit)
+        elif kind == "bar":
+            values, unit, _ = group_values(spec, loaded, group_by, period)
+            chart, table = bar_chart(values.head(MAX_GROUPS), title, unit)
+        elif kind == "pie":
+            if group_by not in loaded.dataset.summable.get(spec.measure, ()):
+                raise stats.AnalysisError(f"a pie shows parts of a whole, but {spec.measure} cannot be added up "
+                                          f"across {group_by}: use a bar chart")
+            values, unit, _ = group_values(spec, loaded, group_by, period)
+            if (values < 0).any():
+                raise stats.AnalysisError("a pie cannot show negative values: use a bar chart")
+            chart, table = pie_chart(values, title, unit)
+        elif kind in ("box", "dot"):
+            groups, unit, pooled = spread(spec, loaded, group_by, start, end)
+            if kind == "dot" and sum(len(v) for v in groups.values()) > MAX_DOTS:
+                raise stats.AnalysisError(f"more than {MAX_DOTS} values hide each other as dots: use a box plot")
+            chart, table = (box_chart({g: stats.distribution(v) for g, v in groups.items()}, title, unit)
+                            if kind == "box" else dot_chart(groups, title, unit))
+            note = f"each period{' and each ' + ', '.join(pooled) if pooled else ''} is one value"
+        else:  # heatmap
+            matrix, unit, columns = matrix_of(spec, loaded, group_by, column_by, period, start, end)
+            chart, table = heatmap_chart(matrix, title, unit)
+            note = f"rows: {group_by}; columns: {columns}"
         chart_id = ws.add_chart(title, chart, table, sources)
-        return _json({"chart_id": chart_id, "title": title, "points": len(table["rows"])})
+        result = {"chart_id": chart_id, "title": title, "points": len(table["rows"])}
+        return _json(result | ({"note": note} if note else {}))
 
     return [
         StructuredTool.from_function(describe_dataset, name="describe_dataset", args_schema=DescribeArgs,
@@ -407,8 +518,15 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
         StructuredTool.from_function(list_records, name="list_records", args_schema=RecordsArgs,
                                      description="Only for tables without a time dimension (e.g. rail stations): "
                                                  "list and count the records matching filters."),
+        StructuredTool.from_function(compute_distribution, name="compute_distribution",
+                                     args_schema=DistributionArgs,
+                                     description="The spread of a measure, by group: median and quartiles of every "
+                                                 "value (each period is one value), recorded as facts."),
         StructuredTool.from_function(create_chart, name="create_chart", args_schema=ChartArgs,
-                                     description="Draw a line chart (series over time), a bar chart (groups in one "
-                                                 "period) or a scatter chart (two measures against each other, e.g. "
-                                                 "to show a correlation) from the data. Returns a chart ID to cite."),
+                                     description="Draw a chart from the data. line: series over time. bar: groups in "
+                                                 "one period. pie: shares of a whole (only where the measure adds up "
+                                                 "across the groups). box or dot: the spread of values by group. "
+                                                 "heatmap: a measure across two categories, or a category over "
+                                                 "time. scatter: two measures against each other (a correlation). "
+                                                 "Returns a chart ID to cite."),
     ]

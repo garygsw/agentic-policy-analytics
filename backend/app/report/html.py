@@ -21,7 +21,17 @@ LABELS = json.loads((Path(__file__).parent / "labels.json").read_text(encoding="
 
 _env = Environment(loader=FileSystemLoader(Path(__file__).parent / "templates"),
                    autoescape=select_autoescape(["html", "j2"]), trim_blocks=True, lstrip_blocks=True)
-_env.filters["number"] = lambda v: (f"{v:,}" if isinstance(v, int) else f"{v:,.2f}".rstrip("0").rstrip("."))
+
+
+def _number(value) -> str:
+    """A table cell: numbers with thousands separators (at most two decimals); text (a heatmap's column name, for
+    example) as it is."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return str(value)
+    return f"{value:,}" if isinstance(value, int) else f"{value:,.2f}".rstrip("0").rstrip(".")
+
+
+_env.filters["number"] = _number
 
 
 def citation_groups(ids: list[str]) -> list[tuple[str, str]]:

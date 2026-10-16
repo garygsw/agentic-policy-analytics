@@ -215,6 +215,62 @@ def test_scatter_chart_plots_the_points_its_correlation_uses():
         t["create_chart"].invoke({"kind": "scatter", "title": "x", "series": [ICT], "reason": "x"})
 
 
+def test_pie_shows_parts_of_a_whole_only():
+    ws, t = tools()
+    employed = {"dataset_id": "employment", "measure": "employed", "filters": {"sex": "female"}, "label": "Women"}
+    out = call(t["create_chart"], kind="pie", title="Women employed by industry", series=[employed],
+               group_by="industry")
+    pie = ws.charts[0]
+    assert out["points"] == 2 and pie["spec"]["data"][0]["labels"] == ["retail", "ict"]
+    assert pie["table"]["rows"] == [["retail", 340.0, 70.8], ["ict", 140.0, 29.2]]  # 2024: shares of 480
+    price = {"dataset_id": "prices", "measure": "price", "filters": {}, "label": "Price"}
+    with pytest.raises(stats.AnalysisError, match="cannot be added up across town"):  # prices are not parts
+        t["create_chart"].invoke({"kind": "pie", "title": "x", "series": [price], "group_by": "town", "reason": "x"})
+
+
+def test_pie_combines_the_smallest_slices_into_other():
+    from app.analysis.charts import pie_chart
+    spec, table = pie_chart(pd.Series({f"g{i}": float(10 - i) for i in range(10)}), "Ten groups", "persons")
+    assert spec["data"][0]["labels"][-1] == "Other" and len(table["rows"]) == 8
+    assert table["rows"][-1][1] == 3.0 + 2.0 + 1.0  # the three smallest
+
+
+def test_distribution_records_quartiles_by_group_and_draws_box_and_dot_plots():
+    ws, t = tools()
+    price = {"dataset_id": "prices", "measure": "price", "filters": {}, "label": "Price"}
+    out = call(t["compute_distribution"], series=price, group_by="town")
+    medians = {f["label"]: f["value"] for f in out["facts"] if "median" in f["label"]}
+    assert medians == {"Price, C: median of 2 values": 315.0, "Price, B: median of 3 values": 210.0,
+                       "Price, A: median of 3 values": 110.0, "Price, D: median of 1 values": 90.0}
+    call(t["create_chart"], kind="box", title="Price spread", series=[price], group_by="town")
+    box = ws.charts[0]
+    assert [tr["name"] for tr in box["spec"]["data"]] == ["C", "B", "A", "D"]  # highest median first
+    assert box["table"]["rows"][2] == ["A", 3, 100.0, 105.0, 110.0, 130.0, 150.0]
+    call(t["create_chart"], kind="dot", title="Every price", series=[price], group_by="town")
+    dots = ws.charts[1]["spec"]["data"][2]
+    assert dots["y"] == [100.0, 110.0, 150.0] and dots["boxpoints"] == "all"
+
+
+def test_distribution_pools_open_dimensions_and_says_so():
+    _, t = tools()
+    employed = {"dataset_id": "employment", "measure": "employed", "filters": {"industry": "ict"}, "label": "ICT"}
+    out = call(t["compute_distribution"], series=employed)
+    assert out["pooled"] == ["sex"] and "median of 10 values" in out["facts"][0]["label"]  # 5 years x 2 sexes
+
+
+def test_heatmap_rows_by_group_and_columns_by_period_or_a_second_dimension():
+    ws, t = tools()
+    employed = {"dataset_id": "employment", "measure": "employed", "filters": {}, "label": "Employed"}
+    call(t["create_chart"], kind="heatmap", title="By industry and year", series=[employed], group_by="industry")
+    heat = ws.charts[0]["spec"]["data"][0]
+    assert heat["y"] == ["retail", "ict"] and heat["x"] == YEARS  # highest row first; columns in time order
+    assert heat["z"][1] == [200.0, 220.0, 240.0, 260.0, 280.0]  # ICT, both sexes added up (allowed)
+    call(t["create_chart"], kind="heatmap", title="By industry and sex", series=[employed], group_by="industry",
+         column_by="sex")
+    assert ws.charts[1]["spec"]["data"][0]["z"] == [[340.0, 340.0], [140.0, 140.0]]  # 2024
+    assert ws.charts[1]["table"]["rows"][0] == ["retail", "female", 340.0]
+
+
 def test_list_records_refuses_time_series_and_counts_tables():
     _, t = tools()
     with pytest.raises(stats.AnalysisError, match="time series"):
@@ -248,7 +304,7 @@ def test_bar_chart_ranks_groups_in_one_period_and_skips_groups_without_a_value()
 
 def test_bar_chart_needs_a_group():
     _, t = tools()
-    with pytest.raises(stats.AnalysisError, match="needs group_by"):
+    with pytest.raises(stats.AnalysisError, match="group_by must be one of"):
         t["create_chart"].invoke({"kind": "bar", "title": "x", "series": [ICT], "reason": "x"})
 
 

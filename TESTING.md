@@ -5,7 +5,7 @@ re-run from `backend/` (and `frontend/` for the UI tests). Results are saved in 
 
 | Level | What it checks | Count | Command | Cost |
 |---|---|---|---|---|
-| Unit tests | agents, tools, statistics, data cleaning, guardrails, LLM layer, RAG, report check, downloads | 191 | `uv run pytest tests/unit` | free (fake models) |
+| Unit tests | agents, tools, statistics, data cleaning, guardrails, LLM layer, RAG, report check, downloads | 197 | `uv run pytest tests/unit` | free (fake models) |
 | Integration tests | the whole graph and API: background runs, pauses, streaming, replay, concurrency, restarts, downloads | 25 | `uv run pytest tests/integration` | free (scripted models) |
 | Frontend tests | the event reducer behind the live view, the history list, sidebar paging and width | 12 | `npm test` (in `frontend/`) | free |
 | Live provider tests | real calls to both providers, structured output, fallback | 3 | `uv run pytest -m live` | cents |
@@ -14,7 +14,7 @@ re-run from `backend/` (and `frontend/` for the UI tests). Results are saved in 
 | Answer evaluation | outcomes, groundedness, citations, LLM-as-judge, consistency | 12 questions | `uv run python -m app.evals.answers` | about $4 |
 | Load test | latency and throughput under concurrent clients | 20 clients | `uv run python scripts/load_test.py` | free |
 
-`uv run pytest` runs the unit and integration tests together (216), with no network access and no API keys. CI
+`uv run pytest` runs the unit and integration tests together (222), with no network access and no API keys. CI
 runs them on every push (section 7).
 
 ## 1. Test plan
@@ -47,7 +47,7 @@ The language models are the part that cannot be unit-tested, so the design keeps
 
 | Requirement | Where it is tested |
 |---|---|
-| Agents and tools | `test_analysis.py` (25): every analytics tool, summing rules, error hints, the tool loop and its step limit, extraction then analysis with shared source IDs, retries keeping earlier results, `rank_changes`, line, bar and scatter charts (a scatter chart plots exactly the points its correlation uses) |
+| Agents and tools | `test_analysis.py` (30): every analytics tool, summing rules, error hints, the tool loop and its step limit, extraction then analysis with shared source IDs, retries keeping earlier results, `rank_changes`, every chart kind: line, bar, scatter (exactly the points its correlation uses), pie (refused where the parts do not add up; small slices combined), box and dot (quartiles by group, pooled dimensions named), heatmap (by period or by a second dimension) |
 | API endpoints | `test_api.py` (24): health, readiness and options, background runs, numbered events, WebSocket replay, reports and their security policy, personal-data rejection, clarification pause and resume (with answer choices), cancelling, invalid input, search and datasets, renaming, pinning, soft-deleting and restoring conversations, searching them, adding new columns to an older database, a run cut off by a restart continuing (or ending after a second cut), Stop on a run whose worker is gone or still working, a dataset's profile, rejecting a plan then approving it later, a new question after a rejected plan |
 | Multi-agent workflows | `test_graph.py` (29): the full graph with scripted models (coordinator, extraction, analytics, report writer, number check, reviewer, translation) across every route, including a conversation surviving a restart and a translation that changes a number, a revised plan not counting the rejected one as done, filler cut from a plan |
 | Hallucination detection | `test_grounding.py` (7) and the report-check tests in `test_graph.py`; measured by the answer evaluation (section 3) |
@@ -353,7 +353,7 @@ Most of the time is model latency. The live view shows elapsed time, tokens and 
 
 `.github/workflows/ci.yml` runs on every push and pull request:
 
-1. **Backend:** `ruff` lint, then all 216 tests with coverage. The coverage report (`coverage.xml` and HTML) is
+1. **Backend:** `ruff` lint, then all 222 tests with coverage. The coverage report (`coverage.xml` and HTML) is
    kept with the run for 30 days.
 2. **Frontend:** type check, unit tests and a production build.
 3. **Secrets:** gitleaks scans every commit in the history, not just the latest, since a key removed later is

@@ -18,6 +18,7 @@ OPTIONAL_TOOLS: dict[str, str] = {
     "search_documents": "Search agency press releases, speeches and parliamentary replies",
     "web_search": "Search the whole web for recent and announced policies",
     "compute_correlation": "Correlate two series, across datasets",
+    "compute_distribution": "Spread of a measure by group: median and quartiles",
     "list_records": "List and count records in tables that are not time series",
     "create_chart": "Draw charts for the report",
 }

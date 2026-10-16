@@ -118,6 +118,23 @@ def test_every_chart_kind_draws_as_an_image_for_the_downloads():
     bar = {"data": [{"type": "bar", "x": ["A", "B"], "y": [3, 1]}], "layout": {}}
     points = {"data": [{"type": "scatter", "mode": "markers+text", "x": [200, 220], "y": [50, 55],
                         "text": ["2020", "2021"]}], "layout": {"xaxis": {"title": {"text": "Jobs (persons)"}}}}
-    for spec in (line, bar, points):
+    pie = {"data": [{"type": "pie", "labels": ["A", "B"], "values": [3, 1], "marker": {"colors": ["#c96442"] * 2}}],
+           "layout": {}}
+    boxes = {"data": [{"type": "box", "name": "A", "x": ["A"], "q1": [1], "median": [2], "q3": [3],
+                       "lowerfence": [0], "upperfence": [4]}], "layout": {}}
+    dots = {"data": [{"type": "box", "name": "A", "y": [1, 2, 3], "boxpoints": "all"}], "layout": {}}
+    heatmap = {"data": [{"type": "heatmap", "z": [[1, None], [3, 4]], "x": ["2020", "2021"], "y": ["A", "B"]}],
+               "layout": {}}
+    for spec in (line, bar, points, pie, boxes, dots, heatmap):
         assert chart_png(spec, "A chart").startswith(b"\x89PNG")
+
+
+def test_a_chart_table_with_text_in_any_column_renders():
+    """A heatmap's table has its column name in the second column; the page must show it, not fail on it."""
+    from app.report.html import render_html
+    chart = {"id": "C1", "title": "Heat", "sources": [], "table": {"columns": ["row", "column", "S$"],
+             "rows": [["Bedok", "2024-Q1", 512000.0]]}, "spec": {"data": [], "layout": {}}}
+    page = render_html(question="q", language="en", report=None, facts=[{"id": "F1", "label": "x", "value": 1,
+                       "unit": "", "sources": []}], sources=[], charts=[chart])
+    assert "<td class=\"num\">2024-Q1</td>" in page and "512,000" in page
 

@@ -545,3 +545,13 @@ Changes from the first round of hands-on testing.
   - A revised plan's reasoning claimed the first extraction had "reported loading but returned no data", because the rejected step stayed in the coordinator's list of steps as if it had run. The rejected step is now removed, and the coordinator is told what was rejected and why.
   - One plan ended in a run of filler ("...Thanks. ...End. ...Done."), a model glitch shown to the user. A validator cuts a tail of three or more such fragments, and the schema asks for at most five sentences.
 - **Why:** in testing, a rejection should stop the analysis, not start another plan. Changing the plan is a separate, explicit action.
+
+## D-048 · 2026-10-16 · More chart kinds: pie, box, dot and heatmap
+- **Decision:** `create_chart` adds four kinds, each built from values pandas computed, never from numbers a model wrote:
+  - **pie** for shares of a whole. It is refused when the dataset's summing rules say the measure cannot be added up across the groups (prices, rates) and when a value is negative. More than eight slices are combined into "Other".
+  - **box** and **dot** for how values spread by group. Quartiles are computed in pandas, and whiskers reach the furthest values within 1.5 times the interquartile range. Every period, and every value of a dimension the filters leave open, is one value; the tool names the dimensions it pooled. A dot plot is refused above 600 values, where dots hide each other.
+  - **heatmap** for a measure across two categories: rows by one dimension, columns by periods or by a second dimension in one period. More than 180 periods are shown as years.
+  - A new tool, `compute_distribution`, records each group's median and quartiles as facts, so a report can cite the spread it shows.
+  - The downloads draw the same charts with matplotlib. Heatmaps and maps use one colour scale spelled out in code, because Plotly's and matplotlib's named "YlOrRd" scales run in opposite directions.
+- **Found on the way:** the report page assumed every table cell after the first was a number, so a heatmap's table (with its column name in the second cell) would have failed to render. Cells are now formatted as numbers only when they are numbers.
+- **Alternatives:** Plotly Express (convenient, but adds a dependency and hides the spec the tests check); letting the model choose any Plotly trace (no guard against a pie of prices).

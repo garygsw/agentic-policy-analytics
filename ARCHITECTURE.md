@@ -122,7 +122,8 @@ A run can also pause as `awaiting_input`.
 | | `rank_changes` | Ranks groups by their rise or fall between the same two periods. |
 | | `compute_correlation` | Pearson correlation of two series, of levels and of period-to-period changes. |
 | | `list_records` | Counts records in tables without a time dimension (e.g. planned stations). |
-| | `create_chart` | A line, bar or scatter chart (Plotly spec) from the data, with its data table. A scatter chart plots two measures against each other on the same periods as `compute_correlation`. |
+| | `compute_distribution` | The spread of a measure by group: median and quartiles of every value, recorded as facts. Each period (and each value of a dimension left open) is one value. |
+| | `create_chart` | A chart (Plotly spec) from the data, with its data table: line (series over time), bar (groups in one period), pie (shares of a whole, only where the measure adds up across the groups; more than eight slices are combined into "Other"), box or dot (the spread of values by group), heatmap (a measure across two categories, or groups over time), scatter (two measures on the same periods as `compute_correlation`). |
 
 The tools apply each dataset's **summing rules**. A measure can be added up only across the dimensions the
 dataset allows; for any other dimension, the agent must filter to one value. This stops, for example, adding up

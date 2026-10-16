@@ -5,7 +5,7 @@ communications sector changed since 2019?". A team of AI agents answers it:
 
 1. The agents find the official datasets and documents.
 2. pandas computes the statistics.
-3. The agents write a report with charts and citations.
+3. The agents write a report with charts (line, bar, pie, box, dot, heatmap, scatter) and citations.
 4. Code checks every number in the report against the computation before you see it.
 
 You can watch the agents work live: each step, the reasoning behind it, tokens and cost, and what each agent was

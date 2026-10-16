@@ -25,7 +25,8 @@ export const OUTCOMES: Record<string, { label: string; tone: "ok" | "warn" | "mu
 
 export const TOOL_NAMES: Record<string, string> = {
   search_datasets: "Dataset search", search_documents: "Document search", web_search: "Web search",
-  compute_correlation: "Correlation", list_records: "Record lists", create_chart: "Charts",
+  compute_correlation: "Correlation", compute_distribution: "Distributions", list_records: "Record lists",
+  create_chart: "Charts",
   load_dataset: "loading data", describe_dataset: "dataset values", compute_trend: "trends",
   compare_groups: "comparisons", rank_changes: "rankings",
 };

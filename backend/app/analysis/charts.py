@@ -1,5 +1,6 @@
 """Plotly chart specs, built from computed series (never from numbers an LLM wrote): lines over time, bars for
-groups in one period, and scatter plots of two measures against each other.
+groups in one period, scatter plots of two measures against each other, pies for shares of a whole, box and dot
+plots for distributions, and heatmaps for a measure across two categories (or a category over time).
 
 A spec is plain JSON ({"data": [...], "layout": {...}}) that plotly.js renders in the browser and in the HTML
 report. Each chart also keeps its data as a table, shown under the chart for accessibility and checking.
@@ -7,6 +8,10 @@ report. Each chart also keeps its data as a table, shown under the chart for acc
 import pandas as pd
 
 PALETTE = ["#c96442", "#3b6ea8", "#5b8a5a", "#9a6fb0", "#b58a2b", "#6b7280"]
+# Light to dark, for heatmaps and maps. Spelled out, because Plotly's and matplotlib's "YlOrRd" run in opposite
+# directions; the PNG downloads use the same list.
+SEQUENTIAL = [[0.0, "#ffffcc"], [0.25, "#fed976"], [0.5, "#fd8d3c"], [0.75, "#e31a1c"], [1.0, "#800026"]]
+MAX_SLICES = 8  # a pie with more slices is unreadable: the smallest are combined into "Other"
 
 
 def plain(text: str) -> str:
@@ -63,3 +68,63 @@ def bar_chart(values: pd.Series, title: str, unit: str) -> tuple[dict, dict]:
 
 def _cell(values: pd.Series, period: str):
     return round(float(values[period]), 4) if period in values.index else None
+
+
+def pie_chart(values: pd.Series, title: str, unit: str) -> tuple[dict, dict]:
+    """Shares of a whole, largest first. Beyond MAX_SLICES, the smallest groups are combined into "Other"."""
+    values = values.sort_values(ascending=False)
+    if len(values) > MAX_SLICES:
+        values = pd.concat([values.iloc[:MAX_SLICES - 1], pd.Series({"Other": values.iloc[MAX_SLICES - 1:].sum()})])
+    total = float(values.sum())
+    spec = {"data": [{"type": "pie", "labels": [plain(str(k)) for k in values.index],
+                      "values": [round(float(v), 4) for v in values], "sort": False, "direction": "clockwise",
+                      "textinfo": "label+percent", "automargin": True,
+                      "marker": {"colors": PALETTE + ["#a8a29e", "#d6d3d1"]}}],
+            "layout": {"title": {"text": plain(title)}, "showlegend": False, "margin": {"t": 60}}}
+    table = {"columns": ["group", unit, "share (%)"],
+             "rows": [[k, round(float(v), 4), round(float(v) / total * 100, 1)] for k, v in values.items()]}
+    return spec, table
+
+
+def box_chart(stats: dict[str, dict], title: str, unit: str) -> tuple[dict, dict]:
+    """One box per group, from quartiles computed in pandas (the box), whiskers to the furthest values within
+    1.5 times the interquartile range, and the minimum and maximum in the data table."""
+    traces = [{"type": "box", "name": plain(group), "x": [plain(group)], "q1": [round(d["q1"], 4)],
+               "median": [round(d["median"], 4)], "q3": [round(d["q3"], 4)],
+               "lowerfence": [round(d["lower_whisker"], 4)], "upperfence": [round(d["upper_whisker"], 4)],
+               "marker": {"color": PALETTE[0]}, "showlegend": False} for group, d in stats.items()]
+    layout = {"title": {"text": plain(title)}, "yaxis": {"title": {"text": unit}},
+              "xaxis": {"type": "category", "automargin": True}, "margin": {"t": 60}}
+    table = {"columns": ["group", "values", "min", "lower quartile", "median", "upper quartile", "max"],
+             "rows": [[g, d["n"], *(round(d[k], 4) for k in ("min", "q1", "median", "q3", "max"))]
+                      for g, d in stats.items()]}
+    return {"data": traces, "layout": layout}, table
+
+
+def dot_chart(groups: dict[str, pd.Series], title: str, unit: str) -> tuple[dict, dict]:
+    """Every value as a dot, one column per group (spread sideways so dots do not hide each other)."""
+    traces = [{"type": "box", "name": plain(group), "y": [round(float(v), 4) for v in values], "boxpoints": "all",
+               "jitter": 0.5, "pointpos": 0, "fillcolor": "rgba(0,0,0,0)", "line": {"color": "rgba(0,0,0,0)"},
+               "marker": {"color": PALETTE[i % len(PALETTE)], "size": 6, "opacity": 0.75}, "showlegend": False}
+              for i, (group, values) in enumerate(groups.items())]
+    layout = {"title": {"text": plain(title)}, "yaxis": {"title": {"text": unit}},
+              "xaxis": {"type": "category", "automargin": True}, "margin": {"t": 60}}
+    table = {"columns": ["group", "values", "min", "median", "max"],
+             "rows": [[g, len(v), round(float(v.min()), 4), round(float(v.median()), 4), round(float(v.max()), 4)]
+                      for g, v in groups.items()]}
+    return {"data": traces, "layout": layout}, table
+
+
+def heatmap_chart(matrix: pd.DataFrame, title: str, unit: str) -> tuple[dict, dict]:
+    """A measure across two categories: rows are one dimension, columns another (or periods). Darker is higher;
+    an empty cell has no value."""
+    z = [[None if pd.isna(v) else round(float(v), 4) for v in row] for row in matrix.to_numpy()]
+    spec = {"data": [{"type": "heatmap", "z": z, "x": [plain(str(c)) for c in matrix.columns],
+                      "y": [plain(str(r)) for r in matrix.index], "colorscale": SEQUENTIAL, "hoverongaps": False,
+                      "colorbar": {"title": {"text": unit}}}],
+            "layout": {"title": {"text": plain(title)}, "xaxis": {"type": "category", "automargin": True},
+                       "yaxis": {"type": "category", "autorange": "reversed", "automargin": True}}}
+    rows = [[r, str(c), cell] for r, row in zip(matrix.index, z, strict=True)
+            for c, cell in zip(matrix.columns, row, strict=True) if cell is not None]
+    return spec, {"columns": ["row", "column", unit], "rows": rows}
+

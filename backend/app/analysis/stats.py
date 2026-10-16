@@ -38,10 +38,9 @@ def _in_range(periods: pd.Series, start: str | None, end: str | None) -> pd.Seri
     return keep
 
 
-def select_series(frame: pd.DataFrame, dataset: CuratedDataset, measure: str, filters: dict | None = None,
-                  start: str | None = None, end: str | None = None) -> tuple[pd.Series, str, list[str]]:
-    """One value per period for `measure`. Dimensions the filters leave open are added up, but only where the
-    dataset says that measure can be summed across them. Returns (series, unit, notes)."""
+def matching_rows(frame: pd.DataFrame, measure: str, filters: dict | None = None, start: str | None = None,
+                  end: str | None = None) -> pd.DataFrame:
+    """The rows of `measure` that match the filters (exact values, any letter case) and the period range."""
     if measure not in set(frame["measure"]):
         raise AnalysisError(f"unknown measure '{measure}'; measures: {sorted(set(frame['measure']))}")
     rows = frame[frame["measure"] == measure]
@@ -57,6 +56,15 @@ def select_series(frame: pd.DataFrame, dataset: CuratedDataset, measure: str, fi
     if rows.empty:
         raise AnalysisError(f"no {measure} data between {start or 'start'} and {end or 'end'}; coverage: "
                             f"{frame['period'].min()} to {frame['period'].max()}")
+    return rows
+
+
+def select_series(frame: pd.DataFrame, dataset: CuratedDataset, measure: str, filters: dict | None = None,
+                  start: str | None = None, end: str | None = None) -> tuple[pd.Series, str, list[str]]:
+    """One value per period for `measure`. Dimensions the filters leave open are added up, but only where the
+    dataset says that measure can be summed across them. Returns (series, unit, notes)."""
+    rows = matching_rows(frame, measure, filters, start, end)
+    dims = dimensions(frame)
     summed = []
     for dim in dims:
         values = rows[dim].unique()
@@ -130,3 +138,29 @@ def correlation(a: pd.Series, b: pd.Series) -> dict:
     if len(changes) >= 4:
         result["r_changes"] = _pearson(changes.iloc[:, 0], changes.iloc[:, 1])
     return result
+
+
+def observations(frame: pd.DataFrame, measure: str, filters: dict | None = None, group_by: str | None = None,
+                 start: str | None = None, end: str | None = None) -> tuple[dict[str, pd.Series], str, list[str]]:
+    """Every value of `measure`, by group, with nothing added up: what a distribution is drawn from. Each period,
+    and each value of a dimension the filters leave open, is one observation. Returns (values by group, unit,
+    the dimensions pooled within each group)."""
+    rows = matching_rows(frame, measure, filters, start, end)
+    dims = dimensions(frame)
+    if group_by and group_by not in dims:
+        raise AnalysisError(f"unknown dimension '{group_by}'; dimensions: {dims}")
+    pooled = [d for d in dims if d != group_by and d not in (filters or {}) and rows[d].nunique() > 1]
+    rows = rows.dropna(subset=["value"])
+    groups = {str(k): g["value"] for k, g in rows.groupby(group_by)} if group_by else {"all": rows["value"]}
+    return groups, rows["unit"].iloc[0], pooled
+
+
+def distribution(values: pd.Series) -> dict:
+    """Quartiles, the range, and box-plot whiskers (the furthest values within 1.5 IQR of the quartiles)."""
+    q1, median, q3 = (float(v) for v in values.quantile([0.25, 0.5, 0.75]))
+    reach = 1.5 * (q3 - q1)
+    inside = values[(values >= q1 - reach) & (values <= q3 + reach)]
+    return {"n": len(values), "min": float(values.min()), "q1": q1, "median": median, "q3": q3,
+            "max": float(values.max()), "lower_whisker": float(inside.min()), "upper_whisker": float(inside.max()),
+            "outliers": len(values) - len(inside)}
+
