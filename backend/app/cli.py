@@ -182,14 +182,12 @@ def main() -> None:
     parser.add_argument("--model", help="main model (see --options)")
     parser.add_argument("--effort", choices=["low", "medium", "high"], help="reasoning effort (default: low)")
     parser.add_argument("--tools", help="comma-separated optional tools to enable (default: all; see --options)")
-    parser.add_argument("--triage", choices=["local", "jev", "llm"], default="local",
-                        help="who makes the fast triage decision (default: local, unsure cases to the LLM)")
     parser.add_argument("--options", action="store_true", help="list the models and tools that can be chosen")
     args = parser.parse_args()
     if args.options:
         print(json.dumps({"models": available_models(), "tools": available_tools()}, indent=1))
         return
-    options = RunOptions(model=args.model, reasoning_effort=args.effort, triage=args.triage,
+    options = RunOptions(model=args.model, reasoning_effort=args.effort,
                          tools=None if args.tools is None else [t for t in args.tools.split(",") if t])
 
     graph = build_graph(checkpointer=sqlite_checkpointer(CHECKPOINTS))

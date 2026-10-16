@@ -218,7 +218,7 @@ Each entry records the date, the decision, the alternatives considered and the r
   | 0.6 | 98% | 30% |
   | 0.7 | 99% | 43% |
 
-- **Decision:** The default is the local classifier at a 0.6 threshold, with uncertain cases going to the LLM. It is trained on all 160 questions in production. Users can choose local, Jev or the LLM for each request.
+- **Decision:** The default is the local classifier at a 0.6 threshold, with uncertain cases going to the LLM. It is trained on all 160 questions in production. Users could choose local, Jev or the LLM for each request (removed in D-054).
 - **Why:** It has close to the LLM's accuracy at a third of the cost, and a typical decision takes milliseconds offline. Every local mistake had confidence below 0.63, which is why the threshold catches them.
   - Jev was not chosen as the default. It classified the demo question itself ("Analyse employment trends in the technology sector") as off topic, with confidence 0.58, the same result as an earlier probe. It also sent two vague questions to off-topic with confidence above 0.7.
 - **Caveats:** The test set has only 80 questions, so the accuracy figures carry wide margins (several percentage points). The labels were drafted with AI help and need human review. "Am I eligible for an HDB loan?" fooled every classifier, which suggests its label (off topic) is debatable.
@@ -280,7 +280,7 @@ Each entry records the date, the decision, the alternatives considered and the r
 - **Decision:**
   - **Stack.** One client-rendered Next.js 16 page in TypeScript. Plain CSS with light and dark themes. `react-markdown` for chat text, and no UI component library. Dependencies are pinned to releases at least two weeks old.
   - **Live view.** A WebSocket per running run feeds a pure reducer (`lib/runState.ts`). The reducer derives everything shown: the step list filtered by verbosity (brief/standard/full), the one-line status, elapsed working time (pauses for the user are excluded), token and cost counters summed across paused and resumed parts, the streamed draft with its check stage, and each agent's latest context window. The same events, live or replayed from history, give the same view.
-  - **Controls.** The per-request options (model, reasoning effort, optional tools, triage method, web scope, plan approval) and the verbosity are kept in the browser's local storage.
+  - **Controls.** The per-request options (model, reasoning effort, optional tools, triage method, web scope, plan approval) and the verbosity are kept in the browser's local storage. (Web scope and the triage method were removed later: D-054.)
   - **Reports.** The HTML report is the API's own page, served with its CSP, in a sandboxed iframe (scripts on, no same-origin access). It posts only its height, so the frame fits it. Exports are the HTML page and the Markdown file.
   - **Inspector.** A side panel shows each agent's context window (tokens by category: system prompt, task, own messages, tool results, retrieved passages, tool definitions; plus the messages sent) and the LLM call log, with input split into uncached, cache read and cache write.
 - **API changes for the UI:**
@@ -387,7 +387,7 @@ Changes from the first round of hands-on testing.
   - **Web search.** It covers the whole web; the government-only option is removed. The budget is 10 searches per extraction task (was 2), and the extraction agent's step limit is 10 (was 6). The agents are told to prefer official sources and to say when a source is a third party.
   - **Default model.** Claude Sonnet 5.5 is the default main model, with GPT 6.1 Sol as its fallback. This revises D-002, where OpenAI was primary; the fast tier is unchanged. The UI's model menu offers Claude Sonnet 5.5 and GPT 6 Luna by name. The API and CLI accept all four models.
   - **Chat bar.**
-    - A + menu on the left holds a switch per optional tool, plan approval and the triage method.
+    - A + menu on the left holds a switch per optional tool, plan approval and the triage method (removed in D-054).
     - The model menu sits beside the send button, with an Effort submenu.
     - The Detail levels are named Normal (the default), Thinking and Verbose.
 - **Why, from testing:**
@@ -593,3 +593,11 @@ Changes from the first round of hands-on testing.
 - **Decision:** line charts place each period at a date in its middle ("2015" on 1 July, "2015-Q1" on 15 February, "2015-09" on 15 September, "FY2015" on 1 October) on a real time axis, instead of treating periods as text categories. The legend sits above the plot, and a second y-axis gets round ticks of its own.
 - **Why:** with periods as categories, a chart mixing yearly and monthly series put all the years first and the months after them, so the 2015 hotspot total was drawn far from the September 2015 PSI peak; with 150 periods the labels were rotated and ran into the legend. On a time axis both series line up, the axis shows a few short labels (years, or months within a year), and the PNG downloads use the same dates. The middle of a period, rather than its start, puts a year's total among that year's months. Hovering a point still shows its period as the data has it, and the data table under the chart keeps the original periods.
 - **Alternatives:** rotating labels by 45 degrees and showing only every nth one (still misplaces mixed frequencies); refusing to chart series of different frequencies together (loses the haze chart, which is the point of the question).
+
+## D-054 · 2026-10-16 · Fewer request options, and unknown ones refused
+- **Decision:** a request's options are now only the model, the reasoning effort and the tools.
+  - **Triage is no longer chosen per request.** The local classifier always decides, and sends uncertain cases to the fast LLM (the default since the trial). The Jev classifier and the LLM alone stay in the code only for `scripts/triage_trial.py`, which reproduces the comparison in `TESTING.md`. The `--triage` flag of the command line is gone too.
+  - **Unknown options are refused.** The API answers 422 for any other option name, such as `web_scope` (removed earlier, when web search began covering the whole web) or `triage`. Before, they were ignored without an error, so the API appeared to accept options that did nothing, and a misspelt option went unnoticed.
+  - **Older runs still work.** Options saved with earlier runs are read without the removed names, when a run is shown, resumed or continued after a restart.
+- **Why:** an option that changes nothing, or that only a maintainer would compare, makes the API harder to explain and to test.
+- **Alternatives:** a server setting for the classifier (one more thing to configure, for a choice the trial already settled); deleting the Jev classifier (the committed trial results could no longer be reproduced); ignoring unknown options (today's silent behaviour).

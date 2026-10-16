@@ -79,7 +79,7 @@ flowchart TD
 |---|---|
 | `detect_language` | Detects English, Chinese, Malay or Tamil (lingua). Short follow-ups keep the previous language. |
 | `understand` | Rewrites a follow-up as a self-contained English question (fast LLM). A first message in English is used as is. |
-| `triage` | Classifies the question as in scope, vague or off topic. The default is a local classifier (embeddings + logistic regression, 3 ms) that sends uncertain cases (confidence < 0.6) to the fast LLM. Jev or the LLM can be chosen per request. |
+| `triage` | Classifies the question as in scope, vague or off topic. A local classifier (embeddings + logistic regression, 3 ms) decides, and sends uncertain cases (confidence < 0.6) to the fast LLM. The triage trial in `TESTING.md` compares it with Jev and the LLM alone. |
 | `clarify` / `ask_user` | Writes one clarifying question with two to four answers to pick from, then pauses the run (LangGraph `interrupt`) until the user picks one or writes their own ("Other"). At most 2 per question. |
 | `redirect` | Explains the scope in the user's language. No LLM call. |
 | `coordinator` | A ReAct agent: each step returns a `thought`, an `action` (extract, analyse, clarify, decline, report) and `instructions`. At most 6 steps. It sees the curated dataset list, the agents' summaries, and what the state records as loaded and computed. A decline before any search is turned into a search of documents and the web, so an announced policy is found rather than declined. |
@@ -177,7 +177,7 @@ How well this works is measured in [TESTING.md](TESTING.md#hallucination-detecti
   price (`llm/providers.py`, LangChain `with_fallbacks`). Structured output uses each provider's native mode.
   `FORCE_PRIMARY_FAIL=true` makes every primary call fail, to demonstrate the fallback.
 - **Per-request options.** The user can choose the main model (its fallback is set automatically), the reasoning
-  effort (default low), the tools and the triage method. The UI's menu offers Claude Sonnet 5.5 (default) and
+  effort (default low) and the tools. Any other option name is refused (422). The UI's menu offers Claude Sonnet 5.5 (default) and
   GPT 6 Luna (faster and cheaper, with Claude Haiku 5.5 as its fallback); the API and CLI accept all four models.
 - **Ledger.** Every call is recorded (`llm/ledger.py`) with:
   - provider, model and effort
@@ -250,7 +250,7 @@ Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health`, `/api/health/ready` | liveness; readiness (database, keys, index, web search) |
-| GET | `/api/options` | models, tools, efforts, triage methods, verbosity levels, defaults |
+| GET | `/api/options` | models, tools, efforts, verbosity levels, defaults |
 | POST, GET | `/api/threads`, `/api/threads?q=…&limit=N&with_runs=true` | start a conversation; list conversations (pinned first), or those with the words in their title or a question; `limit` pages the list and `with_runs` leaves out conversations whose first message was refused |
 | PATCH, DELETE | `/api/threads/{id}` | rename or pin a conversation; delete it (a soft delete: hidden from every route, kept for `python -m app.admin restore`; 409 while a run is working) |
 | GET | `/api/threads/{id}` | a conversation's messages and runs |
@@ -434,7 +434,7 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
     and ⌘K or Ctrl+K focuses the search. The list loads 15 conversations at a time ("View more"), and the
     sidebar's width can be dragged (200–480 px).
 
-  These choices and the Detail level are remembered in the browser. Triage is a server setting.
+  These choices and the Detail level are remembered in the browser.
 - **Citations.** The report's frame never scrolls, so a citation click inside it asks the page to scroll the
   conversation to the cited fact or source.
 - **Titles.** Conversation titles are written by the fast model in the background (`api/titles.py`).

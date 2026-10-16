@@ -5,7 +5,7 @@ a conversation can use different settings. Code running inside a graph step read
 """
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.llm.pricing import CONTEXT_WINDOWS, PRICES
 
@@ -37,10 +37,16 @@ FALLBACK_FOR = {"gpt-6.1-sol": "claude-sonnet-5-5", "claude-sonnet-5-5": "gpt-6.
 
 
 class RunOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # a misspelt or removed option is an error, not silently ignored
+
     model: str | None = None              # main model for the coordinator, agents, writer and reviewer
     reasoning_effort: Effort | None = None
     tools: list[str] | None = None        # enabled optional tools; None means all
-    triage: Literal["local", "jev", "llm"] = "local"  # who makes the fast in-scope/off-topic/vague decision
+
+    @classmethod
+    def saved(cls, raw: dict | None) -> "RunOptions":
+        """Options stored with a run. Older versions also had web_scope and triage, which are dropped."""
+        return cls(**{name: value for name, value in (raw or {}).items() if name in cls.model_fields})
 
     @field_validator("model")
     @classmethod
@@ -68,7 +74,7 @@ def current_options() -> RunOptions:
         raw = get_config().get("configurable", {}).get("options") or {}
     except Exception:  # noqa: BLE001 - outside a graph run
         raw = {}
-    return raw if isinstance(raw, RunOptions) else RunOptions(**raw)
+    return raw if isinstance(raw, RunOptions) else RunOptions.saved(raw)
 
 
 MODEL_NAMES = {"claude-sonnet-5-5": "Claude Sonnet 5.5", "gpt-6.1-sol": "GPT 6.1 Sol", "gpt-6-luna": "GPT 6 Luna",

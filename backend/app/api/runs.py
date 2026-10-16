@@ -19,6 +19,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.api.db import LLMCallRecord, Run, RunEvent, Thread, utcnow
 from app.graph.events import LEVELS
+from app.graph.options import RunOptions
 from app.llm.ledger import Ledger
 from app.report.export import export_markdown, export_pdf
 
@@ -103,7 +104,8 @@ class RunManager:
                 continue
             self.append(run.id, {"node": "run", "kind": "observation", "level": 1, "content": RESTART_NOTE,
                                  "restart": True, "ts": time.time()})
-            self.start(run.id, run.thread_id, None, run.options or {})  # no input: carry on from the checkpoint
+            # no input: carry on from the checkpoint
+            self.start(run.id, run.thread_id, None, RunOptions.saved(run.options).model_dump())
             continued.append(run.id)
         return continued
 

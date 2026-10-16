@@ -157,7 +157,7 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
     @app.get("/api/options")
     def options():
         return {"models": available_models(), "tools": available_tools(), "efforts": ["low", "medium", "high"],
-                "triage": ["local", "jev", "llm"], "verbosity": VERBOSITY,
+                "verbosity": VERBOSITY,
                 "defaults": RunOptions().model_dump() | {"reasoning_effort": get_settings().llm_reasoning_effort,
                                                          "model": get_settings().llm_quality_primary}}
 
@@ -339,7 +339,8 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
                                     .order_by(LLMCallRecord.id)).all()
             large = ("report_html", "report_markdown", "report_pdf")  # served by their own endpoints
             detail = {k: v for k, v in as_dict(run).items() if k not in large}
-            return detail | {"started_at": iso(run.started_at), "finished_at": iso(run.finished_at),
+            return detail | {"options": RunOptions.saved(run.options).model_dump(),  # without removed options
+                             "started_at": iso(run.started_at), "finished_at": iso(run.finished_at),
                              "has_report": bool(run.report_html), "has_pdf": bool(run.report_pdf),
                              "llm_calls": [as_dict(c) for c in calls]}
 

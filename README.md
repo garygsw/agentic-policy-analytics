@@ -227,7 +227,7 @@ Settings are read from `.env`; see `.env.example`. The keys:
 |---|---|---|
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | | required: primary and fallback providers |
 | `TAVILY_API_KEY` | | optional: the web search tool |
-| `TYPESAFE_API_KEY` | | optional: the Jev triage classifier |
+| `TYPESAFE_API_KEY` | | optional: only for the triage trial's Jev comparison |
 | `FIRMS_MAP_KEY` | | optional: only to rebuild the fire-hotspot snapshot (`scripts/make_hotspots.py`) |
 
 Model selection:

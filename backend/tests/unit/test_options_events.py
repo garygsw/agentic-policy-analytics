@@ -33,6 +33,14 @@ def test_options_reject_unknown_models_and_tools():
         RunOptions(tools=["teleport"])
 
 
+def test_removed_options_are_refused_but_dropped_from_older_runs():
+    with pytest.raises(ValidationError, match="Extra inputs"):
+        RunOptions(triage="llm")
+    older = {"model": "gpt-6-luna", "triage": "local", "web_scope": "gov"}  # as saved by an earlier version
+    assert RunOptions.saved(older) == RunOptions(model="gpt-6-luna") and RunOptions.saved(None) == RunOptions()
+    assert in_run({"web_scope": "gov"}, current_options) == RunOptions()  # a run resumed after an upgrade
+
+
 def test_required_tools_cannot_be_switched_off():
     options = RunOptions(tools=["create_chart"])
     assert options.tool_enabled("compute_trend") and options.tool_enabled("create_chart")

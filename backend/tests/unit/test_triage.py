@@ -3,7 +3,6 @@ from collections import Counter
 
 import httpx
 import pytest
-from langchain_core.runnables import RunnableLambda
 
 from app.graph.state import TriageResult
 from app.guardrails import triage
@@ -63,11 +62,8 @@ def test_escalation_passes_unsure_or_failed_decisions_to_the_llm():
     assert triage.with_escalation(broken, llm)("q").decided_by == "llm"
 
 
-@pytest.mark.parametrize("choice,expected", [("local", "local"), ("jev", "jev"), ("llm", "llm")])
-def test_the_classifier_is_chosen_per_request(monkeypatch, choice, expected):
-    monkeypatch.setattr(triage, "production_local_classifier", lambda: fixed("in_scope", 0.95, "local"))
-    monkeypatch.setattr(triage, "JevClassifier", lambda: fixed("in_scope", 0.95, "jev"))
+@pytest.mark.parametrize("confidence,expected", [(0.95, "local"), (0.4, "llm")])
+def test_the_graph_uses_the_local_classifier_and_asks_the_llm_when_unsure(monkeypatch, confidence, expected):
+    monkeypatch.setattr(triage, "production_local_classifier", lambda: fixed("in_scope", confidence, "local"))
     monkeypatch.setattr("app.graph.nodes.intake.llm_decider", lambda llm: fixed("in_scope", 0.99, "llm"))
-    decide = triage.make_triage_decider(llm=None)
-    result = RunnableLambda(lambda q: decide(q)).invoke("q", {"configurable": {"options": {"triage": choice}}})
-    assert result.decided_by == expected
+    assert triage.make_triage_decider(llm=None)("q").decided_by == expected

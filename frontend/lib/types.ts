@@ -71,7 +71,6 @@ export interface OptionsResponse {
   models: ModelInfo[];
   tools: ToolInfo[];
   efforts: string[];
-  triage: string[];
   verbosity: { level: number; name: string; shows: string }[];
   defaults: RunOptions;
 }

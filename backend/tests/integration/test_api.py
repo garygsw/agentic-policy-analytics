@@ -77,7 +77,8 @@ def test_health_and_options(tmp_path):
         options = client.get("/api/options").json()
         assert [(m["id"], m["name"]) for m in options["models"]] == [("claude-sonnet-5-5", "Claude Sonnet 5.5"),
                                                                       ("gpt-6-luna", "GPT 6 Luna")]
-        assert options["models"][0]["fallback_name"] == "GPT 6.1 Sol" and "web_scopes" not in options
+        assert options["models"][0]["fallback_name"] == "GPT 6.1 Sol"
+        assert "web_scopes" not in options and "triage" not in options["defaults"]
         assert [v["name"] for v in options["verbosity"]] == ["normal", "thinking", "verbose"]
         assert options["defaults"]["reasoning_effort"] == "low"
 
@@ -92,6 +93,18 @@ def test_message_runs_in_the_background_to_an_answer(answered):
         assert time.time() < deadline, detail["title"]
         time.sleep(0.05)  # written by the fast model, not the whole question
     assert [m["role"] for m in detail["messages"]] == ["user", "assistant"]
+
+
+def test_removed_options_are_refused_and_dropped_from_older_runs(answered):
+    client, thread, run_id, _ = answered
+    for removed in ({"web_scope": "gov"}, {"triage": "local"}):
+        reply = client.post(f"/api/threads/{thread}/messages", json={"text": QUESTION, "options": removed})
+        assert reply.status_code == 422 and "Extra inputs" in reply.text
+    with client.app.state.sessions() as session:
+        session.get(Run, run_id).options = {"model": None, "triage": "local", "web_scope": "gov"}  # an older run
+        session.commit()
+    assert client.get(f"/api/runs/{run_id}").json()["options"] == {"model": None, "reasoning_effort": None,
+                                                                   "tools": None}
 
 
 def test_events_are_numbered_and_end_with_the_outcome(answered):

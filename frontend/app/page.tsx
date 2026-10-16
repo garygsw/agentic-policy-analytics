@@ -28,7 +28,7 @@ function validOptions(saved: RunOptions, catalog: OptionsResponse): RunOptions {
     model: catalog.models.some((m) => m.id === saved.model) ? saved.model : null,
     reasoning_effort: saved.reasoning_effort ?? null,
     tools: saved.tools ? saved.tools.filter((t) => tools.has(t)) : null,
-  }; // settings saved by older versions (web scope, triage) are dropped: the server's defaults apply
+  }; // settings saved by older versions (web scope, triage) are dropped: the API refuses them
 }
 
 /** Follows one live run's event stream (a component, so each live run gets its own connection). */
@@ -57,7 +57,7 @@ export default function Home() {
     api.options().then(setCatalog).catch((e) => setError(e.message));
   }, [setError]);
 
-  const options = catalog ? validOptions(storedOptions, catalog) : storedOptions;
+  const options = catalog ? validOptions(storedOptions, catalog) : DEFAULT_OPTIONS; // unchecked until it loads
   const active = runs.findLast((r) => ["running", "awaiting_input"].includes(displayedStatus(r)));
   const running = active && displayedStatus(active) === "running" ? active : undefined;
   const pending = active ? pendingOf(active.view) : null;

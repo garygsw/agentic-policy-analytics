@@ -1,12 +1,12 @@
-"""Fast triage decisions (in scope, off topic, vague) by three interchangeable classifiers.
+"""Fast triage decisions (in scope, off topic, vague).
 
-- local: the document-search embedding model plus logistic regression, trained on the labelled questions in
-  data/eval/triage_queries.jsonl. Free, offline, milliseconds.
-- jev: TypeSafe AI's hosted decision model, asked a "choice" question.
-- llm: the fast LLM tier with the triage prompt.
+The graph uses the local classifier: the document-search embedding model plus logistic regression, trained on the
+labelled questions in data/eval/triage_queries.jsonl (free, offline, milliseconds). A decision below
+CONFIDENCE_THRESHOLD is passed to the fast LLM, which is slower but reads the question more carefully; decided_by
+records who made the final call.
 
-With local or jev, a decision below CONFIDENCE_THRESHOLD is passed to the LLM, which is slower but reads the
-question more carefully; decided_by records who made the final call. scripts/triage_trial.py compares them.
+scripts/triage_trial.py compares it with two alternatives kept here for the trial: jev (TypeSafe AI's hosted
+decision model, asked a "choice" question) and the fast LLM alone.
 """
 import json
 import random
@@ -133,18 +133,12 @@ def production_local_classifier() -> LocalClassifier:
 
 
 def make_triage_decider(llm):
-    """The triage decider the graph uses. The classifier is chosen per request (options.triage); local and Jev
-    pass low-confidence or failed decisions to the fast LLM."""
+    """The triage decider the graph uses: the local classifier, passing low-confidence or failed decisions to the
+    fast LLM. The classifier is loaded on the first question, not when the graph is built."""
     from app.graph.nodes.intake import llm_decider
-    from app.graph.options import current_options
 
     ask_llm = llm_decider(llm)
 
     def decide(question: str) -> TriageResult:
-        kind = current_options().triage
-        if kind == "llm":
-            return ask_llm(question)
-        if kind == "jev":
-            return with_escalation(JevClassifier(), ask_llm)(question)
         return with_escalation(production_local_classifier(), ask_llm)(question)
     return decide
