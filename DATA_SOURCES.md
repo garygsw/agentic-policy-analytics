@@ -46,6 +46,18 @@ Coverage is that of the committed snapshots (14 Oct 2026). Live loads may extend
 curated dataset fits. These datasets have no hand-written cleaner: their shape (period column, dimensions,
 measures) is inferred, high-cardinality text columns such as names are dropped, and they are marked uncurated.
 
+**Map boundaries** (`backend/data/boundaries/`, built by `scripts/make_boundaries.py`) are official data.gov.sg
+GeoJSON, simplified (outer rings only; Douglas-Peucker to about 45 m) and redistributed under the Singapore Open
+Data Licence v1.0. Each file names its source.
+
+| Layer | Source | Areas |
+|---|---|---|
+| `planning_areas` | URA Master Plan 2019 Planning Area Boundary (No Sea), `d_4765db0e87b9c86336792efe8a1f7a66` | 55 |
+| `regions` | URA Master Plan 2019 Region Boundary (No Sea), `d_bf4d24df9129d5a8ff8cf82e20959ee0` | 5 |
+| `electoral_2006` to `electoral_2025` | ELD Electoral Boundary 2006, 2011, 2015, 2020, 2025 | 23, 27, 29, 31, 33 |
+
+NEA's five PSI regions have no published boundaries; maps show them at the points NEA's real-time PSI API gives.
+
 ## 2. APIs used
 
 **data.gov.sg** (`backend/app/data/sources.py`, no key needed):

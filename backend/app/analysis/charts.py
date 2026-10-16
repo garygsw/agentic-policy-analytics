@@ -1,6 +1,7 @@
-"""Plotly chart specs, built from computed series (never from numbers an LLM wrote): lines over time, bars for
-groups in one period, scatter plots of two measures against each other, pies for shares of a whole, box and dot
-plots for distributions, and heatmaps for a measure across two categories (or a category over time).
+"""Plotly chart specs, built from computed series (never from numbers an LLM wrote): lines over time; bars for
+groups in one period, grouped or stacked when split by a second dimension; scatter plots of two measures; pies for
+shares of a whole; box and dot plots for distributions; heatmaps for a measure across two categories (or a category
+over time); and maps.
 
 A spec is plain JSON ({"data": [...], "layout": {...}}) that plotly.js renders in the browser and in the HTML
 report. Each chart also keeps its data as a table, shown under the chart for accessibility and checking.
@@ -127,4 +128,76 @@ def heatmap_chart(matrix: pd.DataFrame, title: str, unit: str) -> tuple[dict, di
     rows = [[r, str(c), cell] for r, row in zip(matrix.index, z, strict=True)
             for c, cell in zip(matrix.columns, row, strict=True) if cell is not None]
     return spec, {"columns": ["row", "column", unit], "rows": rows}
+
+
+def scale_colour(fraction: float) -> str:
+    """The colour at a point (0 to 1) of the SEQUENTIAL scale, as #rrggbb."""
+    fraction = min(1.0, max(0.0, fraction))
+    for (low, start), (high, end) in zip(SEQUENTIAL, SEQUENTIAL[1:], strict=False):
+        if fraction <= high:
+            t = (fraction - low) / (high - low)
+            a, b = (int(start[i:i + 2], 16) for i in (1, 3, 5)), (int(end[i:i + 2], 16) for i in (1, 3, 5))
+            return "#" + "".join(f"{round(x + (y - x) * t):02x}" for x, y in zip(a, b, strict=True))
+    return SEQUENTIAL[-1][1]
+
+
+def _outline(rings: list) -> tuple[list, list]:
+    """Rings as one line for Plotly: points of each ring, then None to start the next."""
+    xs, ys = [], []
+    for ring in rings:
+        xs += [x for x, _ in ring] + [None]
+        ys += [y for _, y in ring] + [None]
+    return xs, ys
+
+
+def map_chart(values: pd.Series, shapes: dict[str, list], points: dict[str, tuple], base: list, title: str,
+              unit: str) -> tuple[dict, dict]:
+    """A map of Singapore: areas filled from light (low) to dark (high), or labelled points sized and coloured by
+    value, over the outline of every planning area. Drawn as plain shapes on longitude and latitude, not with a
+    map service, so it needs no network and draws the same in the PDF."""
+    shown = values[[label in shapes or label in points for label in values.index]]
+    low, high = float(shown.min()), float(shown.max())
+    def position(v):
+        return (float(v) - low) / (high - low) if high > low else 0.5
+    base_x, base_y = _outline(base)
+    traces = [{"type": "scatter", "x": base_x, "y": base_y, "mode": "lines", "fill": "toself",
+               "fillcolor": "#e7e5e0", "line": {"color": "#ffffff", "width": 0.5}, "hoverinfo": "skip"}]
+    for label, value in shown.items():
+        if label in shapes:
+            xs, ys = _outline(shapes[label])
+            traces.append({"type": "scatter", "x": xs, "y": ys, "mode": "lines", "fill": "toself",
+                           "fillcolor": scale_colour(position(value)), "line": {"color": "#ffffff", "width": 0.6},
+                           "name": plain(f"{label}: {value:,.4g} {unit}"), "hoveron": "fills", "hoverinfo": "name"})
+    if points:
+        labels = [label for label in shown.index if label in points]
+        traces.append({"type": "scatter", "mode": "markers+text", "x": [points[k][0] for k in labels],
+                       "y": [points[k][1] for k in labels], "text": [plain(k) for k in labels],
+                       "textposition": "top center",
+                       "hovertext": [plain(f"{k}: {shown[k]:,.4g} {unit}") for k in labels],
+                       "hoverinfo": "text", "marker": {"size": [14 + 26 * position(shown[k]) for k in labels],
+                                                       "color": [scale_colour(position(shown[k])) for k in labels],
+                                                       "line": {"color": "#57534e", "width": 1}}})
+    traces.append({"type": "scatter", "x": [base_x[0]], "y": [base_y[0]], "mode": "markers", "hoverinfo": "skip",
+                   "marker": {"size": 0.1, "opacity": 0, "color": [low, high], "colorscale": SEQUENTIAL,
+                              "cmin": low, "cmax": high, "showscale": True, "colorbar": {"title": {"text": unit}}}})
+    layout = {"title": {"text": plain(title)}, "showlegend": False, "hovermode": "closest", "height": 460,
+              "xaxis": {"visible": False}, "yaxis": {"visible": False, "scaleanchor": "x", "scaleratio": 1},
+              "margin": {"t": 60}}
+    table = {"columns": ["area", unit], "rows": [[k, round(float(v), 4)] for k, v in shown.items()]}
+    return {"data": traces, "layout": layout}, table
+
+
+def multi_bar_chart(matrix: pd.DataFrame, title: str, unit: str, stacked: bool) -> tuple[dict, dict]:
+    """Bars split by a second dimension: rows are the bars, columns the parts. Grouped bars stand side by side,
+    to compare the parts; stacked bars build up to each bar's total."""
+    traces = [{"type": "bar", "name": plain(str(part)), "x": [plain(str(r)) for r in matrix.index],
+               "y": [None if pd.isna(v) else round(float(v), 4) for v in matrix[part]],
+               "marker": {"color": PALETTE[i % len(PALETTE)]}} for i, part in enumerate(matrix.columns)]
+    layout = {"title": {"text": plain(title)}, "barmode": "stack" if stacked else "group",
+              "yaxis": {"title": {"text": unit}}, "xaxis": {"type": "category", "automargin": True},
+              "legend": {"orientation": "h"}, "margin": {"t": 60}}
+    table = {"columns": ["group", *[str(c) for c in matrix.columns]],
+             "rows": [[str(r), *[None if pd.isna(v) else round(float(v), 4) for v in row]]
+                      for r, row in zip(matrix.index, matrix.to_numpy(), strict=True)]}
+    return {"data": traces, "layout": layout}, table
 

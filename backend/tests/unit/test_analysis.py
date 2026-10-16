@@ -37,6 +37,15 @@ STATIONS = pd.DataFrame([{"period": "", "station": s, "status": st, "measure": "
                          for s, st, v in (("A", "open", 3.0), ("B", "planned", 0.0), ("C", "planned", 0.0))])
 
 
+# Real place names, for maps: two HDB towns, two that span several planning areas, and one that is not a place.
+TOWNS = pd.DataFrame([{"period": "2024", "town": t, "measure": "price", "unit": "S$", "value": v}
+                      for t, v in (("Bedok", 500.0), ("Tampines", 550.0), ("Kallang/Whampoa", 700.0),
+                                   ("Central Area", 900.0), ("Atlantis", 1.0))])
+PSI = pd.DataFrame([{"period": "2015-09", "region": r, "measure": "highest_psi", "unit": "24-hour PSI", "value": v}
+                    for r, v in (("north", 302.0), ("south", 322.0), ("east", 285.0), ("west", 321.0),
+                                 ("central", 300.0))])
+
+
 def dataset(key, summable=None, frequency="annual"):
     return CuratedDataset(key, key.title(), "Agency", "topic", "desc", "datagovsg", (key,), frequency,
                           clean=lambda raw: None, summable=summable or {})
@@ -48,6 +57,9 @@ DATASETS = {
     "stations": (STATIONS, dataset("stations", {"exits": ("station", "status")}, "none")),
     "gdp": (GDP, dataset("gdp")),
     "prices": (PRICES, dataset("prices", frequency="quarterly")),
+    "towns": (TOWNS, dataset("towns")),
+    "psi": (PSI, dataset("psi", frequency="monthly")),
+    "employment_strict": (EMPLOYMENT, dataset("employment_strict", {"employed": ("industry",)})),  # not by sex
 }
 
 
@@ -269,6 +281,51 @@ def test_heatmap_rows_by_group_and_columns_by_period_or_a_second_dimension():
          column_by="sex")
     assert ws.charts[1]["spec"]["data"][0]["z"] == [[340.0, 340.0], [140.0, 140.0]]  # 2024
     assert ws.charts[1]["table"]["rows"][0] == ["retail", "female", 340.0]
+
+
+def test_grouped_and_stacked_bars_split_each_bar_by_a_second_dimension():
+    ws, t = tools()
+    employed = {"dataset_id": "employment", "measure": "employed", "filters": {}, "label": "Employed"}
+    for kind, mode in (("grouped_bar", "group"), ("stacked_bar", "stack")):
+        out = call(t["create_chart"], kind=kind, title="By industry and sex", series=[employed], group_by="industry",
+                   column_by="sex")
+        chart = ws.charts[-1]
+        assert chart["spec"]["layout"]["barmode"] == mode
+        assert [tr["name"] for tr in chart["spec"]["data"]] == ["female", "male"]
+        assert chart["table"]["rows"] == [["retail", 340.0, 340.0], ["ict", 140.0, 140.0]]  # 2024, largest first
+        assert out["note"] == "bars: industry; split by sex in 2024"
+    strict = {**employed, "dataset_id": "employment_strict"}
+    with pytest.raises(stats.AnalysisError, match="cannot be added up across sex: use grouped bars"):
+        t["create_chart"].invoke({"kind": "stacked_bar", "title": "x", "series": [strict], "group_by": "industry",
+                                  "column_by": "sex", "reason": "x"})
+    with pytest.raises(stats.AnalysisError, match="needs column_by"):
+        t["create_chart"].invoke({"kind": "grouped_bar", "title": "x", "series": [employed], "group_by": "industry",
+                                  "reason": "x"})
+
+
+def test_a_map_fills_towns_by_value_and_says_what_it_left_out():
+    ws, t = tools()
+    price = {"dataset_id": "towns", "measure": "price", "filters": {}, "label": "Price"}
+    out = call(t["create_chart"], kind="map", title="Prices by town", series=[price], group_by="town")
+    traces = ws.charts[0]["spec"]["data"]
+    filled = {tr["name"].split(":")[0]: tr["fillcolor"] for tr in traces if tr.get("name")}
+    assert set(filled) == {"Central Area", "Kallang/Whampoa", "Tampines", "Bedok"}  # Atlantis is not a place
+    assert filled["Central Area"] == "#800026" and filled["Bedok"] == "#ffffcc"  # darkest is highest
+    assert "not on the map: Atlantis" in out["note"] and "Central Area planning areas" in out["note"]
+    assert ws.charts[0]["spec"]["layout"]["yaxis"]["scaleanchor"] == "x"  # longitude and latitude to scale
+    assert traces[-1]["marker"]["showscale"] and traces[-1]["marker"]["cmax"] == 900.0
+
+
+def test_nea_regions_are_mapped_as_points_and_other_labels_get_no_map():
+    ws, t = tools()
+    psi = {"dataset_id": "psi", "measure": "highest_psi", "filters": {}, "label": "Highest PSI"}
+    call(t["create_chart"], kind="map", title="Haze, September 2015", series=[psi], group_by="region")
+    points = next(tr for tr in ws.charts[0]["spec"]["data"] if tr.get("mode") == "markers+text")
+    assert points["text"] == ["south", "west", "north", "central", "east"] and points["x"][0] == 103.82
+    employed = {"dataset_id": "employment", "measure": "employed", "filters": {"sex": "male"}, "label": "Men"}
+    with pytest.raises(stats.AnalysisError, match="no map for industry"):
+        t["create_chart"].invoke({"kind": "map", "title": "x", "series": [employed], "group_by": "industry",
+                                  "reason": "x"})
 
 
 def test_list_records_refuses_time_series_and_counts_tables():

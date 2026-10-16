@@ -7,6 +7,8 @@ pyplot keeps global state.
 import io
 
 import numpy as np
+from matplotlib.cm import ScalarMappable
+from matplotlib.collections import PolyCollection
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
@@ -78,12 +80,66 @@ def _heatmap_png(figure, ax, trace: dict) -> None:
     bar.ax.tick_params(labelsize=7)
 
 
+def _rings(trace: dict) -> list:
+    """A filled outline trace's rings: its points split at each None."""
+    rings, ring = [], []
+    for x, y in zip(trace["x"], trace["y"], strict=True):
+        if x is None:
+            rings, ring = rings + [ring], []
+        else:
+            ring.append((x, y))
+    return rings + ([ring] if ring else [])
+
+
+def _map_png(figure, ax, traces: list[dict]) -> None:
+    """A map: filled areas (the grey outline first), labelled points, and the colour bar's range."""
+    for trace in traces:
+        marker = trace.get("marker") or {}
+        if trace.get("fill") == "toself":
+            ax.add_collection(PolyCollection(_rings(trace), facecolors=trace["fillcolor"], edgecolors="white",
+                                             linewidths=0.4))
+        elif marker.get("showscale"):
+            scale = ScalarMappable(Normalize(marker["cmin"], marker["cmax"]), SEQUENTIAL_MAP)
+            bar = figure.colorbar(scale, ax=ax, shrink=0.8, format=FuncFormatter(_number))
+            bar.set_label(((marker.get("colorbar") or {}).get("title") or {}).get("text", ""), fontsize=8)
+            bar.ax.tick_params(labelsize=7)
+        elif "text" in trace:  # labelled points
+            ax.scatter(trace["x"], trace["y"], s=[size ** 2 / 2 for size in marker["size"]], c=marker["color"],
+                       edgecolors="#57534e", linewidths=0.8, zorder=3)
+            for x, y, label, size in zip(trace["x"], trace["y"], trace["text"], marker["size"], strict=True):
+                ax.annotate(label, (x, y), textcoords="offset points", xytext=(0, size / 2.6 + 3), ha="center",
+                            fontsize=7)  # just above the dot, whatever its size
+    ax.autoscale_view()
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+
+def _bars_png(ax, bars: list[dict], stacked: bool) -> list[str]:
+    """Bars from one or more traces: side by side, or stacked. Returns the categories along the x-axis."""
+    categories = [str(v) for v in bars[0]["x"]]
+    width = 0.8 if stacked or len(bars) == 1 else 0.8 / len(bars)
+    bottom = np.zeros(len(categories))
+    for i, trace in enumerate(bars):
+        y = np.array([np.nan if v is None else v for v in trace["y"]], dtype=float)
+        offset = 0 if stacked or len(bars) == 1 else (i - (len(bars) - 1) / 2) * width
+        ax.bar(np.arange(len(categories)) + offset, y, width=width, bottom=bottom if stacked else None,
+               color=(trace.get("marker") or {}).get("color"), label=trace.get("name"))
+        if stacked:
+            bottom = bottom + np.nan_to_num(y)
+    return categories
+
+
 def chart_png(spec: dict, title: str) -> bytes:
-    """One chart (a Plotly spec: line, bar, scatter, pie, box, dot or heatmap) as a PNG image."""
+    """One chart (a Plotly spec: line, bar, scatter, pie, box, dot, heatmap or map) as a PNG image."""
     figure = Figure(figsize=(7.5, 3.6), dpi=150)
     ax = figure.subplots()
     traces, layout = spec.get("data", []), spec.get("layout", {})
     kind = traces[0].get("type") if traces else None
+    if (layout.get("yaxis") or {}).get("scaleanchor") == "x":  # a map: longitude and latitude to the same scale
+        figure.set_size_inches(7.5, 4.6)
+        _map_png(figure, ax, traces)
+        ax.set_title(title, loc="left", fontsize=10)
+        return _png(figure)
     if kind in ("pie", "box", "heatmap"):
         if kind == "pie":
             _pie_png(ax, traces[0])
@@ -99,14 +155,14 @@ def chart_png(spec: dict, title: str) -> bytes:
     points = [t for t in spec.get("data", []) if t.get("type") == "scatter" and "lines" not in t.get("mode", "lines")]
     for trace in points:
         _points_png(ax, trace, layout)
-    for trace in [t for t in spec.get("data", []) if t not in points]:
+    bars = [t for t in traces if t.get("type") == "bar"]
+    if bars:
+        categories = _bars_png(ax, bars, stacked=layout.get("barmode") == "stack")
+    for trace in [t for t in traces if t not in points and t not in bars]:
         x = [str(v) for v in trace.get("x", [])]
         y = [float("nan") if v is None else v for v in trace.get("y", [])]
         categories = categories or x
         color = (trace.get("line") or trace.get("marker") or {}).get("color")
-        if trace.get("type") == "bar":
-            ax.bar(x, y, color=color)
-            continue
         target = ax
         if trace.get("yaxis") == "y2":
             second_axis = second_axis or ax.twinx()

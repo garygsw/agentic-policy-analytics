@@ -125,7 +125,17 @@ def test_every_chart_kind_draws_as_an_image_for_the_downloads():
     dots = {"data": [{"type": "box", "name": "A", "y": [1, 2, 3], "boxpoints": "all"}], "layout": {}}
     heatmap = {"data": [{"type": "heatmap", "z": [[1, None], [3, 4]], "x": ["2020", "2021"], "y": ["A", "B"]}],
                "layout": {}}
-    for spec in (line, bar, points, pie, boxes, dots, heatmap):
+    stacked = {"data": [{"type": "bar", "name": n, "x": ["A", "B"], "y": [1, 2]} for n in ("f", "m")],
+               "layout": {"barmode": "stack"}}
+    square = [[103.8, 1.3], [103.9, 1.3], [103.9, 1.4], [103.8, 1.3]]
+    a_map = {"data": [{"type": "scatter", "fill": "toself", "fillcolor": "#fed976",
+                       "x": [p[0] for p in square] + [None], "y": [p[1] for p in square] + [None]},
+                      {"type": "scatter", "mode": "markers+text", "x": [103.85], "y": [1.35], "text": ["north"],
+                       "marker": {"size": [20], "color": ["#800026"]}},
+                      {"type": "scatter", "x": [103.8], "y": [1.3], "marker": {"showscale": True, "cmin": 0,
+                                                                                "cmax": 10}}],
+             "layout": {"yaxis": {"scaleanchor": "x"}}}
+    for spec in (line, bar, points, pie, boxes, dots, heatmap, stacked, a_map):
         assert chart_png(spec, "A chart").startswith(b"\x89PNG")
 
 

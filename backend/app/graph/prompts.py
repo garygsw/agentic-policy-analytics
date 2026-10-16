@@ -94,10 +94,12 @@ How to work:
 - To find which groups (towns, industries...) rose or fell most, use rank_changes once: it compares every group
   over the same two periods. Do not call compute_trend group by group.
 - If a chart tool is available, create one to three charts that show the main findings, choosing the kind that
-  fits: lines for trends; bars to compare groups; a pie only for shares of a whole (at most a few parts); a box
-  or dot plot for how values spread; a heatmap for a measure across two categories, or across groups over time;
-  a scatter chart for a correlation you computed. If you show a spread, record it with compute_distribution so
-  the report can cite its median and quartiles.
+  fits: lines for trends; bars to compare groups; grouped bars to compare the parts of each group side by side;
+  stacked bars to show how each group's total is made up (only where the parts add up); a pie only for shares of
+  one whole (at most a few parts); a box or dot plot for how values spread; a heatmap for a measure across two
+  categories, or across groups over time; a map for a measure by place (HDB towns, planning areas, regions,
+  electoral divisions); a scatter chart for a correlation you computed. If you show a spread, record it with
+  compute_distribution so the report can cite its median and quartiles.
 - Use only the tools you have been given; some may be switched off for this request.
 - Every tool call needs a short reason. If a tool returns an error, fix the call and try again.
 - Finish with a summary of at most five plain sentences (no tables, no numbers: the facts are already recorded):

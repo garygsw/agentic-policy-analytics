@@ -123,7 +123,7 @@ A run can also pause as `awaiting_input`.
 | | `compute_correlation` | Pearson correlation of two series, of levels and of period-to-period changes. |
 | | `list_records` | Counts records in tables without a time dimension (e.g. planned stations). |
 | | `compute_distribution` | The spread of a measure by group: median and quartiles of every value, recorded as facts. Each period (and each value of a dimension left open) is one value. |
-| | `create_chart` | A chart (Plotly spec) from the data, with its data table: line (series over time), bar (groups in one period), pie (shares of a whole, only where the measure adds up across the groups; more than eight slices are combined into "Other"), box or dot (the spread of values by group), heatmap (a measure across two categories, or groups over time), scatter (two measures on the same periods as `compute_correlation`). |
+| | `create_chart` | A chart (Plotly spec) from the data, with its data table: line (series over time); bar (groups in one period); grouped_bar and stacked_bar (each bar split by a second dimension; stacked only where the parts add up); pie (shares of a whole, only where the measure adds up across the groups; more than eight slices are combined into "Other"); box or dot (the spread of values by group); heatmap (a measure across two categories, or groups over time); map (a measure by place, see below); scatter (two measures on the same periods as `compute_correlation`). |
 
 The tools apply each dataset's **summing rules**. A measure can be added up only across the dimensions the
 dataset allows; for any other dimension, the agent must filter to one value. This stops, for example, adding up
@@ -198,6 +198,13 @@ Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
   - personal data columns are dropped (CEA salesperson names)
 
   Agents read the quality report in each dataset's profile and cite it in caveats.
+- **Maps** (`analysis/geo.py`). Official boundaries from data.gov.sg are simplified and committed in
+  `data/boundaries/` (`scripts/make_boundaries.py`, about 300 kB): URA's 55 planning areas and 5 regions (Master
+  Plan 2019) and the electoral divisions of the 2006 to 2025 general elections. A map chart matches a dataset's
+  labels to the layer that covers most of them: HDB towns to planning areas (Kallang/Whampoa to Kallang, Central
+  Area to URA's Central Area), URA regions, electoral divisions (the boundaries in force in the period's year),
+  or NEA's five PSI regions, which have no boundaries and are drawn as points. Maps are plain filled shapes on
+  longitude and latitude, not a map service, so they need no network and draw the same in the PDF.
 - **20 curated datasets** have hand-written cleaners, summing rules and caveats. Beyond them, the extraction
   agent can search and load any of the 4,655 catalogue datasets; their shape is inferred automatically, and they
   are marked uncurated.

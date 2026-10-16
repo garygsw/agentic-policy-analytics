@@ -10,8 +10,18 @@ import pandas as pd
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
-from app.analysis import stats
-from app.analysis.charts import bar_chart, box_chart, dot_chart, heatmap_chart, line_chart, pie_chart, scatter_chart
+from app.analysis import geo, stats
+from app.analysis.charts import (
+    bar_chart,
+    box_chart,
+    dot_chart,
+    heatmap_chart,
+    line_chart,
+    map_chart,
+    multi_bar_chart,
+    pie_chart,
+    scatter_chart,
+)
 from app.analysis.workspace import Workspace, profile
 
 MAX_FACT_POINTS = 20  # series this short get one fact per point, so any year can be cited
@@ -21,6 +31,7 @@ MAX_DISTRIBUTION_GROUPS = 12  # boxes or columns of dots on one chart
 MAX_DOTS = 600  # beyond this, dots hide each other: a box plot shows the spread instead
 MAX_HEATMAP_ROWS = 30
 MAX_HEATMAP_COLUMNS = 180  # more periods than this are shown as years
+MAX_PARTS = 8  # bars split into more parts than this cannot be told apart
 
 REASON = Field(description="One short sentence: why this call helps answer the question.")
 
@@ -189,17 +200,20 @@ class DistributionArgs(BaseModel):
 
 
 class ChartArgs(BaseModel):
-    kind: Literal["line", "bar", "scatter", "pie", "box", "dot", "heatmap"]
+    kind: Literal["line", "bar", "grouped_bar", "stacked_bar", "scatter", "pie", "box", "dot", "heatmap", "map"]
     title: str
     series: list[SeriesSpec] = Field(description="line: one to four series over time; scatter: exactly two (x, "
                                                  "then y), one point per shared period; any other kind: one series")
-    group_by: str | None = Field(default=None, description="bar, pie: the dimension shown as bars or slices; box, "
-                                                           "dot: one box or column of dots per value (optional); "
-                                                           "heatmap: the rows")
-    column_by: str | None = Field(default=None, description="heatmap only: a second dimension for the columns, in "
-                                                            "one period; default: the columns are periods")
-    period: str | None = Field(default=None, description="bar, pie, heatmap with column_by: the period shown; "
-                                                         "default: the latest")
+    group_by: str | None = Field(default=None, description="bar, grouped_bar, stacked_bar, pie: the dimension shown "
+                                                           "as bars or slices; map: the place dimension (towns, "
+                                                           "planning areas, regions, electoral divisions); box, dot: "
+                                                           "one box or column of dots per value (optional); heatmap: "
+                                                           "the rows")
+    column_by: str | None = Field(default=None, description="grouped_bar, stacked_bar: the dimension that splits each "
+                                                            "bar; heatmap: a second dimension for the columns, in one "
+                                                            "period (default: the columns are periods)")
+    period: str | None = Field(default=None, description="bar, grouped_bar, stacked_bar, pie, map, heatmap with "
+                                                         "column_by: the period shown; default: the latest")
     start: str | None = None
     end: str | None = None
     reason: str = REASON
@@ -484,6 +498,30 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
             if (values < 0).any():
                 raise stats.AnalysisError("a pie cannot show negative values: use a bar chart")
             chart, table = pie_chart(values, title, unit)
+        elif kind in ("grouped_bar", "stacked_bar"):
+            if not column_by:
+                raise stats.AnalysisError(f"a {kind} needs column_by: the dimension that splits each bar")
+            if kind == "stacked_bar" and column_by not in loaded.dataset.summable.get(spec.measure, ()):
+                raise stats.AnalysisError(f"stacked bars show parts of a whole, but {spec.measure} cannot be added "
+                                          f"up across {column_by}: use grouped bars")
+            matrix, unit, columns = matrix_of(spec, loaded, group_by, column_by, period, start, end)
+            if matrix.shape[1] > MAX_PARTS:
+                raise stats.AnalysisError(f"{column_by} has {matrix.shape[1]} values, too many to split bars into "
+                                          f"(at most {MAX_PARTS}): filter it, or use a heatmap")
+            if kind == "stacked_bar" and (matrix < 0).any().any():
+                raise stats.AnalysisError("stacked bars cannot show negative values: use grouped bars")
+            chart, table = multi_bar_chart(matrix.head(MAX_GROUPS), title, unit, stacked=kind == "stacked_bar")
+            note = f"bars: {group_by}; split by {columns}"
+        elif kind == "map":
+            values, unit, shown = group_values(spec, loaded, group_by, period)
+            found = geo.match([str(v) for v in values.index], shown)
+            if found is None:
+                raise stats.AnalysisError(
+                    f"no map for {group_by}: its values are not HDB towns, planning areas, URA or NEA regions, or "
+                    f"electoral divisions (2006-2025), e.g. {list(values.index)[:5]}")
+            chart, table = map_chart(values, found.shapes, found.points, geo.base_rings(), title, unit)
+            missing = f"not on the map: {', '.join(found.unmatched)}" if found.unmatched else ""
+            note = "; ".join(part for part in (f"{shown}", found.note, missing) if part)
         elif kind in ("box", "dot"):
             groups, unit, pooled = spread(spec, loaded, group_by, start, end)
             if kind == "dot" and sum(len(v) for v in groups.values()) > MAX_DOTS:
@@ -524,9 +562,13 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
                                                  "value (each period is one value), recorded as facts."),
         StructuredTool.from_function(create_chart, name="create_chart", args_schema=ChartArgs,
                                      description="Draw a chart from the data. line: series over time. bar: groups in "
-                                                 "one period. pie: shares of a whole (only where the measure adds up "
-                                                 "across the groups). box or dot: the spread of values by group. "
-                                                 "heatmap: a measure across two categories, or a category over "
-                                                 "time. scatter: two measures against each other (a correlation). "
-                                                 "Returns a chart ID to cite."),
+                                                 "one period. grouped_bar: groups split by a second dimension, side "
+                                                 "by side, to compare the parts. stacked_bar: the same, stacked, to "
+                                                 "show how each total is made up (only where the parts add up). pie: "
+                                                 "shares of one whole (only where the measure adds up). box or dot: "
+                                                 "the spread of values by group. heatmap: a measure across two "
+                                                 "categories, or a category over time. map: a measure by place "
+                                                 "(towns, planning areas, regions, electoral divisions). scatter: "
+                                                 "two measures against each other (a correlation). Returns a chart "
+                                                 "ID to cite."),
     ]
