@@ -1,4 +1,6 @@
 """Graph routing, pauses, checkpoints and fallbacks, driven by scripted LLM replies (no network)."""
+from pathlib import Path
+
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
@@ -432,3 +434,10 @@ def test_the_coordinator_sees_the_skills_by_name():
     system = [m for key, m in llm.calls if key == "CoordinatorStep"][0][0].content
     assert "- haze:" in system and "Use the haze skill" in system
 
+
+
+def test_the_readme_shows_the_graph_as_built():
+    from app.graph.diagram import mermaid
+    readme = (Path(__file__).parents[3] / "README.md").read_text(encoding="utf-8")
+    shown = readme.split("```mermaid\n", 1)[1].split("```", 1)[0]
+    assert shown == mermaid(), "the graph changed: print it with python -m app.graph.diagram and update README.md"

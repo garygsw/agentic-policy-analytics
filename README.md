@@ -43,9 +43,11 @@ given to read.
 
 ![How a question is answered: the web UI calls FastAPI over HTTP and a WebSocket; FastAPI runs the LangGraph agents, which send prompts to Claude or GPT, load datasets from data.gov.sg, SingStat and NASA FIRMS, query the document index and search agency sites and the web, keeping runs and data in SQLite; an ingest service crawls agency sites into the document index each night.](docs/diagrams/architecture.png)
 
+![How the agents work together on one question, in swimlanes: the user asks; intake checks the language and scope (or asks a clarifying question); the coordinator (Claude Sonnet 5.5, ReAct) decides each step, sending the extraction agent to load datasets and search documents and the web, then the analytics agent to compute statistics and charts; then the report writer cites facts and sources, a number check in code and a reviewer from the other provider send it back to fix (at most twice), and the checked report reaches the user.](docs/diagrams/orchestration.png)
+
 ![The tech stack in six layers: interface (Next.js, React, Plotly.js), API and runs (FastAPI, WebSocket), agents (LangGraph, LangChain, ReAct tool loops, skills), models (Claude Sonnet 5.5 with GPT 6.1 Sol as fallback, GPT 6 Luna, local embeddings), data and analysis (pandas, SQLite with FTS5 and sqlite-vec, matplotlib), and delivery (Docker Compose, GitHub Actions, GHCR).](docs/diagrams/tech-stack.png)
 
-Both diagrams are editable HTML and SVG in [docs/diagrams](docs/diagrams/); the images are exported from them.
+The diagrams are editable HTML and SVG in [docs/diagrams](docs/diagrams/); the images are exported from them.
 
 A question becomes a background run of a LangGraph state graph:
 - The coordinator decides each step: extract, analyse, clarify, decline or report.
@@ -54,6 +56,86 @@ A question becomes a background run of a LangGraph state graph:
 - A reviewer reads the result, and the report is rendered as HTML.
 
 Events stream to the browser over a WebSocket and are stored, so a run can be replayed. Details: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+### The agent graph
+
+The nodes and edges of the LangGraph `StateGraph`, drawn by LangGraph from the compiled graph
+(`uv run python -m app.graph.diagram`; a test keeps this copy the same as the code). Solid arrows always follow;
+dotted ones are chosen by a routing function. The coordinator, extraction and analytics agents are highlighted.
+[ARCHITECTURE.md](ARCHITECTURE.md#2-the-agent-workflow) names each route.
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	detect_language(detect_language)
+	understand(understand)
+	triage(triage)
+	clarify(clarify)
+	ask_user(ask_user)
+	redirect(redirect)
+	coordinator(coordinator)
+	approve_plan(approve_plan)
+	decline(decline)
+	extraction(extraction)
+	analytics(analytics)
+	report_writer(report_writer)
+	validate(validate)
+	reviewer(reviewer)
+	localize_report(localize_report)
+	render(render)
+	fallback_report(fallback_report)
+	localize(localize)
+	respond(respond)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> detect_language;
+	analytics -.-> coordinator;
+	analytics -.-> fallback_report;
+	approve_plan -.-> coordinator;
+	approve_plan -.-> extraction;
+	ask_user --> understand;
+	clarify -.-> ask_user;
+	clarify -.-> fallback_report;
+	coordinator -.-> analytics;
+	coordinator -.-> approve_plan;
+	coordinator -.-> clarify;
+	coordinator -.-> decline;
+	coordinator -.-> extraction;
+	coordinator -.-> fallback_report;
+	coordinator -.-> report_writer;
+	decline --> localize;
+	detect_language --> understand;
+	extraction -.-> coordinator;
+	extraction -.-> fallback_report;
+	fallback_report --> localize;
+	localize --> respond;
+	localize_report --> render;
+	redirect --> respond;
+	render --> respond;
+	report_writer -.-> fallback_report;
+	report_writer -.-> validate;
+	reviewer -.-> coordinator;
+	reviewer -.-> localize_report;
+	reviewer -.-> report_writer;
+	triage -.-> clarify;
+	triage -.-> coordinator;
+	triage -.-> fallback_report;
+	triage -.-> redirect;
+	understand -.-> fallback_report;
+	understand -.-> triage;
+	validate -.-> report_writer;
+	validate -.-> reviewer;
+	respond --> __end__;
+	classDef default fill:#ffffff,stroke:#2d3142,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#e4e4e9
+	classDef agent fill:#fbe9e3,stroke:#bf4520,stroke-width:1.5px
+	class coordinator,extraction,analytics agent
+```
 
 ## Quick start with Docker
 

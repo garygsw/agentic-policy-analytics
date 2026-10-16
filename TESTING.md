@@ -14,7 +14,7 @@ re-run from `backend/` (and `frontend/` for the UI tests). Results are saved in 
 | Answer evaluation | outcomes, groundedness, citations, LLM-as-judge, consistency | 12 questions | `uv run python -m app.evals.answers` | about $4 |
 | Load test | latency and throughput under concurrent clients | 20 clients | `uv run python scripts/load_test.py` | free |
 
-`uv run pytest` runs the unit and integration tests together (247), with no network access and no API keys. CI
+`uv run pytest` runs the unit and integration tests together (248), with no network access and no API keys. CI
 runs them on every push (section 7).
 
 ## 1. Test plan
@@ -49,7 +49,7 @@ The language models are the part that cannot be unit-tested, so the design keeps
 |---|---|
 | Agents and tools | `test_analysis.py` (37): every analytics tool, summing rules, rules over time and seasons of chosen months (lined up with yearly fire counts), error hints, the tool loop and its step limit, extraction then analysis with shared source IDs, retries keeping earlier results, `rank_changes`, every chart kind: line (on a time axis, so yearly and monthly series line up), bar, scatter (exactly the points its correlation uses), pie (refused where the parts do not add up; small slices combined), box and dot (quartiles by group, pooled dimensions named), heatmap (by period, on a time axis, or by a second dimension), grouped and stacked bars (stacked refused where the parts do not add up), maps (towns filled by value, what was left out named; NEA regions as points; no map for labels that are not places; the region's countries with Singapore marked). `test_geo.py` (6): every committed boundary layer, towns to planning areas, each kind of region, electoral boundaries by year, points placed in their country, grid cells as squares. `test_skills.py` (4): every skill parses and names only real tools, chart kinds, datasets, measures and dimensions; read_skill returns the steps |
 | API endpoints | `test_api.py` (25): health, readiness and options, removed options refused (and dropped from older runs), background runs, numbered events, WebSocket replay, reports and their security policy, personal-data rejection, clarification pause and resume (with answer choices), cancelling, invalid input, search and datasets, renaming, pinning, soft-deleting and restoring conversations, searching them, adding new columns to an older database, a run cut off by a restart continuing (or ending after a second cut), Stop on a run whose worker is gone or still working, a dataset's profile, rejecting a plan then approving it later, a new question after a rejected plan |
-| Multi-agent workflows | `test_graph.py` (30): the full graph with scripted models (coordinator, extraction, analytics, report writer, number check, reviewer, translation) across every route, including a conversation surviving a restart and a translation that changes a number, a revised plan not counting the rejected one as done, filler cut from a plan, the coordinator seeing the skills |
+| Multi-agent workflows | `test_graph.py` (31): the README's graph diagram matches the compiled graph; the full graph with scripted models (coordinator, extraction, analytics, report writer, number check, reviewer, translation) across every route, including a conversation surviving a restart and a translation that changes a number, a revised plan not counting the rejected one as done, filler cut from a plan, the coordinator seeing the skills |
 | Hallucination detection | `test_grounding.py` (7) and the report-check tests in `test_graph.py`; measured by the answer evaluation (section 3) |
 | Accuracy and consistency | the answer evaluation: expected outcomes, judge scores, overlap between repeated runs |
 | Data quality validation | `test_data.py` (39): period normalisation, number parsing, placeholders, duplicates, total rows, case-merged labels, personal columns dropped, rail-station names matched across layers, the internal workbook's planted problems, every committed snapshot loading, cleaned tables stored in and read back from the database, a town published under two names, PSI summarised from both timestamp formats, election results without walkovers or candidate names, fire hotspots counted by season, country and cell, a snapshot-only dataset loading without a warning |
@@ -357,7 +357,7 @@ Most of the time is model latency. The live view shows elapsed time, tokens and 
 
 `.github/workflows/ci.yml` runs on every push and pull request:
 
-1. **Backend:** `ruff` lint, then all 247 tests with coverage. The coverage report (`coverage.xml` and HTML) is
+1. **Backend:** `ruff` lint, then all 248 tests with coverage. The coverage report (`coverage.xml` and HTML) is
    kept with the run for 30 days.
 2. **Frontend:** type check, unit tests and a production build.
 3. **Secrets:** gitleaks scans every commit in the history, not just the latest, since a key removed later is
