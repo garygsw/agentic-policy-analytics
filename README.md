@@ -16,9 +16,9 @@ given to read.
 its Detail levels, triage of an off-topic question, then HDB prices, COE premiums, the 2025 general election and the
 haze, each on real data. Waiting for the agents is shown sped up.
 
-[![A frame from the demo video: a report's map of fire hotspots across Southeast Asia in 2015, with Singapore marked.](docs/demo-poster.jpg)](https://github.com/garygsw/agentic-policy-analytics/releases/download/v1.0.3/policy-demo.mp4)
+https://github.com/user-attachments/assets/b8c7b5b4-0911-4ac4-80a7-457d0234e295
 
-[Watch the demo video (MP4, 17 MB)](https://github.com/garygsw/agentic-policy-analytics/releases/download/v1.0.3/policy-demo.mp4)
+Full quality (1080p, 17 MB): [download it from the v1.0.3 release](https://github.com/garygsw/agentic-policy-analytics/releases/download/v1.0.3/policy-demo.mp4).
 
 **What it does**
 - **Answers from official data.** 22 curated datasets from MOM, HDB, URA, LTA, MOH, NEA, ELD, IMDA, SingStat and
