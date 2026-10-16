@@ -173,16 +173,21 @@ How well this works is measured in [TESTING.md](TESTING.md#hallucination-detecti
 
 | Tier | Used for | Primary | Fallback |
 |---|---|---|---|
-| quality | coordinator, agents, report writer, reviewer | Claude Sonnet 5.5 | GPT 6.1 Sol |
-| fast | question rewrite, triage escalation, clarifying questions, translation, conversation titles | gpt-6-luna | claude-haiku-5-5 |
+| quality | coordinator, extraction and analytics agents, report writer | Claude Sonnet 5.5 | GPT 6.1 Sol |
+| fast | question rewrite, triage escalation, clarifying questions, translation, conversation titles | GPT 6 Luna | Claude Haiku 5.5 |
 | check | the reviewer and claim checker: the other provider, so a model never checks its own writing | GPT 6.1 Sol | Claude Sonnet 5.5 |
 
+- **Providers by role.** Every run uses both providers, each where it is needed: by default Claude for the main
+  work, GPT for checking it (a model never checks its own writing) and for short tasks. Every call can also fall
+  back to the other provider. Models are chosen by role, not by agent: the extraction agent's calls are about a
+  tenth of a run's cost, so a cheaper model there would save little and risk choosing the wrong data (D-057).
 - **Fallback.** Each call tries the primary provider (one retry), then the other provider's model at the same
   price (`llm/providers.py`, LangChain `with_fallbacks`). Structured output uses each provider's native mode.
   `FORCE_PRIMARY_FAIL=true` makes every primary call fail, to demonstrate the fallback.
 - **Per-request options.** The user can choose the main model (its fallback is set automatically), the reasoning
-  effort (default low) and the tools. Any other option name is refused (422). The UI's menu offers Claude Sonnet 5.5 (default) and
-  GPT 6 Luna (faster and cheaper, with Claude Haiku 5.5 as its fallback); the API and CLI accept all four models.
+  effort (default low) and the tools. Any other option name is refused (422). The UI's menu offers Claude Sonnet
+  5.5 (default) and GPT 6 Luna (faster and cheaper, with Claude Haiku 5.5 as its fallback); the API and CLI accept
+  all four models.
 - **Ledger.** Every call is recorded (`llm/ledger.py`) with:
   - provider, model and effort
   - latency and success

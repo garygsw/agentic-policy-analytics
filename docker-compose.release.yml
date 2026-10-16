@@ -1,5 +1,5 @@
 # Run the images that CI published for a version tag, instead of building them:
-#   VERSION=v1.0.1 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+#   VERSION=v1.0.2 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
 # The published web image calls the API at http://localhost:8000, so it suits a single machine. On a server with
 # its own address, build the images there with PUBLIC_API_URL set (README, "Deployment").
 services:

@@ -270,7 +270,7 @@ to the GitHub Container Registry.
 **On one machine, from the published images.** Nothing is built:
 
 ```bash
-VERSION=v1.0.1 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+VERSION=v1.0.2 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
 ```
 
 The published web image calls the API at `http://localhost:8000`, so the browser must be on the same machine.
