@@ -1,5 +1,5 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 interface Props {
   text: string;
@@ -9,11 +9,16 @@ interface Props {
   onSubmit: (text: string) => Promise<boolean>; // false: refused, so keep the text for editing
   left?: ReactNode; // the + menu (tools and settings)
   right?: ReactNode; // the model menu, beside the send button
+  focusKey?: number; // changes when the page wants the box focused (a new conversation), so typing can start at once
 }
 
 /** The question box. Enter sends, Shift+Enter adds a line; typing with an input method (e.g. Chinese) is safe. */
-export function Composer({ text, onText, placeholder, disabled, onSubmit, left, right }: Props) {
+export function Composer({ text, onText, placeholder, disabled, onSubmit, left, right, focusKey }: Props) {
   const [sending, setSending] = useState(false);
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (focusKey) box.current?.focus(); // after the render, when the box is enabled again
+  }, [focusKey]);
 
   const submit = async () => {
     const value = text.trim();
@@ -27,6 +32,7 @@ export function Composer({ text, onText, placeholder, disabled, onSubmit, left, 
   return (
     <form className="composer" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       <textarea
+        ref={box}
         aria-label="Your question"
         value={text}
         placeholder={placeholder}

@@ -434,7 +434,7 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
   - The + menu has a switch per tool.
   - The mode is Auto, or Plan (pause for plan approval: Approve, Reject, or a change to Submit).
   - The sidebar can be hidden. It has a search box (titles and questions, searched by the API), and each
-    conversation's ⋮ menu pins, renames or deletes it (keys P, R, D). ⌘⇧O or Ctrl+Shift+O starts a new one,
+    conversation's ⋮ menu pins, renames or deletes it (keys P, R, D). ⌘⇧O or Ctrl+Shift+O starts a new one with the cursor in the question box (as + New does),
     and ⌘K or Ctrl+K focuses the search. The list loads 15 conversations at a time ("View more"), and the
     sidebar's width can be dragged (200–480 px).
 

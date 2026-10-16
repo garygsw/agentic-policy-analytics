@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 
 import { Composer } from "@/components/Composer";
 import { Inspector } from "@/components/Inspector";
@@ -73,11 +73,19 @@ export default function Home() {
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
   }, [runs.length, lastRun?.view.lastSeq, lastRun?.detail]);
 
+  // A new conversation puts the cursor in the question box, from the shortcut or the + New button.
+  const [focusKey, setFocusKey] = useState(0);
+  const { newThread } = conversation;
+  const startNew = useCallback(() => {
+    newThread();
+    setFocusKey((key) => key + 1);
+  }, [newThread]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "o") { // New, as in other chat apps
-        e.preventDefault();
-        conversation.newThread();
+        e.preventDefault(); // also keeps Chrome on Windows from opening its bookmark manager
+        startNew();
         return;
       }
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "k") { // search the history
@@ -93,7 +101,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [inspecting, running, cancel, conversation.newThread, setSidebarHidden]);
+  }, [inspecting, running, cancel, startNew, setSidebarHidden]);
 
   const submit = (value: string) => conversation.ask(value, options, mode === "plan");
 
@@ -117,7 +125,7 @@ export default function Home() {
         activeId={conversation.threadId}
         open={sidebarOpen}
         onOpen={(id) => { setSidebarOpen(false); void conversation.openThread(id); }}
-        onNew={() => { setSidebarOpen(false); conversation.newThread(); }}
+        onNew={() => { setSidebarOpen(false); startNew(); }}
         onRename={(id, name) => void conversation.updateThread(id, { title: name })}
         onPin={(id, pinned) => void conversation.updateThread(id, { pinned })}
         onDelete={(id) => void conversation.deleteThread(id)}
@@ -185,7 +193,7 @@ export default function Home() {
               </div>
             )}
             {running && <StatusLine view={running.view} now={now} onStop={() => void cancel(running.id)} />}
-            <Composer text={text} onText={setText} placeholder={placeholder} onSubmit={submit}
+            <Composer text={text} onText={setText} placeholder={placeholder} onSubmit={submit} focusKey={focusKey}
               disabled={Boolean(running) || Boolean(pending)}
               left={catalog && (
                 <>
