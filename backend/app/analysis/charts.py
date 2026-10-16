@@ -151,9 +151,10 @@ def _outline(rings: list) -> tuple[list, list]:
 
 
 def map_chart(values: pd.Series, shapes: dict[str, list], points: dict[str, tuple], base: list, title: str,
-              unit: str) -> tuple[dict, dict]:
-    """A map of Singapore: areas filled from light (low) to dark (high), or labelled points sized and coloured by
-    value, over the outline of every planning area. Drawn as plain shapes on longitude and latitude, not with a
+              unit: str, landmark: tuple[str, tuple] | None = None, max_point_labels: int = 12) -> tuple[dict, dict]:
+    """A map: areas filled from light (low) to dark (high), or points sized and coloured by value (labelled when
+    there are few), over an outline (Singapore's planning areas, or the region's countries), with an optional
+    landmark such as Singapore on a map of the region. Drawn as plain shapes on longitude and latitude, not with a
     map service, so it needs no network and draws the same in the PDF."""
     shown = values[[label in shapes or label in points for label in values.index]]
     low, high = float(shown.min()), float(shown.max())
@@ -162,7 +163,7 @@ def map_chart(values: pd.Series, shapes: dict[str, list], points: dict[str, tupl
     base_x, base_y = _outline(base)
     traces = [{"type": "scatter", "x": base_x, "y": base_y, "mode": "lines", "fill": "toself",
                "fillcolor": "#e7e5e0", "line": {"color": "#ffffff", "width": 0.5}, "hoverinfo": "skip"}]
-    for label, value in shown.items():
+    for label, value in shown.sort_values().items():  # darkest last, so the highest values are drawn on top
         if label in shapes:
             xs, ys = _outline(shapes[label])
             traces.append({"type": "scatter", "x": xs, "y": ys, "mode": "lines", "fill": "toself",
@@ -170,13 +171,20 @@ def map_chart(values: pd.Series, shapes: dict[str, list], points: dict[str, tupl
                            "name": plain(f"{label}: {value:,.4g} {unit}"), "hoveron": "fills", "hoverinfo": "name"})
     if points:
         labels = [label for label in shown.index if label in points]
-        traces.append({"type": "scatter", "mode": "markers+text", "x": [points[k][0] for k in labels],
+        mode = "markers+text" if len(labels) <= max_point_labels else "markers"
+        traces.append({"type": "scatter", "mode": mode, "x": [points[k][0] for k in labels],
                        "y": [points[k][1] for k in labels], "text": [plain(k) for k in labels],
                        "textposition": "top center",
                        "hovertext": [plain(f"{k}: {shown[k]:,.4g} {unit}") for k in labels],
                        "hoverinfo": "text", "marker": {"size": [14 + 26 * position(shown[k]) for k in labels],
                                                        "color": [scale_colour(position(shown[k])) for k in labels],
                                                        "line": {"color": "#57534e", "width": 1}}})
+    if landmark:
+        name, (x, y) = landmark
+        traces.append({"type": "scatter", "mode": "markers+text", "x": [x], "y": [y], "text": [name],
+                       "textposition": "middle right", "hoverinfo": "text",
+                       "marker": {"symbol": "star", "size": [13], "color": ["#1d4ed8"],
+                                  "line": {"color": "#ffffff", "width": 1}}})
     traces.append({"type": "scatter", "x": [base_x[0]], "y": [base_y[0]], "mode": "markers", "hoverinfo": "skip",
                    "marker": {"size": 0.1, "opacity": 0, "color": [low, high], "colorscale": SEQUENTIAL,
                               "cmin": low, "cmax": high, "showscale": True, "colorbar": {"title": {"text": unit}}}})

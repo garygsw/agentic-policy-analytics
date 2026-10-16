@@ -9,6 +9,7 @@ from app.graph import prompts
 from app.graph.events import emit, guarded
 from app.graph.options import current_options
 from app.graph.state import AgentState, CoordinatorStep
+from app.skills import skill_list
 
 MAX_STEPS = 6
 
@@ -60,7 +61,7 @@ def make_coordinator(llm) -> Callable:
                                    instructions="Report what has been found so far, and say what is missing.")
         else:
             system = prompts.COORDINATOR.format(max_steps=MAX_STEPS, progress=describe_progress(state),
-                                                datasets=curated_titles())
+                                                datasets=curated_titles(), skills=skill_list())
             step = llm("quality", schema=CoordinatorStep).invoke([SystemMessage(system),
                                                                   HumanMessage(state["question"])])
             step = search_before_declining(state["question"], steps, step)

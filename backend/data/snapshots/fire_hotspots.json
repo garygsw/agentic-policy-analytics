@@ -1,0 +1,35 @@
+{
+ "quality": {
+  "dataset_id": "fire_hotspots",
+  "rows_in": 738826,
+  "rows_out": 6672,
+  "invalid_periods": 0,
+  "missing_values": {
+   "hotspots": 0
+  },
+  "unparseable_values": {
+   "hotspots": 0
+  },
+  "duplicates_removed": 0,
+  "total_rows_removed": 0,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "2014",
+   "2026"
+  ],
+  "notes": [
+   "counted from 738,826 detections: 54,047 low-confidence ones and 94,293 outside the region's countries (at sea, or in other countries) left out"
+  ]
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "NASA FIRMS",
+  "agency": "NASA FIRMS",
+  "urls": [
+   "https://firms.modaps.eosdis.nasa.gov/"
+  ],
+  "licence": "NASA LANCE FIRMS, free to use with acknowledgement: data from LANCE FIRMS operated by NASA's Earth Science Data and Information System (ESDIS)",
+  "retrieved_at": "2026-10-16T03:48:06.041482+00:00",
+  "warning": null
+ }
+}

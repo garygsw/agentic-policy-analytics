@@ -80,6 +80,11 @@ class DataStore:
 
     def load(self, key: str) -> LoadedDataset:
         dataset = self.describe(key)
+        if not dataset.live:  # refreshed only by a script that needs a key: the committed snapshot is the data
+            loaded = self._read(self.snapshot_dir, dataset, "snapshot")
+            if loaded is None:
+                raise DataUnavailable(f"{dataset.title}: no snapshot (build it with the script in its notes)")
+            return loaded
         cached = self._read_cache(dataset)
         fresh = cached and self._age_hours(cached) < self.settings.data_max_age_hours
         if fresh and not self.settings.force_source_fail:

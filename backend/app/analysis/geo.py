@@ -1,10 +1,14 @@
 """Map layers: the committed boundaries (data/boundaries, written by scripts/make_boundaries.py) and the matching
-of a dataset's labels to them, so a measure by town, planning area, region or electoral division can be drawn as
-a map. Labels are matched by name, ignoring letter case and punctuation."""
+of a dataset's labels to them, so a measure by town, planning area, region, electoral division, Southeast Asian
+country or 1-degree grid cell can be drawn as a map. Labels are matched by name, ignoring letter case and
+punctuation."""
 import json
 import re
 from dataclasses import dataclass, field
 from functools import cache
+
+import numpy as np
+from matplotlib.path import Path as Outline
 
 from app.data.sources import DATA_DIR
 
@@ -14,6 +18,8 @@ MIN_COVERAGE = 0.6  # a layer is used when it covers at least this share of the 
 NEA_REGIONS = {"NORTH": (103.82, 1.41803), "SOUTH": (103.82, 1.29587), "EAST": (103.94, 1.35735),
                "WEST": (103.7, 1.35735), "CENTRAL": (103.82, 1.35735)}
 ELECTION_YEARS = (2006, 2011, 2015, 2020, 2025)  # the electoral boundaries committed
+SINGAPORE = (103.82, 1.35)  # marked on maps of the region
+CELL = re.compile(r"(\d+(?:\.\d+)?)([NS]) (\d+(?:\.\d+)?)([EW])")  # a grid cell's centre, e.g. "1.5S 101.5E"
 
 
 @dataclass
@@ -23,6 +29,7 @@ class Match:
     points: dict[str, tuple] = field(default_factory=dict)  # label -> (lon, lat)
     unmatched: list[str] = field(default_factory=list)
     note: str = ""
+    base: str = "singapore"                                 # the outline drawn underneath: singapore or region
 
     @property
     def coverage(self) -> float:
@@ -64,6 +71,42 @@ def _shapes(labels: list[str], layer_name: str, aliases: dict[str, list[str]] | 
     return found
 
 
+def cell_label(lon: float, lat: float) -> str:
+    """The 1-degree cell a point falls in, named by its centre: "1.5S 101.5E"."""
+    centre_lat, centre_lon = np.floor(lat) + 0.5, np.floor(lon) + 0.5
+    north, east = "N" if centre_lat >= 0 else "S", "E" if centre_lon >= 0 else "W"
+    return f"{abs(centre_lat):.1f}{north} {abs(centre_lon):.1f}{east}"
+
+
+def cell_square(label: str) -> list | None:
+    """A grid cell's outline: the 1-degree square around its centre."""
+    centre = cell_point(label)
+    if centre is None:
+        return None
+    lon, lat = centre
+    return [(lon - 0.5, lat - 0.5), (lon + 0.5, lat - 0.5), (lon + 0.5, lat + 0.5), (lon - 0.5, lat + 0.5),
+            (lon - 0.5, lat - 0.5)]
+
+
+def cell_point(label: str) -> tuple[float, float] | None:
+    found = CELL.fullmatch(str(label).strip())
+    if not found:
+        return None
+    lat, north, lon, east = found.groups()
+    return (float(lon) * (1 if east == "E" else -1), float(lat) * (1 if north == "N" else -1))
+
+
+def country_of(lons: np.ndarray, lats: np.ndarray) -> np.ndarray:
+    """The Southeast Asian country each point falls in, or None (sea, or a country outside the region)."""
+    points = np.column_stack([lons, lats])
+    found = np.full(len(points), None, dtype=object)
+    for area in layer("southeast_asia").values():
+        for ring in area["rings"]:
+            inside = Outline(ring).contains_points(points) & (found == None)  # noqa: E711 - element-wise
+            found[inside] = area["name"]
+    return found
+
+
 def match(labels: list[str], year: str | None = None) -> Match | None:
     """The layer that covers most of the labels (at least MIN_COVERAGE), or None. `year` picks the electoral
     boundaries in force then (the latest election up to that year)."""
@@ -81,6 +124,16 @@ def match(labels: list[str], year: str | None = None) -> Match | None:
         electoral = _shapes(labels, f"electoral_{election}")
         electoral.note = f"electoral divisions as drawn for the {election} general election"
         candidates.append(electoral)
+    countries = _shapes(labels, "southeast_asia")
+    countries.base = "region"
+    cells = Match("grid_cells", base="region", note="1-degree grid cells, drawn as squares")
+    for label in labels:
+        square = cell_square(label)
+        if square:
+            cells.shapes[label] = [square]
+        else:
+            cells.unmatched.append(label)
+    candidates += [countries, cells]
     best = max(candidates, key=lambda m: m.coverage)  # the first wins a tie
     if best.coverage < MIN_COVERAGE:
         return None
@@ -89,6 +142,7 @@ def match(labels: list[str], year: str | None = None) -> Match | None:
     return best
 
 
-def base_rings() -> list:
-    """Every planning area: the outline of Singapore under a map."""
-    return [ring for area in layer("planning_areas").values() for ring in area["rings"]]
+def base_rings(base: str = "singapore") -> list:
+    """The outline under a map: every planning area for Singapore, every country for the region."""
+    name = "southeast_asia" if base == "region" else "planning_areas"
+    return [ring for area in layer(name).values() for ring in area["rings"]]

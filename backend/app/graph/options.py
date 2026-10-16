@@ -21,6 +21,7 @@ OPTIONAL_TOOLS: dict[str, str] = {
     "compute_distribution": "Spread of a measure by group: median and quartiles",
     "list_records": "List and count records in tables that are not time series",
     "create_chart": "Draw charts for the report",
+    "read_skill": "Playbooks for common analyses (haze, maps, spreads, shares...)",
 }
 REQUIRED_TOOLS: dict[str, str] = {
     "load_dataset": "Load a dataset with its quality report",

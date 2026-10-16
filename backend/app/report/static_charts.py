@@ -103,12 +103,16 @@ def _map_png(figure, ax, traces: list[dict]) -> None:
             bar = figure.colorbar(scale, ax=ax, shrink=0.8, format=FuncFormatter(_number))
             bar.set_label(((marker.get("colorbar") or {}).get("title") or {}).get("text", ""), fontsize=8)
             bar.ax.tick_params(labelsize=7)
-        elif "text" in trace:  # labelled points
+        elif "markers" in trace.get("mode", ""):  # points, labelled when the chart labels them
+            star = marker.get("symbol") == "star"
             ax.scatter(trace["x"], trace["y"], s=[size ** 2 / 2 for size in marker["size"]], c=marker["color"],
-                       edgecolors="#57534e", linewidths=0.8, zorder=3)
-            for x, y, label, size in zip(trace["x"], trace["y"], trace["text"], marker["size"], strict=True):
-                ax.annotate(label, (x, y), textcoords="offset points", xytext=(0, size / 2.6 + 3), ha="center",
-                            fontsize=7)  # just above the dot, whatever its size
+                       marker="*" if star else "o", edgecolors="white" if star else "#57534e", linewidths=0.8,
+                       zorder=4 if star else 3, alpha=1 if star else 0.85)
+            if "text" in trace.get("mode", ""):
+                for x, y, label, size in zip(trace["x"], trace["y"], trace["text"], marker["size"], strict=True):
+                    offset = (size / 2 + 3, 0) if star else (0, size / 2.6 + 3)  # beside a star, above a dot
+                    ax.annotate(label, (x, y), textcoords="offset points", xytext=offset, va="center" if star else
+                                "bottom", ha="left" if star else "center", fontsize=7)
     ax.autoscale_view()
     ax.set_aspect("equal")
     ax.axis("off")

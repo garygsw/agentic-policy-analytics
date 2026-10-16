@@ -193,7 +193,7 @@ def test_search_and_dataset_endpoints(tmp_path):
         assert "rerank" in reranked.json()[0]["ranks"]
         assert client.get("/api/search", params={"q": "x", "mode": "magic"}).status_code == 422
         datasets = client.get("/api/datasets").json()
-        assert len(datasets) == 21 and next(d for d in datasets if d["key"] == "coe_bidding_results")["coverage"]
+        assert len(datasets) == 22 and next(d for d in datasets if d["key"] == "coe_bidding_results")["coverage"]
 
 
 def test_streamed_report_json_becomes_readable_text():

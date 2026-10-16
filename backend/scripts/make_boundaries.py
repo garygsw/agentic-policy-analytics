@@ -5,17 +5,23 @@
 Each layer keeps one name per area (plus a few useful properties) and only its outer rings, simplified with
 Douglas-Peucker to about 45 metres, which is finer than a map in a report can show. The files are redistributed
 under the Singapore Open Data Licence v1.0, with the source named in each file.
+
+Southeast Asia's countries come from Natural Earth (public domain), simplified to about 2 km, for the haze map.
 """
 import json
 import re
 import time
 
+import httpx
 import numpy as np
 
 from app.data.sources import DATA_DIR, DataGovSg
 
 OUT = DATA_DIR / "boundaries"
 TOLERANCE = 0.0004  # degrees, about 45 m
+NATURAL_EARTH = ("https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/"
+                 "ne_50m_admin_0_countries.geojson")  # a pinned release
+REGION_TOLERANCE = 0.02  # degrees, about 2 km: Southeast Asia is drawn at a much smaller scale
 LICENCE = "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)"
 # layer: (data.gov.sg dataset, title, the property holding each area's name, other properties to keep)
 LAYERS = {
@@ -69,8 +75,9 @@ def prop(feature: dict, key: str) -> str:
     return found.group(1).strip()
 
 
-def build(dataset_id: str, title: str, name_key: str, extra: dict) -> tuple[dict, int, int]:
-    source = json.loads(DataGovSg().download(dataset_id))
+def build(dataset_id: str, title: str, name_key: str, extra: dict, source: dict | None = None,
+          tolerance: float = TOLERANCE) -> tuple[dict, int, int]:
+    source = source or json.loads(DataGovSg().download(dataset_id))
     areas: dict[str, dict] = {}
     before = after = 0
     for feature in source["features"]:
@@ -78,7 +85,7 @@ def build(dataset_id: str, title: str, name_key: str, extra: dict) -> tuple[dict
         rings = []
         for ring in outer_rings(feature["geometry"]):
             before += len(ring)
-            simple = [(round(x, 5), round(y, 5)) for x, y in simplify_ring(ring, TOLERANCE)]
+            simple = [(round(x, 5), round(y, 5)) for x, y in simplify_ring(ring, tolerance)]
             if len(simple) >= 4:  # a ring smaller than the tolerance disappears
                 rings.append(simple)
                 after += len(simple)
@@ -88,12 +95,28 @@ def build(dataset_id: str, title: str, name_key: str, extra: dict) -> tuple[dict
                  "geometry": {"type": "MultiPolygon", "coordinates": [[list(map(list, r))] for r in a["rings"]]}}
                 for a in areas.values() if a["rings"]]
     layer = {"type": "FeatureCollection", "source": f"{title}, data.gov.sg {dataset_id}", "licence": LICENCE,
-             "simplified": f"outer rings only; Douglas-Peucker, {TOLERANCE} degrees", "features": features}
+             "simplified": f"outer rings only; Douglas-Peucker, {tolerance} degrees", "features": features}
+    return layer, before, after
+
+
+def southeast_asia() -> tuple[dict, int, int]:
+    """The 11 countries of Natural Earth's "South-Eastern Asia" subregion."""
+    world = httpx.get(NATURAL_EARTH, timeout=120, follow_redirects=True).json()
+    region = {"type": "FeatureCollection",
+              "features": [f for f in world["features"] if f["properties"]["SUBREGION"] == "South-Eastern Asia"]}
+    layer, before, after = build("", "", "NAME", {"iso3": "ADM0_A3"}, source=region, tolerance=REGION_TOLERANCE)
+    layer.update(source=f"Natural Earth 1:50m Admin 0 Countries, v5.1.2 ({NATURAL_EARTH})",
+                 licence="Public domain (https://www.naturalearthdata.com/about/terms-of-use/)")
     return layer, before, after
 
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
+    layer, before, after = southeast_asia()
+    path = OUT / "southeast_asia.geojson"
+    path.write_text(json.dumps(layer, separators=(",", ":"), ensure_ascii=False))
+    print(f"southeast_asia   {len(layer['features']):3d} areas  {before:7,} -> {after:6,} points  "
+          f"{path.stat().st_size / 1e3:6.1f} kB")
     for name, (dataset_id, title, name_key, extra) in LAYERS.items():
         layer, before, after = build(dataset_id, title, name_key, extra)
         path = OUT / f"{name}.geojson"

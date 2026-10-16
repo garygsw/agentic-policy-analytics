@@ -424,3 +424,11 @@ def test_filler_after_a_plan_is_cut():
     plain = "Compare ICT employment with GDP. ...Use 2020 to 2024."  # fewer than three fragments: kept as written
     assert CoordinatorStep(thought="t", action="analyse", instructions=plain).instructions == plain
 
+
+def test_the_coordinator_sees_the_skills_by_name():
+    graph, llm, _ = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
+                          "Report": [GOOD], "Review": [PASS]})
+    ask(graph, QUESTION)
+    system = [m for key, m in llm.calls if key == "CoordinatorStep"][0][0].content
+    assert "- haze:" in system and "Use the haze skill" in system
+

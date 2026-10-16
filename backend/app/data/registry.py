@@ -31,6 +31,8 @@ class CuratedDataset:
     # Which measures may be added up, and over which dimensions. Anything not listed (medians, prices, indices,
     # rates, nested or overlapping categories) can only be read one combination at a time.
     summable: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # False for data refreshed only by a script (it needs a key): loaded from its committed snapshot, no warning.
+    live: bool = True
 
 
 def _csv(raw: Raw, source_id: str) -> pd.DataFrame:
@@ -291,6 +293,32 @@ def clean_ge_results(raw: Raw):
     return frame, report
 
 
+# -- haze in the region: fires detected by satellite -----------------------------------------------------------
+HOTSPOTS = "firms_modis_hotspots.csv"  # written by scripts/make_hotspots.py from the NASA FIRMS API
+HOTSPOT_MIN_CONFIDENCE = 30  # MODIS confidence runs 0-100; below 30 is low confidence
+
+
+def clean_hotspots(raw: Raw):
+    """Fires detected by MODIS in Southeast Asia from July to October (the season when haze from Sumatra and
+    Kalimantan reaches Singapore), counted by year, country and 1-degree grid cell."""
+    from app.analysis import geo  # the region's boundaries, for which country a fire is in
+
+    df = pd.read_csv(io.BytesIO(raw[HOTSPOTS]), dtype={"acq_date": str, "version": str})  # "6.1" or "6.1NRT"
+    rows_in = len(df)
+    df = df[pd.to_numeric(df["confidence"], errors="coerce") >= HOTSPOT_MIN_CONFIDENCE].copy()
+    low_confidence = rows_in - len(df)
+    df["country"] = geo.country_of(df["longitude"].to_numpy(), df["latitude"].to_numpy())
+    outside = int(df["country"].isna().sum())
+    df = df.dropna(subset=["country"])
+    df["cell"] = [geo.cell_label(lon, lat) for lon, lat in zip(df["longitude"], df["latitude"], strict=True)]
+    df["period"] = df["acq_date"].str[:4]
+    grouped = df.groupby(["period", "country", "cell"]).size().rename("hotspots").astype(str).reset_index()
+    return _aggregate(grouped, "fire_hotspots", rows_in, frequency="annual", dims=["country", "cell"],
+                      measures={"hotspots": "hotspots"},
+                      note=f"counted from {rows_in:,} detections: {low_confidence:,} low-confidence ones and "
+                           f"{outside:,} outside the region's countries (at sea, or in other countries) left out")
+
+
 # -- environment ---------------------------------------------------------------------------------------------
 PSI_24H = "d_b4cf557f8750260d229c49fd768e11ed"
 PSI_REGIONS = ["north", "south", "east", "west", "central"]
@@ -435,6 +463,19 @@ CURATED: dict[str, CuratedDataset] = {d.key: d for d in [
                    "election, so a constituency's name may cover different areas over time. Report results "
                    "neutrally: figures only, no judgement of parties or candidates.",
                    summable={"vote_count": ("constituency", "constituency_type", "party")}),
+    CuratedDataset("fire_hotspots", "Fire Hotspots in Southeast Asia, July to October (NASA FIRMS, MODIS)",
+                   "NASA FIRMS", "environment",
+                   "Fires detected by satellite in the 11 Southeast Asian countries from July to October each year "
+                   "since 2014, the season when haze from Sumatra and Kalimantan reaches Singapore: counts by year, "
+                   "country and 1-degree grid cell (named by its centre, e.g. '1.5S 101.5E')", "firms", (HOTSPOTS,),
+                   "annual", clean_hotspots,
+                   "Each year is its July-October season, not a calendar year. 2026 runs to mid-October, and its "
+                   "August-October data come from NASA's near-real-time feed, not yet reprocessed like earlier "
+                   "years. A hotspot is a detection, not a fire: one fire can be detected several times, and cloud "
+                   "or smoke can hide fires. MODIS (1 km), nominal and high confidence. Where fires are matters as "
+                   "much as how many: in the July-October monsoon, smoke from Sumatra reaches Singapore more readily "
+                   "than smoke from Kalimantan. Compare with psi_by_region for the haze in Singapore.",
+                   summable={"hotspots": ("country", "cell")}, live=False),
     CuratedDataset("psi_by_region", "Pollutant Standards Index (PSI) by Region, Monthly", "National Environment Agency",
                    "environment", "Monthly highest and average 24-hour PSI, and days with unhealthy air (PSI above "
                    "100), for NEA's five regions (north, south, east, west, central), from April 2014. Shows haze "

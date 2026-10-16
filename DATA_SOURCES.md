@@ -12,7 +12,7 @@ Where the data comes from, how it is fetched and cleaned, and what is mock. Four
 
 ## 1. Curated datasets
 
-21 datasets have hand-written cleaners, summing rules and caveats (`backend/app/data/registry.py`). Their
+22 datasets have hand-written cleaners, summing rules and caveats (`backend/app/data/registry.py`). Their
 cleaned snapshots are committed in `backend/data/snapshots/`. Each comes with a `.json` file holding its quality
 report and provenance.
 
@@ -38,6 +38,7 @@ report and provenance.
 | `life_expectancy` | Life Expectancy at Birth | MOH | data.gov.sg `d_e8e0db9cbd76e12eaa2bf071cc9ce964` | annual | 1990–2021 |
 | `top_hospitalisation_conditions` | Top 10 Conditions of Hospitalisation | MOH | data.gov.sg `d_5961507eed5bede3dc9ea02432153de4` | annual | 1990–2024 |
 | `ge_results` | Parliamentary General Election Results by Constituency and Party: vote share and votes; walkovers and candidate names left out | Elections Department | data.gov.sg `d_581a30bee57fa7d8383d6bc94739ad00` | election years | 1955–2025 |
+| `fire_hotspots` | Fire Hotspots in Southeast Asia, July to October: MODIS detections counted by season, country and 1-degree grid cell | NASA FIRMS | FIRMS API, `MODIS_SP` (archive) and `MODIS_NRT` (recent) | annual (July-October seasons) | 2014–2026 |
 | `psi_by_region` | Pollutant Standards Index (PSI) by Region, Monthly: highest and average 24-hour PSI, and days above 100, summarised from 108,864 hourly readings | NEA | data.gov.sg `d_b4cf557f8750260d229c49fd768e11ed` | monthly | 2014-04–2026-09 |
 
 Coverage is that of the committed snapshots (14 Oct 2026). Live loads may extend it.
@@ -56,10 +57,24 @@ Data Licence v1.0. Each file names its source.
 | `planning_areas` | URA Master Plan 2019 Planning Area Boundary (No Sea), `d_4765db0e87b9c86336792efe8a1f7a66` | 55 |
 | `regions` | URA Master Plan 2019 Region Boundary (No Sea), `d_bf4d24df9129d5a8ff8cf82e20959ee0` | 5 |
 | `electoral_2006` to `electoral_2025` | ELD Electoral Boundary 2006, 2011, 2015, 2020, 2025 | 23, 27, 29, 31, 33 |
+| `southeast_asia` | Natural Earth 1:50m Admin 0 Countries, v5.1.2 (public domain), the "South-Eastern Asia" subregion, simplified to about 2 km | 11 |
 
 NEA's five PSI regions have no published boundaries; maps show them at the points NEA's real-time PSI API gives.
 
 ## 2. APIs used
+
+**NASA FIRMS** (`backend/app/data/sources.py`, `backend/scripts/make_hotspots.py`, free map key `FIRMS_MAP_KEY`):
+
+| Endpoint | Purpose |
+|---|---|
+| `GET https://firms.modaps.eosdis.nasa.gov/api/data_availability/csv/{key}/ALL` | The dates each product covers: the archive (`MODIS_SP`) ends a few months back; near-real-time (`MODIS_NRT`) covers the rest. |
+| `GET https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/{product}/{west,south,east,north}/{days}/{date}` | Fire detections in a box for up to 5 days. The script asks for July to October of every year since 2014 over Southeast Asia (92°E to 142°E, 12°S to 24°N). |
+
+The key is needed only to rebuild the snapshot, never while answering a question, so reviewers need none. It is part
+of the URL, so the client removes it from any error message. FIRMS data are free to use with acknowledgement:
+*data from LANCE FIRMS operated by NASA's Earth Science Data and Information System (ESDIS)*. Only the counts
+(by season, country and grid cell) are committed, not the detections.
+
 
 **data.gov.sg** (`backend/app/data/sources.py`, no key needed):
 

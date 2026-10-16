@@ -571,3 +571,20 @@ Changes from the first round of hands-on testing.
   - **Candidate names are not kept.** The party's result is the measure, and the platform drops columns that name individuals.
   - **Neutrality.** Election results are politically sensitive in a government setting. The dataset's notes, which the agents read and cite, say to report figures only, with no judgement of parties or candidates. The scope now names official election results.
 - **Alternatives:** leaving elections out (the user asked for electoral maps); keeping candidate names (not needed for any analysis here).
+
+## D-051 · 2026-10-16 · Fire hotspots across Southeast Asia, from NASA FIRMS
+- **Decision:** a curated dataset, `fire_hotspots`, counts fires detected by satellite in the 11 Southeast Asian countries from July to October of every year since 2014, by season, country and 1-degree grid cell. With `psi_by_region` it lets the agents put the haze in Singapore next to the fires that cause it, and map them on the region.
+  - **Source:** NASA FIRMS, MODIS (1 km): the archive up to its last date, near-real-time after it. MODIS rather than VIIRS: its record runs unbroken from 2000, and a five-day request at the 2015 peak took 4.6 s against 54 s for VIIRS, whose more sensitive detections would have made a full download too slow. Low-confidence detections (below 30) are left out.
+  - **A one-time snapshot, not live data.** FIRMS needs a map key, so `scripts/make_hotspots.py` builds the snapshot with the maintainer's key (about 20 minutes, 5 days per request, the API's limit). The dataset is marked snapshot-only: it loads from the committed snapshot with no "source unavailable" warning, and reviewers need no key. The download is kept in the database for auditing; only the counts are committed.
+  - **Seasons, not months.** Each year counts July to October, the southwest monsoon season when haze from Sumatra and Kalimantan reaches Singapore. Storing months would leave gaps between seasons, which would make the year-on-year statistics of a monthly series wrong.
+  - **Countries by point-in-polygon** against Natural Earth's country boundaries (public domain, simplified to about 2 km and committed). Detections at sea or in countries outside the region are counted in the quality report and left out.
+  - **The key stays private.** It is part of FIRMS URLs, so the client removes it from any error before raising it, and the script logs only dates and counts.
+- **Alternatives:** the ASEAN Specialised Meteorological Centre's hotspot maps (images, not data); VIIRS (too slow to download every season); fetching hotspots while answering (every reviewer would need a key).
+
+
+## D-052 · 2026-10-16 · Skills: playbooks the agents read when a question fits
+- **Decision:** common multi-step analyses are written as skills: short Markdown playbooks in `app/skills/` (name, description, numbered steps naming the tools, datasets and chart kinds). The coordinator sees only the names and descriptions; the extraction and analytics agents read a skill's steps with a `read_skill` tool when one fits. Six to start: haze (PSI next to fire hotspots, mapped), places on a map, distribution, composition, change across groups, and elections.
+- **Why:** these analyses chain several tools in an order that matters (load both datasets, map the right dimension, align seasons with calendar years before correlating, report elections neutrally). Written once and tested, they make the agents take the proven route instead of rediscovering it, and a reviewer can read exactly what the agents were told.
+- **Why a tool, not more prompt:** the full text enters an agent's context only when it reads it (progressive disclosure), the trace shows which skill was used, and the + menu can switch skills off to compare.
+- **Kept honest:** a test checks that every name a skill puts in backticks is a real tool, chart kind, dataset, measure or dimension.
+- **Alternatives:** putting every playbook in the agents' prompts (always paid for, and harder to see which one was followed); hard-coding each analysis as a graph branch (rigid: the agents could no longer adapt the steps to the question).

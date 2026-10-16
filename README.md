@@ -15,7 +15,8 @@ given to read.
 > Demo video: *to be added.*
 
 **What it does**
-- **Answers from official data.** 21 curated datasets from MOM, HDB, URA, LTA, MOH, NEA, ELD, IMDA and SingStat, plus
+- **Answers from official data.** 22 curated datasets from MOM, HDB, URA, LTA, MOH, NEA, ELD, IMDA, SingStat and
+  NASA (fire hotspots across Southeast Asia), plus
   search over all 4,655 data.gov.sg datasets, about 3,000 agency documents and the web.
 - **Grounded reports.**
   - Every number must match a computed fact or a cited source, and every finding and caveat is cited.
@@ -33,6 +34,8 @@ given to read.
   - **Data sources:** a failing live source falls back to a cache, then to a snapshot.
   - **Messages with personal data** (NRIC, phone numbers and so on) are rejected before any model sees them.
 - **Four languages:** English, Chinese, Malay and Tamil. Reports are translated, with every number checked.
+- **Skills.** Playbooks for common analyses (haze and fires, places on a map, spreads, shares, change across
+  groups, elections) that the agents read when a question fits, so they take the proven route.
 - **Measured quality.** Evaluations score the reports for groundedness, retrieval quality, faithfulness
   (LLM-as-judge) and consistency. Load is tested too. See [TESTING.md](TESTING.md).
 
@@ -229,6 +232,7 @@ Settings are read from `.env`; see `.env.example`. The keys:
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | | required: primary and fallback providers |
 | `TAVILY_API_KEY` | | optional: the web search tool |
 | `TYPESAFE_API_KEY` | | optional: the Jev triage classifier |
+| `FIRMS_MAP_KEY` | | optional: only to rebuild the fire-hotspot snapshot (`scripts/make_hotspots.py`) |
 
 Model selection:
 

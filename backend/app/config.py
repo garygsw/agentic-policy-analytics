@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     anthropic_api_key: SecretStr | None = None
     tavily_api_key: SecretStr | None = None      # web search tool (optional)
+    firms_map_key: SecretStr | None = None       # NASA fire hotspots: only to rebuild their snapshot (optional)
     typesafe_api_key: SecretStr | None = None    # Jev classifier trial (optional)
     # Provider endpoints are set here on purpose. The SDKs would otherwise honour ambient
     # OPENAI_BASE_URL / ANTHROPIC_BASE_URL shell variables and could silently send traffic elsewhere.

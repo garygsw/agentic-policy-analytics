@@ -129,6 +129,20 @@ The tools apply each dataset's **summing rules**. A measure can be added up only
 dataset allows; for any other dimension, the agent must filter to one value. This stops, for example, adding up
 medians or counting a total row twice. Users can switch optional tools off per request (`graph/options.py`).
 
+### Skills
+
+Skills are playbooks for common analyses: Markdown files in `app/skills/`, each with a name, a one-line description
+and numbered steps that name the tools, datasets and chart kinds to use. There are six: `haze` (PSI by region next
+to fire hotspots, with a map), `places_on_a_map`, `distribution`, `composition`, `change_across_groups` and
+`elections` (neutral figures only).
+
+- The coordinator's prompt lists each skill's name and description, and it names one in its instructions when it
+  fits ("Use the haze skill").
+- The extraction and analytics agents have a `read_skill` tool that returns a skill's steps. A skill's full text
+  enters an agent's context only when it reads it, and the trace shows `read_skill(haze)`.
+- It is an optional tool, so the + menu can switch skills off. A test checks that every name a skill puts in
+  backticks is a real tool, chart kind, dataset, measure or dimension, so a rename cannot leave a playbook stale.
+
 ## 3. Keeping reports grounded
 
 The rule everything depends on: **the language model never computes a number.** pandas computes, every result is
@@ -203,9 +217,11 @@ Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
   Plan 2019) and the electoral divisions of the 2006 to 2025 general elections. A map chart matches a dataset's
   labels to the layer that covers most of them: HDB towns to planning areas (Kallang/Whampoa to Kallang, Central
   Area to URA's Central Area), URA regions, electoral divisions (the boundaries in force in the period's year),
-  or NEA's five PSI regions, which have no boundaries and are drawn as points. Maps are plain filled shapes on
+  or NEA's five PSI regions, which have no boundaries and are drawn as points. For the region, the 11 Southeast
+  Asian countries (Natural Earth) and 1-degree grid cells (drawn at their centres) are matched too, and
+  Singapore is marked, so fire hotspots in Sumatra and Kalimantan show next to where the haze arrives. Maps are plain filled shapes on
   longitude and latitude, not a map service, so they need no network and draw the same in the PDF.
-- **21 curated datasets** have hand-written cleaners, summing rules and caveats. Beyond them, the extraction
+- **22 curated datasets** have hand-written cleaners, summing rules and caveats. Beyond them, the extraction
   agent can search and load any of the 4,655 catalogue datasets; their shape is inferred automatically, and they
   are marked uncurated.
 

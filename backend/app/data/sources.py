@@ -74,4 +74,35 @@ class Internal:
         return f"internal://{workbook}"
 
 
-SOURCES = {"datagovsg": DataGovSg, "singstat": SingStat, "internal": Internal}
+class Firms:
+    """NASA FIRMS: fires detected by satellite. Its API needs a free map key (FIRMS_MAP_KEY), so it is used only to
+    build the committed hotspot snapshot (scripts/make_hotspots.py), never while answering a question."""
+    name = "NASA FIRMS"
+    licence = ("NASA LANCE FIRMS, free to use with acknowledgement: data from LANCE FIRMS operated by NASA's Earth "
+               "Science Data and Information System (ESDIS)")
+    API = "https://firms.modaps.eosdis.nasa.gov/api"
+
+    def __init__(self, map_key: str = ""):
+        self.map_key = map_key
+
+    def download(self, source_id: str) -> bytes:
+        raise SourceUnavailable("hotspots are refreshed by scripts/make_hotspots.py, not while answering")
+
+    def page_url(self, source_id: str) -> str:
+        return "https://firms.modaps.eosdis.nasa.gov/"
+
+    def get(self, path: str) -> str:
+        """One API request. The key is part of the URL, so it is removed from any error before it is raised."""
+        if not self.map_key:
+            raise SourceUnavailable("FIRMS_MAP_KEY is not set: python3 scripts/set_keys.py FIRMS_MAP_KEY")
+        try:
+            return fetch(f"{self.API}/{path.format(key=self.map_key)}", timeout_s=180).text
+        except SourceUnavailable as error:
+            raise SourceUnavailable(str(error).replace(self.map_key, "<MAP_KEY>")) from None
+
+    def area(self, product: str, bbox: str, start: str, days: int) -> str:
+        """Hotspots in a box ("west,south,east,north") for `days` days from `start` (YYYY-MM-DD), as CSV."""
+        return self.get(f"area/csv/{{key}}/{product}/{bbox}/{days}/{start}")
+
+
+SOURCES = {"datagovsg": DataGovSg, "singstat": SingStat, "internal": Internal, "firms": Firms}

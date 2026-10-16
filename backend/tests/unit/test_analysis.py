@@ -60,6 +60,9 @@ DATASETS = {
     "towns": (TOWNS, dataset("towns")),
     "psi": (PSI, dataset("psi", frequency="monthly")),
     "employment_strict": (EMPLOYMENT, dataset("employment_strict", {"employed": ("industry",)})),  # not by sex
+    "fires": (pd.DataFrame([{"period": "2015", "country": c, "cell": "", "measure": "hotspots", "unit": "hotspots",
+                             "value": v} for c, v in (("Indonesia", 9000.0), ("Malaysia", 700.0), ("Brunei", 20.0))]),
+              dataset("fires", {"hotspots": ("country", "cell")})),
 }
 
 
@@ -326,6 +329,17 @@ def test_nea_regions_are_mapped_as_points_and_other_labels_get_no_map():
     with pytest.raises(stats.AnalysisError, match="no map for industry"):
         t["create_chart"].invoke({"kind": "map", "title": "x", "series": [employed], "group_by": "industry",
                                   "reason": "x"})
+
+
+def test_a_map_of_the_region_shows_countries_and_marks_singapore():
+    ws, t = tools()
+    fires = {"dataset_id": "fires", "measure": "hotspots", "filters": {}, "label": "Hotspots"}
+    call(t["create_chart"], kind="map", title="Fire hotspots, 2015 season", series=[fires], group_by="country")
+    traces = ws.charts[0]["spec"]["data"]
+    assert {tr["name"].split(":")[0] for tr in traces if tr.get("name")} == {"Indonesia", "Malaysia", "Brunei"}
+    star = next(tr for tr in traces if (tr.get("marker") or {}).get("symbol") == "star")
+    assert star["text"] == ["Singapore"] and star["x"] == [103.82]
+    assert min(x for x in traces[0]["x"] if x is not None) < 100  # the outline is the region, not Singapore
 
 
 def test_list_records_refuses_time_series_and_counts_tables():

@@ -23,6 +23,7 @@ from app.analysis.charts import (
     scatter_chart,
 )
 from app.analysis.workspace import Workspace, profile
+from app.skills import skill_list, skills
 
 MAX_FACT_POINTS = 20  # series this short get one fact per point, so any year can be cited
 MAX_GROUPS = 15
@@ -137,6 +138,7 @@ def extraction_tools(ws: Workspace, retriever=None) -> list[StructuredTool]:
         StructuredTool.from_function(web_search, name="web_search", args_schema=WebSearchArgs,
                                      description="Search the web for recent context the documents do not cover. "
                                                  "Returns untrusted pages (W1, W2...)."),
+        read_skill_tool(),
     ]
 
 
@@ -189,6 +191,23 @@ class RecordsArgs(BaseModel):
     dataset_id: str
     filters: dict[str, str] = Field(default_factory=dict)
     reason: str = REASON
+
+
+class SkillArgs(BaseModel):
+    name: str = Field(description="A skill named in this tool's description")
+    reason: str = REASON
+
+
+def read_skill_tool() -> StructuredTool:
+    """Both agents can read a skill: a playbook of steps for a common analysis (app/skills)."""
+    def read_skill(name: str, reason: str = "") -> str:
+        found = skills().get(name.strip().lower())
+        if found is None:
+            raise stats.AnalysisError(f"unknown skill '{name}'; skills: {sorted(skills())}")
+        return _json({"skill": found.name, "steps": found.steps})
+    return StructuredTool.from_function(read_skill, name="read_skill", args_schema=SkillArgs,
+                                        description="Read the steps of a playbook for a common analysis before "
+                                                    "you start one that fits. Skills:\n" + skill_list())
 
 
 class DistributionArgs(BaseModel):
@@ -517,9 +536,12 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
             found = geo.match([str(v) for v in values.index], shown)
             if found is None:
                 raise stats.AnalysisError(
-                    f"no map for {group_by}: its values are not HDB towns, planning areas, URA or NEA regions, or "
-                    f"electoral divisions (2006-2025), e.g. {list(values.index)[:5]}")
-            chart, table = map_chart(values, found.shapes, found.points, geo.base_rings(), title, unit)
+                    f"no map for {group_by}: its values are not HDB towns, planning areas, URA or NEA regions, "
+                    f"electoral divisions (2006-2025), Southeast Asian countries or grid cells, e.g. "
+                    f"{list(values.index)[:5]}")
+            landmark = ("Singapore", geo.SINGAPORE) if found.base == "region" else None
+            chart, table = map_chart(values, found.shapes, found.points, geo.base_rings(found.base), title, unit,
+                                     landmark)
             missing = f"not on the map: {', '.join(found.unmatched)}" if found.unmatched else ""
             note = "; ".join(part for part in (f"{shown}", found.note, missing) if part)
         elif kind in ("box", "dot"):
@@ -540,6 +562,7 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
     return [
         StructuredTool.from_function(describe_dataset, name="describe_dataset", args_schema=DescribeArgs,
                                      description="List every value of one dimension, to pick exact filter values."),
+        read_skill_tool(),
         StructuredTool.from_function(compute_trend, name="compute_trend", args_schema=TrendArgs,
                                      description="A series over time: its values, change, compound annual growth, "
                                                  "peak and latest year-on-year change, recorded as facts."),

@@ -218,6 +218,25 @@ def test_election_results_keep_parties_votes_and_shares_but_not_walkovers_or_nam
     assert report.personal_data_columns_dropped == ["candidates"] and "1 uncontested" in report.notes[-1]
 
 
+def test_hotspots_are_counted_by_season_country_and_cell():
+    from app.data.registry import HOTSPOTS, clean_hotspots
+    csv = ("latitude,longitude,acq_date,confidence\n"
+           "-0.5,101.4,2015-09-10,80\n-0.4,101.2,2015-09-12,60\n"  # Riau, Sumatra: one cell
+           "3.0,105.0,2015-09-10,90\n"  # the South China Sea
+           "-0.6,101.5,2015-09-11,10\n"  # low confidence
+           "-2.2,113.9,2019-09-01,70\n")  # Central Kalimantan
+    frame, report = clean_hotspots({HOTSPOTS: csv.encode()})
+    counts = {(r.period, r.country, r.cell): r.value for r in frame.itertuples()}
+    assert counts == {("2015", "Indonesia", "0.5S 101.5E"): 2.0, ("2019", "Indonesia", "2.5S 113.5E"): 1.0}
+    assert "1 low-confidence ones and 1 outside" in report.notes[-1] and report.rows_in == 5
+
+
+def test_a_snapshot_only_dataset_loads_its_snapshot_without_a_warning(tmp_path):
+    loaded = DataStore(Settings(_env_file=None), database=f"sqlite:///{tmp_path / 'd.db'}").load("fire_hotspots")
+    assert loaded.provenance.origin == "snapshot" and loaded.provenance.warning is None
+    assert loaded.provenance.source == "NASA FIRMS" and set(loaded.frame["measure"]) == {"hotspots"}
+
+
 def test_stores_created_at_once_in_parallel_runs_share_one_set_of_tables(tmp_path):
     """Parallel runs each create a store; the tables must be created once, not by every thread at the same time."""
     from concurrent.futures import ThreadPoolExecutor
