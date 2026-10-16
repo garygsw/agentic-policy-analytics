@@ -147,11 +147,16 @@ def heatmap_chart(matrix: pd.DataFrame, title: str, unit: str) -> tuple[dict, di
     """A measure across two categories: rows are one dimension, columns another (or periods). Darker is higher;
     an empty cell has no value."""
     z = [[None if pd.isna(v) else round(float(v), 4) for v in row] for row in matrix.to_numpy()]
-    spec = {"data": [{"type": "heatmap", "z": z, "x": [plain(str(c)) for c in matrix.columns],
-                      "y": [plain(str(r)) for r in matrix.index], "colorscale": SEQUENTIAL, "hoverongaps": False,
-                      "colorbar": {"title": {"text": unit}}}],
-            "layout": {"title": {"text": plain(title)}, "xaxis": {"type": "category", "automargin": True},
-                       "yaxis": {"type": "category", "autorange": "reversed", "automargin": True}}}
+    columns = [plain(str(c)) for c in matrix.columns]
+    trace = {"type": "heatmap", "z": z, "x": columns, "y": [plain(str(r)) for r in matrix.index],
+             "colorscale": SEQUENTIAL, "hoverongaps": False, "colorbar": {"title": {"text": unit}}}
+    xaxis = {"type": "category", "automargin": True}
+    dates = [period_date(c) for c in columns]
+    if all(dates):  # columns are periods: a time axis, as for lines (short labels, never rotated)
+        trace |= {"x": dates, "text": [columns] * len(z), "hovertemplate": "%{y}, %{text}: %{z:,}<extra></extra>"}
+        xaxis = {"type": "date"}
+    spec = {"data": [trace], "layout": {"title": {"text": plain(title)}, "xaxis": xaxis,
+                                        "yaxis": {"type": "category", "autorange": "reversed", "automargin": True}}}
     rows = [[r, str(c), cell] for r, row in zip(matrix.index, z, strict=True)
             for c, cell in zip(matrix.columns, row, strict=True) if cell is not None]
     return spec, {"columns": ["row", "column", unit], "rows": rows}

@@ -75,9 +75,15 @@ def _heatmap_png(figure, ax, trace: dict) -> None:
     z = np.array([[np.nan if v is None else v for v in row] for row in trace["z"]], dtype=float)
     image = ax.imshow(z, aspect="auto", cmap=SEQUENTIAL_MAP, norm=Normalize(np.nanmin(z), np.nanmax(z)),
                       interpolation="nearest")
-    columns = [str(c) for c in trace["x"]]
-    step = max(1, len(columns) // MAX_X_LABELS)
-    ax.set_xticks(range(0, len(columns), step), columns[::step], rotation=45, ha="right", fontsize=7)
+    columns = [str(c) for c in trace.get("text", [trace["x"]])[0]]  # periods are kept as text on a time axis
+    if "text" in trace and len(columns) > MAX_X_LABELS:  # many periods: each year labelled once, not rotated
+        years = [str(date)[:4] for date in trace["x"]]
+        starts = [i for i, year in enumerate(years) if i == 0 or year != years[i - 1]]
+        starts = starts[::max(1, len(starts) // MAX_X_LABELS)]
+        ax.set_xticks(starts, [years[i] for i in starts], fontsize=7)
+    else:
+        step = max(1, len(columns) // MAX_X_LABELS)
+        ax.set_xticks(range(0, len(columns), step), columns[::step], rotation=45, ha="right", fontsize=7)
     ax.set_yticks(range(len(trace["y"])), trace["y"], fontsize=7)
     bar = figure.colorbar(image, ax=ax)
     bar.set_label(((trace.get("colorbar") or {}).get("title") or {}).get("text", ""), fontsize=8)

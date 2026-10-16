@@ -279,11 +279,13 @@ def test_heatmap_rows_by_group_and_columns_by_period_or_a_second_dimension():
     employed = {"dataset_id": "employment", "measure": "employed", "filters": {}, "label": "Employed"}
     call(t["create_chart"], kind="heatmap", title="By industry and year", series=[employed], group_by="industry")
     heat = ws.charts[0]["spec"]["data"][0]
-    assert heat["y"] == ["retail", "ict"] and heat["x"] == YEARS  # highest row first; columns in time order
+    assert heat["y"] == ["retail", "ict"] and heat["text"][0] == YEARS  # highest row first; columns in time order
+    assert heat["x"][0] == "2020-07-01" and ws.charts[0]["spec"]["layout"]["xaxis"]["type"] == "date"
     assert heat["z"][1] == [200.0, 220.0, 240.0, 260.0, 280.0]  # ICT, both sexes added up (allowed)
     call(t["create_chart"], kind="heatmap", title="By industry and sex", series=[employed], group_by="industry",
          column_by="sex")
     assert ws.charts[1]["spec"]["data"][0]["z"] == [[340.0, 340.0], [140.0, 140.0]]  # 2024
+    assert ws.charts[1]["spec"]["layout"]["xaxis"]["type"] == "category"  # columns that are not periods
     assert ws.charts[1]["table"]["rows"][0] == ["retail", "female", 340.0]
 
 

@@ -4,7 +4,7 @@ import re
 
 import pandas as pd
 
-from app.analysis.charts import line_chart
+from app.analysis.charts import heatmap_chart, line_chart
 from app.graph.state import Claim, Report
 from app.report.html import PLOTLY_SRI, render_html
 
@@ -137,7 +137,10 @@ def test_every_chart_kind_draws_as_an_image_for_the_downloads():
              "layout": {"yaxis": {"scaleanchor": "x"}}}
     on_dates, _ = line_chart([("Hotspots", pd.Series([69563.0, 153267.0], index=["2014", "2015"]), "hotspots"),
                               ("PSI", pd.Series([88.0, 322.0], index=["2015-08", "2015-09"]), "PSI")], "Haze")
-    for spec in (line, on_dates, bar, points, pie, boxes, dots, heatmap, stacked, a_map):
+    months = pd.DataFrame([[float(m) for m in range(30)]], index=["south"],
+                          columns=[f"{2014 + m // 12}-{m % 12 + 1:02d}" for m in range(30)])
+    monthly_heatmap, _ = heatmap_chart(months, "PSI", "PSI")  # more periods than labels: one label a year
+    for spec in (line, on_dates, bar, points, pie, boxes, dots, heatmap, monthly_heatmap, stacked, a_map):
         assert chart_png(spec, "A chart").startswith(b"\x89PNG")
 
 
