@@ -6,7 +6,7 @@ reloaded from the local cache), so nothing large is ever stored in a checkpoint.
 import json
 import math
 
-from app.analysis.stats import dimensions
+from app.analysis.stats import RULE_WORDS, dimensions
 from app.data.registry import CURATED
 from app.data.store import SNAPSHOT_DIR, DataStore, LoadedDataset
 
@@ -98,6 +98,9 @@ def profile(loaded: LoadedDataset, source_id: str) -> dict:
     frame, dataset = loaded.frame, loaded.dataset
     measures = {measure: {"unit": unit, "can_add_up_across": list(dataset.summable.get(measure, ()))}
                 for measure, unit in frame[["measure", "unit"]].drop_duplicates().itertuples(index=False)}
+    if dataset.frequency in ("monthly", "quarterly"):  # how its periods make a year, or a season of chosen months
+        for measure, about in measures.items():
+            about["periods_combine_as"] = RULE_WORDS[dataset.rule_over_time(measure)]
     dims = {dim: {"distinct_values": int(frame[dim].nunique()), "examples": sorted(frame[dim].unique())[:12]}
             for dim in dimensions(frame)}
     return {"dataset_id": dataset.key, "source_id": source_id, "title": dataset.title, "agency": dataset.agency,

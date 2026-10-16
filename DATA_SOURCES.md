@@ -121,6 +121,10 @@ Each curated dataset also has **summing rules**: the dimensions across which a m
 - A median or a price index is never summed.
 - Retrenchment labels mix broad industry groups with their sub-industries, so they are never added together.
 
+A measure's **rule over time** says how its months or quarters make a year, or a season of chosen months: a total
+for counts, an average for levels and rates (the default when no rule is listed), and the highest for peaks. PSI's
+highest reading takes the highest month, and its unhealthy days are added up.
+
 The analytics tools enforce these rules and say which dimension needs a filter. Tests
 covering all of this are listed in [TESTING.md](TESTING.md).
 

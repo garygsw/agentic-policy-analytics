@@ -4,11 +4,12 @@ Each tool takes a `reason` (why the agent is calling it), which is shown in the 
 compute register numbered facts and charts in the Workspace; the agent only ever chooses what to compute.
 """
 import json
+from dataclasses import replace
 from typing import Literal
 
 import pandas as pd
 from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.analysis import geo, stats
 from app.analysis.charts import (
@@ -48,6 +49,17 @@ class SeriesSpec(BaseModel):
                                     description="dimension -> value. Leave a dimension out to add it up "
                                                 "(only allowed where the profile says the measure can be added up)")
     label: str = Field(description="Short readable name, e.g. 'Tech-sector employment'")
+    months: list[int] | None = Field(default=None, description=(
+        "Monthly data only: keep these calendar months (1-12) of each year, e.g. [7, 8, 9, 10] for the July to "
+        "October haze season. The series becomes one value per year, combining those months by the measure's "
+        "rule (total, average or highest); years missing any of the months are left out"))
+
+    @field_validator("months")
+    @classmethod
+    def calendar_months(cls, value: list[int] | None) -> list[int] | None:
+        if value is not None and (not value or any(m < 1 or m > 12 for m in value)):
+            raise ValueError("months are numbers from 1 (January) to 12 (December)")
+        return sorted(set(value)) if value else None
 
 
 # -- extraction ------------------------------------------------------------------------------------------------
@@ -300,9 +312,9 @@ def matrix_of(spec: SeriesSpec, loaded, group_by: str | None, column_by: str | N
         matrix = matrix[sorted(matrix.columns, key=stats.period_key)]
         note = "periods"
         if matrix.shape[1] > MAX_HEATMAP_COLUMNS:  # too many periods to read: show years instead
-            summable = bool(loaded.dataset.summable.get(spec.measure))
-            matrix = pd.DataFrame({g: stats.to_annual(row.dropna(), summable) for g, row in matrix.iterrows()}).T
-            note = "years (totals or averages of the periods in each year)"
+            rule = loaded.dataset.rule_over_time(spec.measure)
+            matrix = pd.DataFrame({g: stats.to_annual(row.dropna(), rule) for g, row in matrix.iterrows()}).T
+            note = f"years (the {stats.RULE_WORDS[rule]} of the periods in each year)"
     matrix = matrix.loc[matrix.mean(axis=1).sort_values(ascending=False).index]  # highest rows first
     return matrix, unit, note
 
@@ -311,6 +323,11 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
     def load(spec: SeriesSpec | dict):
         spec = SeriesSpec(**spec) if isinstance(spec, dict) else spec
         loaded, source_id = ws.dataset(spec.dataset_id)
+        if spec.months:  # a season: the chosen months of each year, one value per year, named in the label
+            rule = loaded.dataset.rule_over_time
+            loaded = replace(loaded, frame=stats.season(loaded.frame, spec.months, rule))
+            season = f"{stats.months_label(spec.months)}, {stats.RULE_WORDS[rule(spec.measure)]}"
+            spec = spec.model_copy(update={"label": f"{spec.label} ({season})"})
         return spec, loaded, source_id
 
     def describe_dataset(dataset_id: str, dimension: str, reason: str) -> str:
@@ -429,8 +446,8 @@ def analytics_tools(ws: Workspace) -> list[StructuredTool]:
         for spec in (a, b):
             spec, loaded, source_id = load(spec)
             values, unit, _ = stats.select_series(loaded.frame, loaded.dataset, spec.measure, spec.filters, start, end)
-            summable = bool(loaded.dataset.summable.get(spec.measure))
-            series.append((spec, source_id, values, stats.to_annual(values, summable), unit))
+            rule = loaded.dataset.rule_over_time(spec.measure)
+            series.append((spec, source_id, values, stats.to_annual(values, rule), unit))
         needs_annual = stats.is_yearly(series[0][2]) != stats.is_yearly(series[1][2])
         return [(spec, sid, annual if needs_annual else values, unit)
                 for spec, sid, values, annual, unit in series], needs_annual

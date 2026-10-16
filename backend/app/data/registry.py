@@ -33,6 +33,12 @@ class CuratedDataset:
     summable: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # False for data refreshed only by a script (it needs a key): loaded from its committed snapshot, no warning.
     live: bool = True
+    # How a measure's periods combine into a year (or a season of chosen months): "sum", "mean" or "max".
+    over_time: dict[str, str] = field(default_factory=dict)
+
+    def rule_over_time(self, measure: str) -> str:
+        """The listed rule; otherwise a total for measures that can be added up, and an average for the rest."""
+        return self.over_time.get(measure) or ("sum" if self.summable.get(measure) else "mean")
 
 
 def _csv(raw: Raw, source_id: str) -> pd.DataFrame:
@@ -482,7 +488,10 @@ CURATED: dict[str, CuratedDataset] = {d.key: d for d in [
                    "episodes such as September 2015 and September 2019.", "datagovsg", (PSI_24H,), "monthly",
                    clean_psi, "Computed from hourly 24-hour PSI readings. PSI bands: 0-50 good, 51-100 moderate, "
                    "101-200 unhealthy, 201-300 very unhealthy, above 300 hazardous. NEA's regions are reporting areas "
-                   "with no published boundaries. Regions are not added up."),
+                   "with no published boundaries. Regions are not added up. To compare with fire_hotspots, keep "
+                   "July to October of each year (months 7-10): a season's highest PSI is its highest month, its "
+                   "unhealthy days are added up, and its average PSI is the average of its months.",
+                   over_time={"highest_psi": "max", "average_psi": "mean", "unhealthy_days": "sum"}),
     CuratedDataset("top_hospitalisation_conditions", "Top 10 Conditions of Hospitalisation", "Ministry of Health",
                    "health", "Annual top 10 conditions by share of hospital discharges", "datagovsg",
                    (TOP_CONDITIONS,), "annual", clean_top_conditions,

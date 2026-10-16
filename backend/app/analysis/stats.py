@@ -107,15 +107,47 @@ def trend(series: pd.Series) -> dict:
     return result
 
 
-def to_annual(series: pd.Series, summable: bool) -> pd.Series:
-    """Quarterly/monthly -> annual: totals for countable measures, averages otherwise. Incomplete years dropped."""
+def to_annual(series: pd.Series, rule: str) -> pd.Series:
+    """Quarterly/monthly -> annual, each year's periods combined by the measure's rule ("sum", "mean" or "max").
+    Incomplete years dropped."""
     if is_yearly(series):
         return series
     years = series.index.map(lambda p: _period_key(p)[:4])
     per_year = 4 if "-Q" in series.index[0] else 12
     counts = series.groupby(years).size()
-    annual = series.groupby(years).sum() if summable else series.groupby(years).mean()
+    annual = series.groupby(years).agg(rule)
     return annual[counts == per_year]
+
+
+MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+RULE_WORDS = {"sum": "total", "mean": "average", "max": "highest"}
+
+
+def months_label(months: list[int]) -> str:
+    """[7, 8, 9, 10] -> "Jul-Oct"; months that do not run on are listed."""
+    if len(months) > 1 and months == list(range(months[0], months[-1] + 1)):
+        return f"{MONTH_NAMES[months[0] - 1]}-{MONTH_NAMES[months[-1] - 1]}"
+    return ", ".join(MONTH_NAMES[m - 1] for m in months)
+
+
+def season(frame: pd.DataFrame, months: list[int], rule) -> pd.DataFrame:
+    """The chosen calendar months of each year, combined into one row per year for each measure and combination of
+    dimension values, by rule(measure): "sum", "mean" or "max". The periods become years. A year missing any of
+    the months is left out, so a season still in progress is not compared with whole ones."""
+    month = frame["period"].str.extract(r"^\d{4}-(\d{2})$", expand=False)
+    if month.isna().any():
+        raise AnalysisError(f"months only applies to monthly data; this dataset's periods look like "
+                            f"'{frame['period'].iloc[0]}'")
+    rows = frame[month.astype(int).isin(months)].assign(period=lambda f: f["period"].str[:4])
+    keys = ["period", "unit", *dimensions(frame)]
+    parts = []
+    for measure, part in rows.groupby("measure"):
+        values = part.groupby(keys, dropna=False)["value"]
+        combined = values.agg(rule(measure))[values.size() == len(months)]
+        parts.append(combined.reset_index().assign(measure=measure))
+    if not parts:
+        raise AnalysisError(f"no values in {months_label(months)}")
+    return pd.concat(parts, ignore_index=True)[list(frame.columns)]
 
 
 def _pearson(x: pd.Series, y: pd.Series) -> float | None:

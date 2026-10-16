@@ -47,9 +47,20 @@ PSI = pd.DataFrame([{"period": "2015-09", "region": r, "measure": "highest_psi",
                                  ("central", 300.0))])
 
 
-def dataset(key, summable=None, frequency="annual"):
+# Monthly PSI, June to October 2015-2019, for seasons: the highest month is October (100 more each year) and
+# unhealthy days are 0 to 4 a month. October 2019 is missing, so 2019's July-October season is incomplete.
+PSI_MONTHS = pd.DataFrame([
+    {"period": f"{y}-{m:02d}", "region": r, "measure": measure, "unit": unit, "value": value}
+    for y in range(2015, 2020) for m in range(6, 11) if (y, m) != (2019, 10) for r in ("south", "north")
+    for measure, unit, value in (("highest_psi", "24-hour PSI", 10.0 * m + 100 * (y - 2015)),
+                                 ("unhealthy_days", "days", float(m - 6)))])
+FIRE_YEARS = pd.DataFrame([{"period": str(y), "measure": "hotspots", "unit": "hotspots", "value": v}
+                           for y, v in ((2015, 9000.0), (2016, 1000.0), (2017, 800.0), (2018, 2000.0))])
+
+
+def dataset(key, summable=None, frequency="annual", over_time=None):
     return CuratedDataset(key, key.title(), "Agency", "topic", "desc", "datagovsg", (key,), frequency,
-                          clean=lambda raw: None, summable=summable or {})
+                          clean=lambda raw: None, summable=summable or {}, over_time=over_time or {})
 
 
 DATASETS = {
@@ -61,6 +72,9 @@ DATASETS = {
     "towns": (TOWNS, dataset("towns")),
     "psi": (PSI, dataset("psi", frequency="monthly")),
     "employment_strict": (EMPLOYMENT, dataset("employment_strict", {"employed": ("industry",)})),  # not by sex
+    "psi_months": (PSI_MONTHS, dataset("psi_months", frequency="monthly",
+                                       over_time={"highest_psi": "max", "unhealthy_days": "sum"})),
+    "fire_years": (FIRE_YEARS, dataset("fire_years")),
     "fires": (pd.DataFrame([{"period": "2015", "country": c, "cell": "", "measure": "hotspots", "unit": "hotspots",
                              "value": v} for c, v in (("Indonesia", 9000.0), ("Malaysia", 700.0), ("Brunei", 20.0))]),
               dataset("fires", {"hotspots": ("country", "cell")})),
@@ -128,10 +142,43 @@ def test_quarterly_year_on_year_compares_the_same_quarter():
     assert yoy["2024-Q1"] == pytest.approx(-50.0) and np.isnan(yoy["2023-Q4"])
 
 
-def test_to_annual_sums_counts_averages_rates_and_drops_partial_years():
+def test_to_annual_combines_by_the_measures_rule_and_drops_partial_years():
     series = pd.Series([1.0, 2, 3, 4, 5, 6], index=["2023-Q1", "2023-Q2", "2023-Q3", "2023-Q4", "2024-Q1", "2024-Q2"])
-    assert stats.to_annual(series, summable=True).to_dict() == {"2023": 10.0}
-    assert stats.to_annual(series, summable=False).to_dict() == {"2023": 2.5}
+    assert stats.to_annual(series, "sum").to_dict() == {"2023": 10.0}
+    assert stats.to_annual(series, "mean").to_dict() == {"2023": 2.5}
+    assert stats.to_annual(series, "max").to_dict() == {"2023": 4.0}
+    assert dataset("x", {"n": ("a",)}).rule_over_time("n") == "sum" and dataset("x").rule_over_time("rate") == "mean"
+
+
+def test_months_make_one_season_a_year_by_each_measures_rule():
+    frame, ds = DATASETS["psi_months"]
+    seasons = stats.season(frame, [7, 8, 9, 10], ds.rule_over_time)
+    south = seasons[seasons["region"] == "south"]
+    highest = south[south["measure"] == "highest_psi"].set_index("period")["value"].to_dict()
+    assert highest == {"2015": 100.0, "2016": 200.0, "2017": 300.0, "2018": 400.0}  # its highest month; 2019 is short
+    assert set(south[south["measure"] == "unhealthy_days"]["value"]) == {10.0}  # 1 + 2 + 3 + 4 days, added up
+    assert list(seasons.columns) == list(frame.columns)
+    assert stats.months_label([7, 8, 9, 10]) == "Jul-Oct" and stats.months_label([1, 2, 12]) == "Jan, Feb, Dec"
+    ws, t = tools()
+    measures = call(t["load_dataset"], dataset_id="psi_months")["measures"]
+    assert [measures[m]["periods_combine_as"] for m in ("highest_psi", "unhealthy_days")] == ["highest", "total"]
+    with pytest.raises(stats.AnalysisError, match="only applies to monthly data"):
+        stats.season(EMPLOYMENT, [7], ds.rule_over_time)
+
+
+def test_a_season_lines_up_with_yearly_fire_counts():
+    ws, t = tools()
+    season = {"dataset_id": "psi_months", "measure": "highest_psi", "filters": {"region": "south"},
+              "label": "Highest PSI", "months": [10, 7, 8, 9]}
+    first = call(t["compute_trend"], series=season)["facts"][0]
+    assert (first["label"], first["value"]) == ("Highest PSI (Jul-Oct, highest), 2015", 100.0)
+    fires = {"dataset_id": "fire_years", "measure": "hotspots", "filters": {}, "label": "Hotspots"}
+    out = call(t["compute_correlation"], a=fires, b=season)
+    assert out["note"] == "aligned on matching periods" and "2015 to 2018 (n=4)" in out["facts"][0]["label"]
+    with pytest.raises(stats.AnalysisError, match="only applies to monthly data"):
+        call(t["compute_trend"], series={**fires, "months": [7]})
+    with pytest.raises(ValueError, match="from 1 \\(January\\) to 12"):
+        call(t["compute_trend"], series={**season, "months": [13]})
 
 
 def test_correlation_separates_shared_trend_from_related_changes():

@@ -112,7 +112,7 @@ A run can also pause as `awaiting_input`.
 
 | Agent | Tool | What it does |
 |---|---|---|
-| Extraction | `load_dataset` | Loads a dataset; returns its profile (measures, units, dimensions, coverage, summing rules, quality report). |
+| Extraction | `load_dataset` | Loads a dataset; returns its profile (measures, units, dimensions, coverage, summing rules and rules over time, quality report). |
 | | `search_datasets` | Hybrid search over the 4,655-dataset data.gov.sg catalogue, for topics the curated set does not cover. |
 | | `search_documents` | Hybrid search over agency documents; returns citable passages D1, D2… At most 3 per task. |
 | | `web_search` | Tavily, over the whole web; returns untrusted passages W1, W2… At most 10 per task. |
@@ -127,7 +127,11 @@ A run can also pause as `awaiting_input`.
 
 The tools apply each dataset's **summing rules**. A measure can be added up only across the dimensions the
 dataset allows; for any other dimension, the agent must filter to one value. This stops, for example, adding up
-medians or counting a total row twice. Users can switch optional tools off per request (`graph/options.py`).
+medians or counting a total row twice. A measure also has a **rule over time** for making years from months or
+quarters: a total, an average or the highest (PSI's highest month, its unhealthy days added up). A series can keep
+chosen months of each year (`months`, e.g. July to October for the haze season); it then has one value per
+season, combined by that rule, and its label names the season. Users can switch optional tools off per request
+(`graph/options.py`).
 
 ### Skills
 
