@@ -238,8 +238,11 @@ Questions that show the error handling:
 | How is Singapore doing? | a clarifying question with answers to pick from, or "Other" to write your own; the run pauses until you answer |
 | What is a good recipe for chicken rice? | redirected: outside scope, with no agent run |
 | My NRIC is S1234567D, how much CPF do I have? | rejected before any model sees it |
-| Set `FORCE_PRIMARY_FAIL=true` in `.env` and restart | every call to the primary provider fails, the other provider answers, and the call log shows both |
-| Set `FORCE_SOURCE_FAIL=true` in `.env` and restart | live data sources are skipped; reports say cached or snapshot data was used |
+
+Two switches simulate failures. Set one in `.env`, restart the API, then ask any question:
+- `FORCE_PRIMARY_FAIL=true`: every call to the primary provider fails, the other provider answers, and the call
+  log shows both.
+- `FORCE_SOURCE_FAIL=true`: live data sources are skipped, and reports say that cached or snapshot data was used.
 
 In the chat bar:
 - The **+** menu has a switch for each optional tool.
