@@ -27,6 +27,9 @@ jobs:
       - run: uv sync --frozen
       - name: Lint
         run: uv run ruff check app tests scripts
+      - name: Tests of the key-entry script (scripts/set_keys.py)
+        working-directory: .
+        run: python3 -m unittest discover -s scripts/tests
       - name: Unit and integration tests (fake language models, no network)
         run: uv run pytest --cov=app --cov-report=term --cov-report=xml --cov-report=html
       - name: Keep the coverage report (coverage.xml and an HTML report, under the run's artifacts)

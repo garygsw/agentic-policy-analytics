@@ -58,7 +58,7 @@ class MainTest(unittest.TestCase):
         return code, out.getvalue()
 
     def test_new_file_is_seeded_from_example_and_owner_only(self):
-        code, out = self.run_main([FAKE_OPENAI, FAKE_ANTHROPIC, "", ""])
+        code, out = self.run_main([FAKE_OPENAI, FAKE_ANTHROPIC, "", "", ""])  # optional keys left blank
         self.assertEqual(code, 0)
         self.assertEqual(self.env.read_text().splitlines(),
                          ["# example", f"OPENAI_API_KEY={FAKE_OPENAI}", f"ANTHROPIC_API_KEY={FAKE_ANTHROPIC}", "DEBUG=false"])
@@ -67,8 +67,8 @@ class MainTest(unittest.TestCase):
         self.assertNotIn(FAKE_ANTHROPIC, out)
 
     def test_blank_input_keeps_the_current_value(self):
-        self.run_main([FAKE_OPENAI, FAKE_ANTHROPIC, "", ""])
-        code, out = self.run_main(["", "", "", ""])
+        self.run_main([FAKE_OPENAI, FAKE_ANTHROPIC, "", "", ""])
+        code, out = self.run_main(["", "", "", "", ""])
         self.assertIn("No changes.", out)
         self.assertIn("ends ..." + FAKE_OPENAI[-4:], out)
         self.assertEqual(set_keys.get_value(set_keys.read_lines(self.env), "OPENAI_API_KEY"), FAKE_OPENAI)
@@ -90,7 +90,7 @@ class MainTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("Refusing", out)
         (self.dir / ".gitignore").write_text(".env\n")
-        code, _ = self.run_main([FAKE_OPENAI, "", "", ""])
+        code, _ = self.run_main([FAKE_OPENAI, "", "", "", ""])
         self.assertEqual(code, 0)
 
 

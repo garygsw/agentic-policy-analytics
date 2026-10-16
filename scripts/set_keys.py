@@ -55,6 +55,13 @@ PROVIDERS = {
         "headers": lambda key: {"Authorization": f"Bearer {key}"},
         "optional": True,
     },
+    "FIRMS_MAP_KEY": {  # NASA fire hotspots, for the Southeast Asia haze map (free: firms.modaps.eosdis.nasa.gov)
+        "label": "NASA FIRMS map key (fire hotspots, optional)",
+        "prefix": "",
+        "url": lambda key: f"https://firms.modaps.eosdis.nasa.gov/mapserver/mapkey_status/?MAP_KEY={key}",
+        "headers": lambda key: {},
+        "optional": True,
+    },
 }
 
 
@@ -139,13 +146,14 @@ def tls_context() -> ssl.SSLContext:
 
 
 def verify(name: str, value: str, opener=urllib.request.urlopen) -> tuple[bool, str]:
-    """List models with the key: proves it is accepted, costs no tokens."""
+    """List models (or show the key's status) with the key: proves it is accepted, costs no tokens."""
     provider = PROVIDERS[name]
     if not value:
         return (True, "not set (optional)") if provider.get("optional") else (False, "not set")
     headers = {"User-Agent": "set-keys-check/1.0", **provider["headers"](value)}
+    url = provider["url"](value) if callable(provider["url"]) else provider["url"]  # FIRMS takes the key in the URL
     try:
-        request = urllib.request.Request(provider["url"], headers=headers)
+        request = urllib.request.Request(url, headers=headers)
         with opener(request, timeout=15, context=tls_context()) as response:
             json.load(response)
         return True, "OK"
