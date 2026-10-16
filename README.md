@@ -15,7 +15,7 @@ given to read.
 > Demo video: *to be added.*
 
 **What it does**
-- **Answers from official data.** 20 curated datasets from MOM, HDB, URA, LTA, MOH, NEA, IMDA and SingStat, plus
+- **Answers from official data.** 21 curated datasets from MOM, HDB, URA, LTA, MOH, NEA, ELD, IMDA and SingStat, plus
   search over all 4,655 data.gov.sg datasets, about 3,000 agency documents and the web.
 - **Grounded reports.**
   - Every number must match a computed fact or a cited source, and every finding and caveat is cited.

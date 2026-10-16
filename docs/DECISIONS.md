@@ -564,3 +564,10 @@ Changes from the first round of hands-on testing.
   - **PSI by region** (`psi_by_region`): monthly highest and average 24-hour PSI, and days above 100, for NEA's five regions since April 2014, summarised from 108,864 hourly rows. With it the agents can show the 2015 and 2019 haze as a heatmap or a map.
   - **HDB's central town** was published as "Central" until 2018 and "CENTRAL AREA" from 2019, which split its series. `tidy()` now merges labels for the same thing under different names (`same_as`), and records it in the quality report.
 - **Alternatives:** Plotly `choroplethmap` with map tiles (blocked by the report's security policy, and needs network); GeoPandas and Shapely (heavier dependencies for what a 25-line simplification and a polygon fill do here); matching places by fuzzy names (risky: "Central" is a town, a URA region and an NEA region).
+
+## D-050 · 2026-10-16 · Election results on the electoral map
+- **Decision:** a curated dataset, `ge_results`, holds every general election from 1955 to 2025: vote share (per cent of valid votes) and votes by constituency, constituency type and party. Mapped by constituency, it is drawn on the boundaries of that election (2006 to 2025 are committed), and every constituency name matched for all five elections.
+  - **Walkovers** have no votes, so they are left out (185 results) and counted in the quality report, instead of appearing as 0%. On a map they are grey.
+  - **Candidate names are not kept.** The party's result is the measure, and the platform drops columns that name individuals.
+  - **Neutrality.** Election results are politically sensitive in a government setting. The dataset's notes, which the agents read and cite, say to report figures only, with no judgement of parties or candidates. The scope now names official election results.
+- **Alternatives:** leaving elections out (the user asked for electoral maps); keeping candidate names (not needed for any analysis here).

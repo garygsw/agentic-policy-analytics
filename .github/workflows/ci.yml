@@ -80,7 +80,7 @@ jobs:
         run: |
           curl --fail --silent http://localhost:8000/api/health
           curl --fail --silent http://localhost:8000/api/datasets \
-            | python3 -c "import json, sys; assert len(json.load(sys.stdin)) == 20"
+            | python3 -c "import json, sys; assert len(json.load(sys.stdin)) == 21"
           for attempt in $(seq 1 30); do
             curl --fail --silent http://localhost:3000 | grep -q "Policy Data Analytics" && exit 0
             sleep 2

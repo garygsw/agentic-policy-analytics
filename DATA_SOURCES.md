@@ -12,7 +12,7 @@ Where the data comes from, how it is fetched and cleaned, and what is mock. Four
 
 ## 1. Curated datasets
 
-20 datasets have hand-written cleaners, summing rules and caveats (`backend/app/data/registry.py`). Their
+21 datasets have hand-written cleaners, summing rules and caveats (`backend/app/data/registry.py`). Their
 cleaned snapshots are committed in `backend/data/snapshots/`. Each comes with a `.json` file holding its quality
 report and provenance.
 
@@ -37,6 +37,7 @@ report and provenance.
 | `hospital_admissions` | Hospital Admissions and Public Sector Outpatient Attendances | MOH | data.gov.sg `d_a5267c58f60b20f8e04576261abfac93` | annual | 1984–2020 |
 | `life_expectancy` | Life Expectancy at Birth | MOH | data.gov.sg `d_e8e0db9cbd76e12eaa2bf071cc9ce964` | annual | 1990–2021 |
 | `top_hospitalisation_conditions` | Top 10 Conditions of Hospitalisation | MOH | data.gov.sg `d_5961507eed5bede3dc9ea02432153de4` | annual | 1990–2024 |
+| `ge_results` | Parliamentary General Election Results by Constituency and Party: vote share and votes; walkovers and candidate names left out | Elections Department | data.gov.sg `d_581a30bee57fa7d8383d6bc94739ad00` | election years | 1955–2025 |
 | `psi_by_region` | Pollutant Standards Index (PSI) by Region, Monthly: highest and average 24-hour PSI, and days above 100, summarised from 108,864 hourly readings | NEA | data.gov.sg `d_b4cf557f8750260d229c49fd768e11ed` | monthly | 2014-04–2026-09 |
 
 Coverage is that of the committed snapshots (14 Oct 2026). Live loads may extend it.

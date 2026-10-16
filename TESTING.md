@@ -5,7 +5,7 @@ re-run from `backend/` (and `frontend/` for the UI tests). Results are saved in 
 
 | Level | What it checks | Count | Command | Cost |
 |---|---|---|---|---|
-| Unit tests | agents, tools, statistics, data cleaning, maps, guardrails, LLM layer, RAG, report check, downloads | 206 | `uv run pytest tests/unit` | free (fake models) |
+| Unit tests | agents, tools, statistics, data cleaning, maps, guardrails, LLM layer, RAG, report check, downloads | 207 | `uv run pytest tests/unit` | free (fake models) |
 | Integration tests | the whole graph and API: background runs, pauses, streaming, replay, concurrency, restarts, downloads | 25 | `uv run pytest tests/integration` | free (scripted models) |
 | Frontend tests | the event reducer behind the live view, the history list, sidebar paging and width | 12 | `npm test` (in `frontend/`) | free |
 | Live provider tests | real calls to both providers, structured output, fallback | 3 | `uv run pytest -m live` | cents |
@@ -14,7 +14,7 @@ re-run from `backend/` (and `frontend/` for the UI tests). Results are saved in 
 | Answer evaluation | outcomes, groundedness, citations, LLM-as-judge, consistency | 12 questions | `uv run python -m app.evals.answers` | about $4 |
 | Load test | latency and throughput under concurrent clients | 20 clients | `uv run python scripts/load_test.py` | free |
 
-`uv run pytest` runs the unit and integration tests together (231), with no network access and no API keys. CI
+`uv run pytest` runs the unit and integration tests together (232), with no network access and no API keys. CI
 runs them on every push (section 7).
 
 ## 1. Test plan
@@ -52,7 +52,7 @@ The language models are the part that cannot be unit-tested, so the design keeps
 | Multi-agent workflows | `test_graph.py` (29): the full graph with scripted models (coordinator, extraction, analytics, report writer, number check, reviewer, translation) across every route, including a conversation surviving a restart and a translation that changes a number, a revised plan not counting the rejected one as done, filler cut from a plan |
 | Hallucination detection | `test_grounding.py` (7) and the report-check tests in `test_graph.py`; measured by the answer evaluation (section 3) |
 | Accuracy and consistency | the answer evaluation: expected outcomes, judge scores, overlap between repeated runs |
-| Data quality validation | `test_data.py` (36): period normalisation, number parsing, placeholders, duplicates, total rows, case-merged labels, personal columns dropped, rail-station names matched across layers, the internal workbook's planted problems, every committed snapshot loading, cleaned tables stored in and read back from the database, a town published under two names, PSI summarised from both timestamp formats |
+| Data quality validation | `test_data.py` (37): period normalisation, number parsing, placeholders, duplicates, total rows, case-merged labels, personal columns dropped, rail-station names matched across layers, the internal workbook's planted problems, every committed snapshot loading, cleaned tables stored in and read back from the database, a town published under two names, PSI summarised from both timestamp formats, election results without walkovers or candidate names |
 | Error handling | `test_llm_layer.py`: provider failure and fallback, including structured output. `test_data.py`: retries, then stale cache, then snapshot. `test_graph.py`: model failure leads to the template report; an unanswerable question is declined; a vague one gets a clarifying question |
 | Guardrails | `test_pii.py` (19): NRIC/FIN, emails, phones, unit numbers, bank accounts, cards (Luhn); names and statistics allowed. `test_language.py` (9). `test_triage.py` (8) |
 | Retrieval | `test_rag.py` (24): chunking, crawling rules, incremental re-crawls, each search mode, fusion, filters, per-document cap, web result de-duplication, concurrent searches |
@@ -353,14 +353,14 @@ Most of the time is model latency. The live view shows elapsed time, tokens and 
 
 `.github/workflows/ci.yml` runs on every push and pull request:
 
-1. **Backend:** `ruff` lint, then all 231 tests with coverage. The coverage report (`coverage.xml` and HTML) is
+1. **Backend:** `ruff` lint, then all 232 tests with coverage. The coverage report (`coverage.xml` and HTML) is
    kept with the run for 30 days.
 2. **Frontend:** type check, unit tests and a production build.
 3. **Secrets:** gitleaks scans every commit in the history, not just the latest, since a key removed later is
    still published. (A local pre-commit hook also blocks keys before they are committed.)
 4. **Images:** build both images, start the API and web UI with Docker Compose, then smoke-test:
    - API health
-   - all 20 datasets listed
+   - all 21 datasets listed
    - the web page served
 5. **Publishing (on a version tag):** push both images to the GitHub Container Registry (README, "Deployment").
 

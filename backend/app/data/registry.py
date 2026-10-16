@@ -270,6 +270,27 @@ def clean_top_conditions(raw: Raw):
                 dims=["rank", "condition", "icd"], measures={"percentage_discharges": "% of discharges"})
 
 
+# -- elections -----------------------------------------------------------------------------------------------
+GE_RESULTS = "d_581a30bee57fa7d8383d6bc94739ad00"
+
+
+def clean_ge_results(raw: Raw):
+    """Parliamentary general election results by constituency and party, 1955 to 2025. Uncontested constituencies
+    (walkovers) have no votes and are left out; candidate names are not kept (a party's result is the measure)."""
+    df = _csv(raw, GE_RESULTS)
+    contested = pd.to_numeric(df["vote_count"], errors="coerce").notna()
+    walkovers = df.loc[~contested, ["year", "constituency"]].drop_duplicates()
+    df = df[contested].copy()
+    df["vote_share"] = (pd.to_numeric(df["vote_percentage"], errors="coerce") * 100).round(2).astype(str)
+    frame, report = tidy(df, "ge_results", period="year", frequency="annual",
+                         dims=["constituency", "constituency_type", "party"],
+                         measures={"vote_share": "% of valid votes", "vote_count": "votes"})
+    report.rows_in = len(df) + int((~contested).sum())
+    report.personal_data_columns_dropped = ["candidates"]
+    report.notes.append(f"{len(walkovers)} uncontested constituency results (walkovers, no votes) left out")
+    return frame, report
+
+
 # -- environment ---------------------------------------------------------------------------------------------
 PSI_24H = "d_b4cf557f8750260d229c49fd768e11ed"
 PSI_REGIONS = ["north", "south", "east", "west", "central"]
@@ -405,6 +426,15 @@ CURATED: dict[str, CuratedDataset] = {d.key: d for d in [
     CuratedDataset("life_expectancy", "Life Expectancy at Birth", "Ministry of Health", "health",
                    "Annual life expectancy at birth by sex", "datagovsg", (LIFE_EXPECTANCY,), "annual",
                    clean_life_expectancy, "Ends in 2021."),
+    CuratedDataset("ge_results", "Parliamentary General Election Results by Constituency and Party",
+                   "Elections Department", "elections",
+                   "Vote share and votes for each party in each contested constituency, every general election "
+                   "from 1955 to 2025", "datagovsg", (GE_RESULTS,), "annual", clean_ge_results,
+                   "Periods are election years, not every year. Uncontested constituencies (walkovers) have no votes "
+                   "and are not in the data. A GRC elects a team; results are per party. Boundaries change at every "
+                   "election, so a constituency's name may cover different areas over time. Report results "
+                   "neutrally: figures only, no judgement of parties or candidates.",
+                   summable={"vote_count": ("constituency", "constituency_type", "party")}),
     CuratedDataset("psi_by_region", "Pollutant Standards Index (PSI) by Region, Monthly", "National Environment Agency",
                    "environment", "Monthly highest and average 24-hour PSI, and days with unhealthy air (PSI above "
                    "100), for NEA's five regions (north, south, east, west, central), from April 2014. Shows haze "

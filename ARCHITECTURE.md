@@ -205,7 +205,7 @@ Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
   Area to URA's Central Area), URA regions, electoral divisions (the boundaries in force in the period's year),
   or NEA's five PSI regions, which have no boundaries and are drawn as points. Maps are plain filled shapes on
   longitude and latitude, not a map service, so they need no network and draw the same in the PDF.
-- **20 curated datasets** have hand-written cleaners, summing rules and caveats. Beyond them, the extraction
+- **21 curated datasets** have hand-written cleaners, summing rules and caveats. Beyond them, the extraction
   agent can search and load any of the 4,655 catalogue datasets; their shape is inferred automatically, and they
   are marked uncurated.
 

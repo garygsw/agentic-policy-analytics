@@ -205,6 +205,19 @@ def test_psi_is_summarised_by_month_and_region_from_both_timestamp_formats():
     assert report.rows_in == 4 and "1 timestamps written in another format were read" in report.notes[0]
 
 
+def test_election_results_keep_parties_votes_and_shares_but_not_walkovers_or_names():
+    from app.data.registry import GE_RESULTS, clean_ge_results
+    rows = ["year,constituency,constituency_type,candidates,party,vote_count,vote_percentage",
+            "2025,Bukit Panjang,SMC,A Candidate,PAP,20000,0.6",
+            "2025,Bukit Panjang,SMC,B Candidate,SDP,13333,0.4",
+            "2025,Marine Parade-Braddell Heights,GRC,C Candidate,PAP,na,na"]  # a walkover
+    frame, report = clean_ge_results({GE_RESULTS: "\n".join(rows).encode()})
+    shares = frame[frame.measure == "vote_share"].set_index("party")["value"]
+    assert shares.to_dict() == {"PAP": 60.0, "SDP": 40.0}  # per cent of valid votes
+    assert "Marine Parade-Braddell Heights" not in set(frame["constituency"]) and "candidates" not in frame
+    assert report.personal_data_columns_dropped == ["candidates"] and "1 uncontested" in report.notes[-1]
+
+
 def test_stores_created_at_once_in_parallel_runs_share_one_set_of_tables(tmp_path):
     """Parallel runs each create a store; the tables must be created once, not by every thread at the same time."""
     from concurrent.futures import ThreadPoolExecutor
