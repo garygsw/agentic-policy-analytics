@@ -41,15 +41,11 @@ given to read.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  UI[Next.js UI] -- REST + WebSocket --> API[FastAPI]
-  API --> G[LangGraph agents:<br/>coordinator, extraction,<br/>analytics, report writer,<br/>number check, reviewer]
-  G --> D[(Datasets:<br/>data.gov.sg, SingStat,<br/>internal workbook)]
-  G --> R[(Document index<br/>BM25 + vectors)]
-  G --> L[OpenAI / Anthropic]
-  I[Ingest service, cron] --> R
-```
+![How a question is answered: the web UI calls FastAPI over HTTP and a WebSocket; FastAPI runs the LangGraph agents, which send prompts to Claude or GPT, load datasets from data.gov.sg, SingStat and NASA FIRMS, query the document index and search agency sites and the web, keeping runs and data in SQLite; an ingest service crawls agency sites into the document index each night.](docs/diagrams/architecture.png)
+
+![The tech stack in six layers: interface (Next.js, React, Plotly.js), API and runs (FastAPI, WebSocket), agents (LangGraph, LangChain, ReAct tool loops, skills), models (Claude Sonnet 5.5 with GPT 6.1 Sol as fallback, GPT 6 Luna, local embeddings), data and analysis (pandas, SQLite with FTS5 and sqlite-vec, matplotlib), and delivery (Docker Compose, GitHub Actions, GHCR).](docs/diagrams/tech-stack.png)
+
+Both diagrams are editable HTML and SVG in [docs/diagrams](docs/diagrams/); the images are exported from them.
 
 A question becomes a background run of a LangGraph state graph:
 - The coordinator decides each step: extract, analyse, clarify, decline or report.
