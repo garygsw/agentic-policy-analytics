@@ -91,7 +91,7 @@ def test_happy_path_extract_analyse_report_review():
     assert workers.calls == ["extract", "analyse"]
 
 
-def test_the_writer_is_told_what_each_chart_is_and_shows():
+def test_the_writer_and_the_reviewer_are_told_what_each_chart_is():
     graph, llm, workers = make({"TriageDecision": [IN_SCOPE], "CoordinatorStep": steps("extract", "analyse", "report"),
                                 "Report": [GOOD], "Review": [PASS]})
     chart = {"id": "C1", "title": "Price by town", "kind": "map", "note": "not on the map: Atlantis",
@@ -99,8 +99,9 @@ def test_the_writer_is_told_what_each_chart_is_and_shows():
              "table": {"columns": ["area", "price"], "rows": [["Bedok", 1.0], ["Tampines", 2.0]]}, "sources": ["S1"]}
     workers.analyse = lambda *args, **kwargs: {"summary": "Mapped prices", "facts": FACTS, "charts": [chart]}
     ask(graph, QUESTION)
-    writer_input = next(m for key, m in llm.calls if key == "Report")[-1].content
-    assert '"kind": "map", "data rows": 2, "note": "not on the map: Atlantis"' in writer_input
+    for step in ("Report", "Review"):
+        given = next(m for key, m in llm.calls if key == step)[-1].content
+        assert '"kind": "map", "note": "not on the map: Atlantis"' in given
 
 
 def test_a_retried_extraction_receives_the_first_result():

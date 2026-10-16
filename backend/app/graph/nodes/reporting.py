@@ -31,6 +31,13 @@ def charts_of(state: AgentState) -> list[dict]:
     return ((state.get("findings") or {}).get("analytics") or {}).get("charts", [])
 
 
+def chart_briefs(state: AgentState) -> list[dict]:
+    """What each chart is, for the writer and the reviewer alike: its kind, and any note from making it (such as
+    places left off a map). No counts: a number about a chart is not a computed fact, so the check would reject it."""
+    return [{"id": c["id"], "title": c["title"], "kind": c.get("kind", ""),
+             **({"note": c["note"]} if c.get("note") else {})} for c in charts_of(state)]
+
+
 def _show(number: float) -> str:
     """How an unmatched number is quoted back to the writer: 3000000000.0 -> '3,000,000,000', 31.5 -> '31.5'."""
     return f"{int(number):,}" if float(number).is_integer() else f"{number:,.6g}"
@@ -52,10 +59,7 @@ def make_report_writer(llm) -> Callable:
                              "the cited facts and sources show, or cite what supports them:\n- "
                              + "\n- ".join(f"{p.where}: {p.problem}" for p in review.unsupported))
             feedback = "\n\n".join(notes)
-        # What each chart is and shows, so the writer can describe it ("a map of 24 towns") without guessing.
-        charts = [{"id": c["id"], "title": c["title"], "kind": c.get("kind", ""),
-                   "data rows": len(c.get("table", {}).get("rows", [])),
-                   **({"note": c["note"]} if c.get("note") else {})} for c in charts_of(state)]
+        charts = chart_briefs(state)
         content = (f"Question: {state['question']}\n\nFacts:\n{json.dumps(facts_of(state), ensure_ascii=False)}\n\n"
                    f"Charts:\n{json.dumps(charts, ensure_ascii=False)}\n\n"
                    f"Sources:\n{json.dumps(sources_of(state), ensure_ascii=False)}\n\n{feedback}").strip()
@@ -129,12 +133,12 @@ def make_reviewer(llm) -> Callable:
         statements = [f"summary: {report.summary}"]
         statements += [f"finding {i}: {c.text} [{', '.join(c.citations)}]" for i, c in enumerate(report.findings, 1)]
         statements += [f"caveat {i}: {c.text} [{', '.join(c.citations)}]" for i, c in enumerate(report.caveats, 1)]
-        material = {"facts": facts_of(state),
+        material = {"facts": facts_of(state), "charts": chart_briefs(state),
                     "sources": [{k: v for k, v in s.items() if k != "key"} for s in sources_of(state)]}
         content = (f"Question: {state['question']}\n\nAnalysis performed: {analytics.get('summary', '')}\n\n"
                    f"Report title: {report.title}\n\nStatements:\n" + "\n".join(statements))
         if claim_check:  # the statements are checked against what the writer had
-            content += f"\n\nFacts and sources the writer had:\n{json.dumps(material, ensure_ascii=False)}"
+            content += f"\n\nFacts, charts and sources the writer had:\n{json.dumps(material, ensure_ascii=False)}"
         system = prompts.REVIEW + (prompts.CLAIM_CHECK if claim_check else "")
         # The other provider's model checks, so the writer's model never checks its own work.
         review = llm("check", schema=Review).invoke([SystemMessage(system), HumanMessage(content)])
