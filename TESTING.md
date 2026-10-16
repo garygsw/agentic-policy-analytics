@@ -93,10 +93,10 @@ the English report is shown instead.
 
 | Measure | How | Latest result |
 |---|---|---|
-| Groundedness | the share of numbers in final reports that pass the check | 454 of 454 |
-| What the checks caught | drafts sent back | number check: 0 of 17; claim checker: about 8 rewrites (section 5) |
-| Faithfulness of prose | LLM-as-judge from the other provider, given what the writer saw | 5.00 of 5 (3.62 before citations on caveats; see section 5 for the judge's blind spots) |
-| Consistency | overlap of the numbers stated by three runs of the same question | 0.71 and 0.46 |
+| Groundedness | the share of numbers in final reports that pass the check | 437 of 437 |
+| What the checks caught | drafts sent back | number check: 1 of 15; claim checker: about 5 rewrites (section 5) |
+| Faithfulness of prose | LLM-as-judge from the other provider, given what the writer saw | 4.78 of 5 (3.62 before citations on caveats; see section 5 for the judge's blind spots) |
+| Consistency | overlap of the numbers stated by three runs of the same question | 0.77 and 0.68 |
 
 What the code cannot check is meaning: a sentence can cite the right fact and still overstate it, rank it
 wrongly, or call a fall a rise. That is the claim checker's job (D-035). The reviewer, a model from the other
@@ -213,20 +213,21 @@ tools. The two consistency questions run three times each.
   its metadata, and the cited passages.
 - **Consistency.** The average overlap (Jaccard) of the numbers stated by repeated runs of the same question.
 
-**Results** (16 Oct 2026, after the new chart kinds, maps and skills, D-048 to D-052; `answers_results.json`):
+**Results** (16 Oct 2026, after comparisons list and count every group and the writer and reviewer see what each
+chart is, D-058; `answers_results.json`):
 
 | Question | Expected | Outcome | Time | LLM calls | Cost | Numbers grounded | Statements cited | Judge: rel / comp / faith / clarity / caveats |
 |---|---|---|---|---|---|---|---|---|
-| tech-employment | answered | answered | 62 s | 12 | $0.24 | 76/76 | 100% | 5 / 5 / 5 / 4 / 5 |
-| hdb-towns | answered | answered | 115 s | 20 | $0.67 | 63/63 | 100% | 5 / 4 / 5 / 4 / 3 |
-| coe | answered | answered | 55 s | 13 | $0.14 | 42/42 | 100% | 5 / 4 / 5 / 5 / 4 |
-| life-expectancy | answered | answered | 33 s | 9 | $0.12 | 46/46 | 100% | 5 / 4 / 5 / 5 / 3 |
-| retrenchment-gdp | answered | answered | 61 s | 13 | $0.17 | 25/25 | 100% | 5 / 4 / 5 / 4 / 3 |
-| mrt-stations | answered or partial | answered | 114 s | 19 | $0.34 | 15/15 | 100% | 5 / 5 / 5 / 4 / 5 |
-| internal-programmes | answered | answered | 37 s | 9 | $0.13 | 64/64 | 100% | 5 / 5 / 5 / 4 / 5 |
-| chinese (in Chinese) | answered | answered | 47 s | 11 | $0.14 | 60/60 | 100% | 5 / 5 / 5 / 5 / 5 |
-| future-policy | answered | answered | 110 s | 16 | $0.37 | 63/63 | 100% | 4 / 4 / 5 / 4 / 5 |
-| forecast | declined or answered | declined | 21 s | 4 | $0.06 | | | |
+| tech-employment | answered | answered | 55 s | 9 | $0.14 | 65/65 | 100% | 5 / 5 / 5 / 5 / 5 |
+| hdb-towns | answered | answered | 84 s | 14 | $0.55 | 45/45 | 100% | 5 / 3 / 4 / 4 / 3 |
+| coe | answered | answered | 65 s | 14 | $0.17 | 36/36 | 100% | 5 / 4 / 5 / 4 / 4 |
+| life-expectancy | answered | answered | 35 s | 9 | $0.13 | 44/44 | 100% | 5 / 4 / 5 / 5 / 4 |
+| retrenchment-gdp | answered | answered | 38 s | 10 | $0.13 | 13/13 | 100% | 5 / 4 / 4 / 5 / 3 |
+| mrt-stations | answered or partial | answered | 47 s | 9 | $0.15 | 16/16 | 100% | 5 / 5 / 5 / 5 / 5 |
+| internal-programmes | answered | answered | 42 s | 10 | $0.15 | 70/70 | 100% | 5 / 5 / 5 / 4 / 4 |
+| chinese (in Chinese) | answered | answered | 53 s | 12 | $0.16 | 60/60 | 100% | 5 / 5 / 5 / 5 / 5 |
+| future-policy | answered | answered | 131 s | 19 | $0.50 | 88/88 | 100% | 4 / 4 / 5 / 3 / 3 |
+| forecast | declined or answered | declined | 23 s | 5 | $0.08 | | | |
 | off-topic | off_topic | off_topic | 0 s | 0 | $0.00 | | | |
 | vague | clarification | clarification | 2 s | 1 | $0.00 | | | |
 
@@ -234,18 +235,18 @@ tools. The two consistency questions run three times each.
 
 **Across the configurations** (each a full run of the set):
 
-| | GPT 6.1 Sol, first run | GPT 6.1 Sol, after D-031 | Claude Sonnet 5.5, after D-034 | + claim checker (D-035) | + judge sees charts and analysis | + chart kinds, maps, skills |
-|---|---|---|---|---|---|---|
-| Outcomes as expected | 11 of 11 | 10 of 11 | **12 of 12** | **12 of 12** | **12 of 12** | **12 of 12** |
-| Numbers grounded | 227 of 227 | 257 of 257 | 494 of 494 | 460 of 460 | 471 of 471 | 454 of 454 |
-| Drafts rejected by the number check | 1 of 13 | 3 of 16 | 1 of 14 | 0 of 21 | 0 of 24 | 0 of 17 |
-| Judge: faithfulness | 3.62 | 4.38 | 4.33 | 4.00 | 4.56 | **5.00** |
-| Judge: relevance / completeness / clarity / caveats | 4.88 / 4.12 / 4.62 / 3.88 | 4.75 / 4.12 / 4.62 / 4.75 | 4.78 / 4.67 / 4.56 / 4.78 | 4.89 / 4.56 / 4.56 / 4.56 | 4.89 / 4.44 / 4.22 / 4.11 | 4.89 / 4.44 / 4.33 / 4.22 |
-| Consistency (tech-employment / hdb-towns) | 0.79 / 0.80 | 0.77 / 0.44 | 0.80 / 0.60 | 0.66 / 0.38 | 0.72 / 0.54 | 0.71 / 0.46 |
-| Median time for an answered question | 104 s | 115 s | **51 s** | 59 s | 92 s | 61 s |
-| Cost of a full run | $1.94 | $1.91 | $2.60 (12 questions) | $3.77 (12 questions) | $3.58 (12 questions) | $3.98 (12 questions) |
+| | GPT 6.1 Sol, first run | GPT 6.1 Sol, after D-031 | Claude Sonnet 5.5, after D-034 | + claim checker (D-035) | + judge sees charts and analysis | + chart kinds, maps, skills | + every group listed and counted (D-058) |
+|---|---|---|---|---|---|---|---|
+| Outcomes as expected | 11 of 11 | 10 of 11 | **12 of 12** | **12 of 12** | **12 of 12** | **12 of 12** | **12 of 12** |
+| Numbers grounded | 227 of 227 | 257 of 257 | 494 of 494 | 460 of 460 | 471 of 471 | 454 of 454 | 437 of 437 |
+| Drafts rejected by the number check | 1 of 13 | 3 of 16 | 1 of 14 | 0 of 21 | 0 of 24 | 0 of 17 | 1 of 15 |
+| Judge: faithfulness | 3.62 | 4.38 | 4.33 | 4.00 | 4.56 | **5.00** | 4.78 |
+| Judge: relevance / completeness / clarity / caveats | 4.88 / 4.12 / 4.62 / 3.88 | 4.75 / 4.12 / 4.62 / 4.75 | 4.78 / 4.67 / 4.56 / 4.78 | 4.89 / 4.56 / 4.56 / 4.56 | 4.89 / 4.44 / 4.22 / 4.11 | 4.89 / 4.44 / 4.33 / 4.22 | 4.89 / 4.33 / 4.44 / 4.00 |
+| Consistency (tech-employment / hdb-towns) | 0.79 / 0.80 | 0.77 / 0.44 | 0.80 / 0.60 | 0.66 / 0.38 | 0.72 / 0.54 | 0.71 / 0.46 | 0.77 / 0.68 |
+| Median time for an answered question | 104 s | 115 s | **51 s** | 59 s | 92 s | 61 s | 53 s |
+| Cost of a full run | $1.94 | $1.91 | $2.60 (12 questions) | $3.77 (12 questions) | $3.58 (12 questions) | $3.98 (12 questions) | $3.61 (12 questions) |
 
-The judge was Claude Sonnet 5.5 for the first two columns and GPT 6.1 Sol for the last four, so the
+The judge was Claude Sonnet 5.5 for the first two columns and GPT 6.1 Sol for the rest, so the
 faithfulness scores are close but not strictly comparable. In the fifth run the dataset cache started empty (it had
 just moved into the database, D-042), so the first runs fetched every dataset live; repeats of the same question
 took 43–65 s, close to the sixth run's median of 61 s.
@@ -300,6 +301,11 @@ took 43–65 s, close to the sixth run's median of 61 s.
   is one run: the attribution error may still recur. Caveats remain the weakest judge score (4.22; three reports
   scored 3). A full run cost 11% more ($3.98 against $3.58); the extra tool and longer prompts are the likely
   cause, but they were not measured separately. The eval does not record which chart kinds the reports drew.
+- **Every group listed and counted (D-058), measured.** Outcomes, numbers and citations held (437 of 437). The HDB
+  question's consistency rose from 0.46 to 0.68: with every town listed, repeated runs quote more of the same
+  numbers. Faithfulness was 4.78: two reports scored 4 (hdb-towns, for generalising about towns with high starting
+  prices; retrenchment-gdp, for leaving out a tentative explanation from the analysis), within the variation seen
+  between runs. The number check sent one draft back. Median time 53 s; the full run cost $3.61.
 
 **What the checks caught in an earlier run (D-034 column):**
 - **The number check.** In the life-expectancy report, the writer computed a gap of "4.44 years" between men and
