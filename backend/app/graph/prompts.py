@@ -1,7 +1,8 @@
 """System prompts for every LLM step, kept in one place so they can be reviewed together."""
 
 SCOPE = ("Singapore public policy and official statistics: the economy and employment, housing and property, "
-         "transport, health, population, education, the digital economy and other government policy areas")
+         "transport, health, population, education, the digital economy, the environment (including air quality "
+         "and haze) and other government policy areas")
 
 UNDERSTAND = """Rewrite the user's latest message as one self-contained question in English.
 - Resolve references to earlier turns (e.g. "what about 2019?" becomes the full question with 2019).

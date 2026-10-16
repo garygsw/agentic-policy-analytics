@@ -360,7 +360,7 @@ Most of the time is model latency. The live view shows elapsed time, tokens and 
    still published. (A local pre-commit hook also blocks keys before they are committed.)
 4. **Images:** build both images, start the API and web UI with Docker Compose, then smoke-test:
    - API health
-   - all 19 datasets listed
+   - all 20 datasets listed
    - the web page served
 5. **Publishing (on a version tag):** push both images to the GitHub Container Registry (README, "Deployment").
 

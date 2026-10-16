@@ -270,6 +270,43 @@ def clean_top_conditions(raw: Raw):
                 dims=["rank", "condition", "icd"], measures={"percentage_discharges": "% of discharges"})
 
 
+# -- environment ---------------------------------------------------------------------------------------------
+PSI_24H = "d_b4cf557f8750260d229c49fd768e11ed"
+PSI_REGIONS = ["north", "south", "east", "west", "central"]
+UNHEALTHY_PSI = 100  # NEA's band: above 100 is unhealthy
+
+
+def clean_psi(raw: Raw):
+    """Hourly 24-hour PSI for NEA's five regions, summarised by month: the highest reading, the average, and the
+    number of days whose highest reading was unhealthy (above 100)."""
+    df = _csv(raw, PSI_24H)
+    # Most timestamps read "1/4/2014 1:00" (day first); one reads "2016-04-04 010:00:00", with a 3-digit hour.
+    # Each format is parsed as itself: read day-first, "2015-09-02" would become 9 February.
+    stamps = df["24hr_psi"].str.replace(r" 0(\d\d):", r" \1:", regex=True)
+    day_first = stamps.str.contains("/")
+    df["time"] = pd.to_datetime(stamps.where(day_first), format="%d/%m/%Y %H:%M", errors="coerce")
+    df.loc[~day_first, "time"] = pd.to_datetime(stamps[~day_first], format="%Y-%m-%d %H:%M:%S", errors="coerce")
+    readings = df.dropna(subset=["time"]).melt(id_vars="time", value_vars=PSI_REGIONS, var_name="region",
+                                               value_name="psi")
+    readings["psi"] = pd.to_numeric(readings["psi"], errors="coerce")
+    readings = readings.dropna(subset=["psi"])
+    readings["day"] = readings["time"].dt.date
+    readings["month"] = readings["time"].dt.strftime("%Y-%m")
+    daily_high = readings.groupby(["region", "month", "day"])["psi"].max().reset_index()
+    monthly = readings.groupby(["month", "region"]).agg(highest_psi=("psi", "max"), average_psi=("psi", "mean"))
+    monthly["unhealthy_days"] = (daily_high.assign(unhealthy=daily_high["psi"] > UNHEALTHY_PSI)
+                                 .groupby(["month", "region"])["unhealthy"].sum())
+    grouped = monthly.reset_index().rename(columns={"month": "period"})
+    for column in ("highest_psi", "average_psi", "unhealthy_days"):
+        grouped[column] = grouped[column].astype(str)
+    return _aggregate(grouped, "psi_by_region", len(df), frequency="monthly", dims=["region"],
+                      measures={"highest_psi": "24-hour PSI", "average_psi": "24-hour PSI",
+                                "unhealthy_days": "days"},
+                      note=f"summarised from {len(df):,} hourly rows, each with a reading for every region; "
+                           f"{int((~day_first).sum())} timestamps written in another format were read; "
+                           f"{int(df['time'].isna().sum())} unreadable timestamps were dropped")
+
+
 CURATED: dict[str, CuratedDataset] = {d.key: d for d in [
     CuratedDataset("employment_by_industry", "Employed Residents by Industry, Age and Sex", "Ministry of Manpower",
                    "employment", "Annual employed residents by industry (incl. information and communications), "
@@ -368,6 +405,13 @@ CURATED: dict[str, CuratedDataset] = {d.key: d for d in [
     CuratedDataset("life_expectancy", "Life Expectancy at Birth", "Ministry of Health", "health",
                    "Annual life expectancy at birth by sex", "datagovsg", (LIFE_EXPECTANCY,), "annual",
                    clean_life_expectancy, "Ends in 2021."),
+    CuratedDataset("psi_by_region", "Pollutant Standards Index (PSI) by Region, Monthly", "National Environment Agency",
+                   "environment", "Monthly highest and average 24-hour PSI, and days with unhealthy air (PSI above "
+                   "100), for NEA's five regions (north, south, east, west, central), from April 2014. Shows haze "
+                   "episodes such as September 2015 and September 2019.", "datagovsg", (PSI_24H,), "monthly",
+                   clean_psi, "Computed from hourly 24-hour PSI readings. PSI bands: 0-50 good, 51-100 moderate, "
+                   "101-200 unhealthy, 201-300 very unhealthy, above 300 hazardous. NEA's regions are reporting areas "
+                   "with no published boundaries. Regions are not added up."),
     CuratedDataset("top_hospitalisation_conditions", "Top 10 Conditions of Hospitalisation", "Ministry of Health",
                    "health", "Annual top 10 conditions by share of hospital discharges", "datagovsg",
                    (TOP_CONDITIONS,), "annual", clean_top_conditions,

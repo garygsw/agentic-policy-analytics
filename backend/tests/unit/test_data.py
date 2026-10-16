@@ -189,6 +189,22 @@ def test_a_town_published_under_two_names_is_one_series():
     assert any("'Central' as 'Central Area'" in note for note in report.notes)
 
 
+def test_psi_is_summarised_by_month_and_region_from_both_timestamp_formats():
+    from app.data.registry import PSI_24H, clean_psi
+    rows = ["24hr_psi,north,south,east,west,central",
+            "1/9/2015 1:00,120,90,80,70,60", "1/9/2015 2:00,140,95,85,75,65",  # day 1: north unhealthy
+            "2015-09-02 010:00:00,90,101,80,70,60",  # the other format, with a 3-digit hour: day 2, south
+            "1/10/2015 1:00,50,50,50,50,50"]
+    frame, report = clean_psi({PSI_24H: "\n".join(rows).encode()})
+    def value(period, region, measure):
+        return frame[(frame.period == period) & (frame.region == region) & (frame.measure == measure)]["value"].item()
+    assert value("2015-09", "north", "highest_psi") == 140.0
+    assert value("2015-09", "north", "average_psi") == pytest.approx((120 + 140 + 90) / 3)  # 02 Sept, not 09 Feb
+    assert (value("2015-09", "north", "unhealthy_days"), value("2015-09", "south", "unhealthy_days")) == (1.0, 1.0)
+    assert value("2015-10", "west", "highest_psi") == 50.0
+    assert report.rows_in == 4 and "1 timestamps written in another format were read" in report.notes[0]
+
+
 def test_stores_created_at_once_in_parallel_runs_share_one_set_of_tables(tmp_path):
     """Parallel runs each create a store; the tables must be created once, not by every thread at the same time."""
     from concurrent.futures import ThreadPoolExecutor

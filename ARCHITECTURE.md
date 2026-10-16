@@ -198,7 +198,7 @@ Details of every source are in [DATA_SOURCES.md](DATA_SOURCES.md).
   - personal data columns are dropped (CEA salesperson names)
 
   Agents read the quality report in each dataset's profile and cite it in caveats.
-- **19 curated datasets** have hand-written cleaners, summing rules and caveats. Beyond them, the extraction
+- **20 curated datasets** have hand-written cleaners, summing rules and caveats. Beyond them, the extraction
   agent can search and load any of the 4,655 catalogue datasets; their shape is inferred automatically, and they
   are marked uncurated.
 

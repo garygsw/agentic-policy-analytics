@@ -1,0 +1,39 @@
+{
+ "quality": {
+  "dataset_id": "psi_by_region",
+  "rows_in": 108864,
+  "rows_out": 2250,
+  "invalid_periods": 0,
+  "missing_values": {
+   "highest_psi": 0,
+   "average_psi": 0,
+   "unhealthy_days": 0
+  },
+  "unparseable_values": {
+   "highest_psi": 0,
+   "average_psi": 0,
+   "unhealthy_days": 0
+  },
+  "duplicates_removed": 0,
+  "total_rows_removed": 0,
+  "personal_data_columns_dropped": [],
+  "coverage": [
+   "2014-04",
+   "2026-09"
+  ],
+  "notes": [
+   "summarised from 108,864 hourly rows, each with a reading for every region; 1 timestamps written in another format were read; 0 unreadable timestamps were dropped"
+  ]
+ },
+ "provenance": {
+  "origin": "snapshot",
+  "source": "data.gov.sg",
+  "agency": "National Environment Agency",
+  "urls": [
+   "https://data.gov.sg/datasets/d_b4cf557f8750260d229c49fd768e11ed/view"
+  ],
+  "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
+  "retrieved_at": "2026-10-16T03:05:47.677217+00:00",
+  "warning": null
+ }
+}
