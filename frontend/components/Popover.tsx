@@ -27,6 +27,16 @@ export function usePopover() {
   return { open, setOpen, ref };
 }
 
+/** The downward chevron on a menu button: drawn, so it sits centred beside the text at any font size. */
+export function Chevron() {
+  return (
+    <svg className="chevron" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M2.5 4.5L6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"
+        strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 /** An on/off switch. */
 export function Switch({ on, onChange, label }: { on: boolean; onChange: (on: boolean) => void; label: string }) {
   return (

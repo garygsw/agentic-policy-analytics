@@ -1,5 +1,5 @@
 "use client";
-import { usePopover } from "./Popover";
+import { Chevron, usePopover } from "./Popover";
 
 export type Mode = "auto" | "plan";
 
@@ -16,7 +16,8 @@ export function ModeMenu({ mode, onChange }: { mode: Mode; onChange: (mode: Mode
     <div className="menu-anchor" ref={ref}>
       <button type="button" className={`pill${mode === "plan" ? " plan" : ""}`} aria-haspopup="menu"
         aria-expanded={open} aria-label={`Mode: ${current.name}`} onClick={() => setOpen(!open)}>
-        {current.name} <span aria-hidden>⌄</span>
+        {current.name}
+        <Chevron />
       </button>
       {open && (
         <div className="popover align-left narrow" role="menu">

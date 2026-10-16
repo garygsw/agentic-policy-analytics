@@ -230,7 +230,8 @@ select { background: var(--panel); border: 1px solid var(--border); border-radiu
 .plus { flex: none; display: inline-flex; align-items: center; gap: 0.35rem; height: 2rem; min-width: 2rem; padding: 0 0.55rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--muted); font-size: 1.15rem; line-height: 1; }
 .plus:hover, .pill:hover { border-color: var(--accent); color: var(--fg); }
 .off-count { font-size: 0.72rem; color: var(--warn); }
-.pill { height: 2rem; padding: 0 0.7rem; border: 1px solid transparent; border-radius: 8px; background: none; font-size: 0.85rem; white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: 0.35rem; height: 2rem; padding: 0 0.7rem; border: 1px solid transparent; border-radius: 8px; background: none; font-size: 0.85rem; white-space: nowrap; }
+.chevron { flex: none; opacity: 0.75; }
 
 /* Menus open upward from the chat bar. */
 .popover { position: absolute; bottom: calc(100% + 8px); z-index: 30; width: 330px; max-width: calc(100vw - 2rem); padding: 0.35rem; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); box-shadow: 0 10px 30px rgb(0 0 0 / 14%); }

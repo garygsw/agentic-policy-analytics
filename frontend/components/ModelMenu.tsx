@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import type { OptionsResponse, RunOptions } from "@/lib/types";
 
-import { usePopover } from "./Popover";
+import { Chevron, usePopover } from "./Popover";
 
 const capitalise = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
@@ -26,7 +26,8 @@ export function ModelMenu({ catalog, value, onChange }: {
     <div className="menu-anchor" ref={ref}>
       <button type="button" className="pill" aria-haspopup="menu" aria-expanded={open}
         onClick={() => (open ? close() : setOpen(true))}>
-        {model?.name} <span className="muted">· {capitalise(effort)}</span> <span aria-hidden>⌄</span>
+        {model?.name} <span className="muted">· {capitalise(effort)}</span>
+        <Chevron />
       </button>
       {open && (
         <div className="popover align-right" role="menu">
