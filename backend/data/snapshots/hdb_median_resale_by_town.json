@@ -18,7 +18,8 @@
    "2026-Q2"
   ],
   "notes": [
-   "25 town labels differing only in letter case were merged"
+   "25 town labels differing only in letter case were merged",
+   "town labels for the same town under other names were merged: 'Central' as 'Central Area'; 'CENTRAL AREA' as 'Central Area'"
   ]
  },
  "provenance": {
@@ -29,7 +30,7 @@
    "https://data.gov.sg/datasets/d_b51323a474ba789fb4cc3db58a3116d4/view"
   ],
   "licence": "Singapore Open Data Licence v1.0 (https://data.gov.sg/open-data-licence)",
-  "retrieved_at": "2026-10-14T08:20:41.920443+00:00",
+  "retrieved_at": "2026-10-16T03:04:17.065739+00:00",
   "warning": null
  }
 }

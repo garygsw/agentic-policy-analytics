@@ -104,12 +104,13 @@ def unify_case(labels: pd.Series) -> tuple[pd.Series, int]:
 
 
 def tidy(df: pd.DataFrame, dataset_id: str, *, period: str | None, frequency: Frequency, dims: list[str],
-         measures: dict[str, str], total_labels: tuple[str, ...] = (),
-         zero_markers: tuple[str, ...] = ()) -> tuple[pd.DataFrame, QualityReport]:
+         measures: dict[str, str], total_labels: tuple[str, ...] = (), zero_markers: tuple[str, ...] = (),
+         same_as: dict[str, dict[str, str]] | None = None) -> tuple[pd.DataFrame, QualityReport]:
     """Reshape a wide official table into the tidy shape and report every row it had to drop.
 
     measures: {column: unit}. total_labels: dimension values such as "Total" that aggregate other rows; they
-    are removed so that sums over a dimension do not double count.
+    are removed so that sums over a dimension do not double count. same_as: {dimension: {label: label to use}},
+    for one thing published under different names (a town renamed between years), so its series is not split.
     """
     report = QualityReport(dataset_id=dataset_id, rows_in=len(df))
     frame = df.copy()
@@ -118,6 +119,11 @@ def tidy(df: pd.DataFrame, dataset_id: str, *, period: str | None, frequency: Fr
         frame[dim], merged = unify_case(frame[dim])
         if merged:
             report.notes.append(f"{merged} {dim} labels differing only in letter case were merged")
+        renames = {old: new for old, new in (same_as or {}).get(dim, {}).items() if (frame[dim] == old).any()}
+        if renames:
+            frame[dim] = frame[dim].replace(renames)
+            report.notes.append(f"{dim} labels for the same {dim} under other names were merged: "
+                                + "; ".join(f"'{old}' as '{new}'" for old, new in renames.items()))
     if total_labels:
         is_total = pd.Series(False, index=frame.index)
         for dim in dims:

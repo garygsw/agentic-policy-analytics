@@ -144,8 +144,10 @@ def clean_resale_index(raw: Raw):
 
 
 def clean_median_resale(raw: Raw):
+    # HDB published the central town as "Central" until 2018 and as "CENTRAL AREA" from 2019.
     return tidy(_csv(raw, MEDIAN_RESALE), "hdb_median_resale_by_town", period="quarter", frequency="quarterly",
-                dims=["town", "flat_type"], measures={"price": "S$"})
+                dims=["town", "flat_type"], measures={"price": "S$"},
+                same_as={"town": {"Central": "Central Area", "CENTRAL AREA": "Central Area"}})
 
 
 def clean_cea(raw: Raw):

@@ -178,6 +178,17 @@ def test_live_load_is_stored_in_the_database_then_reused(tmp_path):
     assert len(rows) == len(first.frame) and rows[0][2] == first.frame["value"].iloc[0]
 
 
+def test_a_town_published_under_two_names_is_one_series():
+    """HDB published the central town as "Central" until 2018 and "CENTRAL AREA" after: one series, noted."""
+    raw = pd.DataFrame({"quarter": ["2018-Q4", "2019-Q1", "2019-Q1"], "town": ["Central", "CENTRAL AREA", "Bedok"],
+                        "flat_type": ["4-room"] * 3, "price": ["900000", "950000", "500000"]})
+    frame, report = tidy(raw, "t", period="quarter", frequency="quarterly", dims=["town", "flat_type"],
+                         measures={"price": "S$"}, same_as={"town": {"Central": "Central Area",
+                                                                     "CENTRAL AREA": "Central Area"}})
+    assert sorted(frame["town"].unique()) == ["Bedok", "Central Area"]
+    assert any("'Central' as 'Central Area'" in note for note in report.notes)
+
+
 def test_stores_created_at_once_in_parallel_runs_share_one_set_of_tables(tmp_path):
     """Parallel runs each create a store; the tables must be created once, not by every thread at the same time."""
     from concurrent.futures import ThreadPoolExecutor

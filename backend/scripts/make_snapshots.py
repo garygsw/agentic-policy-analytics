@@ -17,9 +17,11 @@ from app.data.store import SNAPSHOT_DIR, DataStore, LoadedDataset
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--fetch", action="store_true", help="download fresh raw files instead of reusing stored ones")
+    parser.add_argument("--only", help="comma-separated dataset keys (default: every curated dataset)")
     args = parser.parse_args()
     store = DataStore()
-    for key, dataset in CURATED.items():
+    keys = args.only.split(",") if args.only else list(CURATED)
+    for key, dataset in ((k, CURATED[k]) for k in keys):
         raws, mtimes = {}, []
         for source_id in dataset.source_ids:
             stored = store.tables.raw(dataset.source, source_id)
