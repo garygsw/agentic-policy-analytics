@@ -137,6 +137,19 @@ class VerifyTest(unittest.TestCase):
         self.assertEqual(set_keys.verify("ANTHROPIC_API_KEY", FAKE_ANTHROPIC, opener), (True, "OK"))
         self.assertEqual(seen["X-api-key"], FAKE_ANTHROPIC)
 
+    def test_a_langsmith_key_refused_in_one_region_names_the_region_that_accepts_it(self):
+        def opener(request, timeout, context):
+            if request.full_url.startswith("https://apac."):
+                return self.FakeResponse(b"[]")
+            raise urllib.error.HTTPError(request.full_url, 403, "Forbidden", {}, io.BytesIO())
+
+        lines = [f"LANGSMITH_API_KEY={FAKE_LANGSMITH}"]
+        ok, message = set_keys.check_langsmith(lines, opener)
+        self.assertFalse(ok)
+        self.assertIn("set LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com", message)
+        self.assertEqual(set_keys.check_langsmith(lines + ["LANGSMITH_ENDPOINT=https://apac.api.smith.langchain.com"],
+                                                  opener), (True, "OK"))
+
     def test_rejected_key_and_missing_key(self):
         def opener(request, timeout, context):
             raise urllib.error.HTTPError(request.full_url, 401, "Unauthorized", {}, io.BytesIO())

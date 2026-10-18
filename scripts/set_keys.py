@@ -81,9 +81,9 @@ PROVIDERS = {
     "LANGSMITH_API_KEY": {
         "label": "LangSmith (tracing)",
         "purpose": "Traces every graph step and LLM call in LangSmith (README, Observability). This sends prompts "
-                   "and data to LangSmith. Saving a key also sets LANGSMITH_TRACING=true and a project name. If the "
-                   "key reaches several workspaces, also set LANGSMITH_WORKSPACE_ID in .env (the ID on the "
-                   "workspace's page).",
+                   "and data to LangSmith. Saving a key also sets LANGSMITH_TRACING=true, a project name and, for "
+                   "an account outside the US region, LANGSMITH_ENDPOINT. LangSmith's LANGSMITH_AGENT_* settings are "
+                   "not needed. If the key reaches several workspaces, also set LANGSMITH_WORKSPACE_ID in .env.",
         "steps": ["Sign up at https://smith.langchain.com.",
                   "Open Settings > API Keys and click 'Create API Key' (a personal access token).",
                   "Copy the key straight away: it is shown only once."],
@@ -91,7 +91,7 @@ PROVIDERS = {
         "typical": "about 51 characters",
         "prefixes": ("lsv2_",),
         "length": (40, 64),
-        "url": "https://api.smith.langchain.com/api/v1/workspaces",
+        "url": "https://api.smith.langchain.com/api/v1/workspaces",  # or the region in LANGSMITH_ENDPOINT
         "headers": lambda key: {"x-api-key": key},
         "also_set": {"LANGSMITH_TRACING": "true", "LANGSMITH_PROJECT": "policy-analytics"},
     },
@@ -123,6 +123,10 @@ PROVIDERS = {
     },
 }
 REQUIRED = [name for name, p in PROVIDERS.items() if p.get("required")]
+# LangSmith keeps each account in one region, and a key is refused by the others. Only these addresses are used,
+# so a LANGSMITH_ENDPOINT in .env cannot send a key anywhere else.
+LANGSMITH_REGIONS = ("https://api.smith.langchain.com", "https://eu.api.smith.langchain.com",
+                     "https://apac.api.smith.langchain.com")
 
 
 def read_lines(path: Path) -> list[str]:
@@ -228,6 +232,27 @@ def save_key(lines: list[str], name: str, value: str) -> list[str]:
     return lines
 
 
+def langsmith_region(value: str, workspace: str = "", opener=urllib.request.urlopen) -> str | None:
+    """The LangSmith region that accepts this key, if any (free calls, one per region)."""
+    for endpoint in LANGSMITH_REGIONS:
+        if verify("LANGSMITH_API_KEY", value, opener, workspace, endpoint)[0]:
+            return endpoint
+    return None
+
+
+def check_langsmith(lines: list[str], opener=urllib.request.urlopen) -> tuple[bool, str]:
+    """Verify the LangSmith key in its configured region; if refused there, say which region accepts it."""
+    value, workspace = get_value(lines, "LANGSMITH_API_KEY"), get_value(lines, "LANGSMITH_WORKSPACE_ID")
+    endpoint = get_value(lines, "LANGSMITH_ENDPOINT") or LANGSMITH_REGIONS[0]
+    ok, message = verify("LANGSMITH_API_KEY", value, opener, workspace, endpoint)
+    if ok or not value:
+        return ok, message
+    found = langsmith_region(value, workspace, opener)
+    if found and found != endpoint:
+        return False, f"{message} at {endpoint}; accepted at {found}: set LANGSMITH_ENDPOINT={found}"
+    return False, message
+
+
 def tls_context() -> ssl.SSLContext:
     """Default trust store, or the OS bundle when this Python build ships none (seen with some pyenv builds)."""
     context = ssl.create_default_context()
@@ -239,16 +264,21 @@ def tls_context() -> ssl.SSLContext:
     return context
 
 
-def verify(name: str, value: str, opener=urllib.request.urlopen, workspace: str = "") -> tuple[bool, str]:
-    """List models (or show the key's status) with the key: proves it is accepted, costs no tokens. A LangSmith key
-    that reaches several workspaces also needs the workspace (LANGSMITH_WORKSPACE_ID)."""
+def verify(name: str, value: str, opener=urllib.request.urlopen, workspace: str = "",
+           endpoint: str = "") -> tuple[bool, str]:
+    """List models (or show the key's status) with the key: proves it is accepted, costs no tokens. For LangSmith:
+    the region's address (LANGSMITH_ENDPOINT, one of LANGSMITH_REGIONS) and, for a key that reaches several
+    workspaces, the workspace (LANGSMITH_WORKSPACE_ID)."""
     provider = PROVIDERS[name]
     if not value:
         return (False, "not set") if provider.get("required") else (True, "not set (optional)")
     headers = {"User-Agent": "set-keys-check/1.0", **provider["headers"](value)}
-    if workspace and name == "LANGSMITH_API_KEY":
-        headers["X-Tenant-Id"] = workspace
     url = provider["url"](value) if callable(provider["url"]) else provider["url"]  # FIRMS takes the key in the URL
+    if name == "LANGSMITH_API_KEY":
+        if workspace:
+            headers["X-Tenant-Id"] = workspace
+        if endpoint in LANGSMITH_REGIONS:
+            url = f"{endpoint}/api/v1/workspaces"
     try:
         request = urllib.request.Request(url, headers=headers)
         with opener(request, timeout=15, context=tls_context()) as response:
@@ -279,8 +309,8 @@ def main(argv: list[str] | None = None, ask=getpass.getpass, confirm=input) -> i
     lines = read_lines(env_file) or read_lines(env_file.with_name(".env.example"))
 
     if args.verify:
-        workspace = get_value(lines, "LANGSMITH_WORKSPACE_ID")
-        results = {name: verify(name, get_value(lines, name), workspace=workspace) for name in names}
+        results = {name: check_langsmith(lines) if name == "LANGSMITH_API_KEY" else verify(name, get_value(lines, name))
+                   for name in names}
         for name, (_, message) in results.items():
             print(f"{name}: {message}")
         return 0 if all(ok for ok, _ in results.values()) else 1
@@ -299,6 +329,11 @@ def main(argv: list[str] | None = None, ask=getpass.getpass, confirm=input) -> i
     if not changed:
         print("No changes.")
         return 0
+    if "LANGSMITH_API_KEY" in changed and not get_value(lines, "LANGSMITH_ENDPOINT"):
+        found = langsmith_region(get_value(lines, "LANGSMITH_API_KEY"), get_value(lines, "LANGSMITH_WORKSPACE_ID"))
+        if found and found != LANGSMITH_REGIONS[0]:  # an account outside the US region
+            lines = set_value(lines, "LANGSMITH_ENDPOINT", found)
+            print(f"LangSmith accepts this key at {found}: saved it as LANGSMITH_ENDPOINT.")
     write_lines(env_file, lines)
     print(f"Saved {', '.join(changed)} to {env_file.name} (owner-only permissions).")
     print("Check them with: python3 scripts/set_keys.py --verify")

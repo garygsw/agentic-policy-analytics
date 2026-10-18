@@ -96,7 +96,8 @@ def verify_keys() -> bool:
         value = set_keys.get_value(lines, name)
         if not value and not provider.get("required"):
             continue
-        accepted, message = set_keys.verify(name, value)
+        accepted, message = (set_keys.check_langsmith(lines) if name == "LANGSMITH_API_KEY"
+                             else set_keys.verify(name, value))
         print(f"  {name}: {message}")
         if not accepted and provider.get("required"):
             ok = False

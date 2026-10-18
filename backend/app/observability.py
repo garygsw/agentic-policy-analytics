@@ -93,6 +93,11 @@ def enable_tracing(settings: Settings | None = None) -> bool:
     os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key.get_secret_value()
     if settings.langsmith_project:
         os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
+    # LangSmith's setup snippet may also name an agent. LangChain's tracer always names a project, and LangSmith
+    # refuses a run addressed to both, so every trace would be lost: the agent is dropped, the project kept.
+    dropped = [n for n in ("LANGSMITH_AGENT_ID", "LANGSMITH_AGENT_ENVIRONMENT") if os.environ.pop(n, None)]
+    if dropped:
+        logging.getLogger("app.api").warning(f"{' and '.join(dropped)} ignored: traces go to the LangSmith project")
     if settings.langsmith_endpoint:
         os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
     if settings.langsmith_workspace_id:
