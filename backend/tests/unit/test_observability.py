@@ -55,9 +55,11 @@ def test_setup_picks_the_format_and_routes_uvicorn_through_it():
 
 
 def test_langsmith_is_off_unless_switched_on_with_a_key(monkeypatch):
-    for name in ("LANGSMITH_TRACING", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_ENDPOINT"):
+    for name in ("LANGSMITH_TRACING", "LANGSMITH_API_KEY", "LANGSMITH_PROJECT", "LANGSMITH_ENDPOINT",
+                 "LANGSMITH_WORKSPACE_ID"):
         monkeypatch.setenv(name, "")  # recorded first, so whatever enable_tracing sets is undone afterwards
         monkeypatch.delenv(name)
     assert not enable_tracing(settings()) and not enable_tracing(settings(langsmith_tracing=True))  # no key
-    assert enable_tracing(settings(langsmith_tracing=True, langsmith_api_key="ls-test", langsmith_project="policy"))
-    assert (os.environ["LANGSMITH_TRACING"], os.environ["LANGSMITH_PROJECT"]) == ("true", "policy")
+    assert enable_tracing(settings(langsmith_tracing=True, langsmith_api_key="ls-test", langsmith_project="policy",
+                                   langsmith_workspace_id="ws-1"))
+    assert [os.environ[f"LANGSMITH_{n}"] for n in ("TRACING", "PROJECT", "WORKSPACE_ID")] == ["true", "policy", "ws-1"]

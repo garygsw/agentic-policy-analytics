@@ -12,13 +12,14 @@ communications sector changed since 2019?". A team of AI agents answers it:
 You can watch the agents work live: each step, the reasoning behind it, tokens and cost, and what each agent was
 given to read.
 
-**Demo video** (4 minutes, narrated, with captions): Plan mode and the plan approval, the agents at work, a report and
-its Detail levels, triage of an off-topic question, then HDB prices, COE premiums, the 2025 general election and the
-haze, each on real data. Waiting for the agents is shown sped up.
+**Demo video** (4½ minutes, narrated, with captions): Plan mode and the plan approval, the agents at work, a report
+and its Detail levels, the Inspector (each agent's context window, and every LLM call's tokens and cost), triage of an
+off-topic question, then HDB prices, COE premiums, the 2025 general election and the haze, each on real data. Waiting
+for the agents is shown sped up.
 
-https://github.com/user-attachments/assets/b8c7b5b4-0911-4ac4-80a7-457d0234e295
+https://github.com/user-attachments/assets/4a49a5db-b7ac-4873-8d0c-3e6647caa335
 
-Full quality (1080p, 17 MB): [download it from the v1.0.3 release](https://github.com/garygsw/agentic-policy-analytics/releases/download/v1.0.3/policy-demo.mp4).
+Full quality (1080p, 18 MB): [download it from the v1.0.4 release](https://github.com/garygsw/agentic-policy-analytics/releases/download/v1.0.4/policy-demo.mp4).
 
 **What it does**
 - **Answers from official data.** 22 curated datasets from MOM, HDB, URA, LTA, MOH, NEA, ELD, IMDA, SingStat and
@@ -469,7 +470,8 @@ Three layers, from built in to optional:
 
 - **LangSmith (optional).** The agents run on LangChain and LangGraph, so `LANGSMITH_TRACING=true`,
   `LANGSMITH_API_KEY` and `LANGSMITH_PROJECT` in `.env` trace every graph step and LLM call in LangSmith, with no code
-  change (`LANGSMITH_ENDPOINT` selects another region). This sends prompts and data to LangSmith, so leave it off
+  change (`LANGSMITH_ENDPOINT` selects another region, and `LANGSMITH_WORKSPACE_ID` names the workspace when a key
+  can reach several). This sends prompts and data to LangSmith, so leave it off
   where data must stay in your environment. Personal data is still rejected before anything reaches a model or a
   trace.
 

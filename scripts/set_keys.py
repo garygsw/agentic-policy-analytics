@@ -81,7 +81,9 @@ PROVIDERS = {
     "LANGSMITH_API_KEY": {
         "label": "LangSmith (tracing)",
         "purpose": "Traces every graph step and LLM call in LangSmith (README, Observability). This sends prompts "
-                   "and data to LangSmith. Saving a key also sets LANGSMITH_TRACING=true and a project name.",
+                   "and data to LangSmith. Saving a key also sets LANGSMITH_TRACING=true and a project name. If the "
+                   "key reaches several workspaces, also set LANGSMITH_WORKSPACE_ID in .env (the ID on the "
+                   "workspace's page).",
         "steps": ["Sign up at https://smith.langchain.com.",
                   "Open Settings > API Keys and click 'Create API Key' (a personal access token).",
                   "Copy the key straight away: it is shown only once."],
@@ -237,12 +239,15 @@ def tls_context() -> ssl.SSLContext:
     return context
 
 
-def verify(name: str, value: str, opener=urllib.request.urlopen) -> tuple[bool, str]:
-    """List models (or show the key's status) with the key: proves it is accepted, costs no tokens."""
+def verify(name: str, value: str, opener=urllib.request.urlopen, workspace: str = "") -> tuple[bool, str]:
+    """List models (or show the key's status) with the key: proves it is accepted, costs no tokens. A LangSmith key
+    that reaches several workspaces also needs the workspace (LANGSMITH_WORKSPACE_ID)."""
     provider = PROVIDERS[name]
     if not value:
         return (False, "not set") if provider.get("required") else (True, "not set (optional)")
     headers = {"User-Agent": "set-keys-check/1.0", **provider["headers"](value)}
+    if workspace and name == "LANGSMITH_API_KEY":
+        headers["X-Tenant-Id"] = workspace
     url = provider["url"](value) if callable(provider["url"]) else provider["url"]  # FIRMS takes the key in the URL
     try:
         request = urllib.request.Request(url, headers=headers)
@@ -274,7 +279,8 @@ def main(argv: list[str] | None = None, ask=getpass.getpass, confirm=input) -> i
     lines = read_lines(env_file) or read_lines(env_file.with_name(".env.example"))
 
     if args.verify:
-        results = {name: verify(name, get_value(lines, name)) for name in names}
+        workspace = get_value(lines, "LANGSMITH_WORKSPACE_ID")
+        results = {name: verify(name, get_value(lines, name), workspace=workspace) for name in names}
         for name, (_, message) in results.items():
             print(f"{name}: {message}")
         return 0 if all(ok for ok, _ in results.values()) else 1

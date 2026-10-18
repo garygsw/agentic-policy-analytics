@@ -95,4 +95,6 @@ def enable_tracing(settings: Settings | None = None) -> bool:
         os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
     if settings.langsmith_endpoint:
         os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
+    if settings.langsmith_workspace_id:
+        os.environ["LANGSMITH_WORKSPACE_ID"] = settings.langsmith_workspace_id
     return True

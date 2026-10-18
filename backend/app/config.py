@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     langsmith_api_key: SecretStr | None = None
     langsmith_project: str | None = None
     langsmith_endpoint: str | None = None  # e.g. the EU endpoint; LangSmith's default otherwise
+    langsmith_workspace_id: str | None = None  # only when the key can reach several workspaces
 
     # Data sources: cleaned data younger than this is reused without fetching again.
     data_max_age_hours: float = 24.0
