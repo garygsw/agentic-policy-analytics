@@ -6,6 +6,7 @@ Requests are stateless: a conversation's state is in the LangGraph checkpointer 
 calls are in the application database, so any request (or any API process) can continue any conversation.
 """
 import asyncio
+import logging
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -28,6 +29,7 @@ from app.graph.options import RunOptions, available_models, available_tools
 from app.guardrails.language import detect_language
 from app.guardrails.pii import rejection_message, screen
 from app.llm.providers import chat
+from app.observability import enable_tracing, setup_logging
 
 CHECKPOINTS = REPO_ROOT / "var" / "checkpoints.sqlite"
 # The report page runs only its own inline script and plotly.js from cdnjs; it can load nothing else.
@@ -88,6 +90,9 @@ def retitle_old_threads(sessions, llm) -> None:
 def create_app(graph=None, sessions=None, retriever=None, store: DataStore | None = None,
                preload_models: bool = True, llm=None) -> FastAPI:
     title_llm = llm or chat  # the model factory that writes conversation titles
+    setup_logging()  # here, not at startup: uvicorn's first lines are written before the startup hook runs
+    tracing = enable_tracing()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.sessions = sessions or make_session_factory()
@@ -95,6 +100,8 @@ def create_app(graph=None, sessions=None, retriever=None, store: DataStore | Non
         app.state.manager = RunManager(app.state.graph, app.state.sessions)
         app.state.background = set()  # title tasks, kept referenced until they finish
         app.state.manager.recover()  # runs cut off when the server last stopped carry on from their last step
+        logging.getLogger("app.api").info("API ready", extra={"data": {
+            "log_format": get_settings().log_format, "langsmith_tracing": tracing}})
         if preload_models:
             threading.Thread(target=warm_up, daemon=True).start()
             threading.Thread(target=retitle_old_threads, args=(app.state.sessions, title_llm), daemon=True).start()

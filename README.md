@@ -316,7 +316,7 @@ Settings are read from `.env`; see `.env.example`. The keys:
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | | required: primary and fallback providers |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | | required: the two providers (each is the other's fallback) |
 | `TAVILY_API_KEY` | | optional: the web search tool |
 | `TYPESAFE_API_KEY` | | optional: only for the triage trial's Jev comparison |
 | `FIRMS_MAP_KEY` | | optional: only to rebuild the fire-hotspot snapshot (`scripts/make_hotspots.py`) |
@@ -344,6 +344,14 @@ Demo switches:
 |---|---|---|
 | `FORCE_PRIMARY_FAIL` | `false` | make the primary provider fail |
 | `FORCE_SOURCE_FAIL` | `false` | make live data sources fail |
+
+Logs and tracing (see [Observability](#observability)):
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `LOG_FORMAT` | `text` | `json` writes one JSON object per line, for a log platform |
+| `LOG_LEVEL` | `INFO` | the lowest level logged |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` | off | optional LangSmith tracing (sends prompts and data to LangSmith) |
 
 Deployment (also read by Docker Compose; see the next section):
 
@@ -402,7 +410,7 @@ The published web image calls the API at `http://localhost:8000`, so the browser
 **Running it:**
 - **Health.** `/api/health` says the API is up (Docker uses it). `/api/health/ready` checks the database, the
   keys, the document index and web search, and answers 503 if the API cannot answer questions.
-- **Logs.** `docker compose logs -f api`; every LLM call is also in the inspector and the database.
+- **Logs.** `docker compose logs -f api`; set `LOG_FORMAT=json` for a log platform (see [Observability](#observability)).
 - **Backups.** All state is in the `state` volume. SQLite files must not be copied while in use, so stop the
   stack first:
 
@@ -420,6 +428,39 @@ The published web image calls the API at `http://localhost:8000`, so the browser
 
 **Limits of this setup:** one machine, SQLite, and runs inside the single API process, so do not run several API
 replicas (D-041). For many users, see "Scaling and production" in ARCHITECTURE.md.
+
+## Observability
+
+Three layers, from built in to optional:
+
+- **Every run, in the app.** Each step of a run is stored as an event, so a run can be replayed
+  (`GET /api/runs/{id}/events`). Every LLM call is recorded with its agent, provider, model, tokens, cost and
+  latency, and what filled the model's context. The web UI's Inspector shows them, and `GET /api/runs/{id}` returns
+  them.
+- **Logs for a log platform.** With `LOG_FORMAT=json` in `.env`, the API (including the workers that run questions)
+  and the ingest service write one JSON object per line, which Loki and Grafana, Datadog, ELK or CloudWatch can
+  ingest as it is. `text`, the default, is for reading in a terminal. Every line has `ts` (UTC), `level`, `logger`
+  and `message`. Lines written while a question is being worked on also carry its `run_id`, so one run can be
+  followed end to end, and some add fields such as `agent`, `model` or `cost_usd`. Logged: each run's start and end
+  (status, outcome, LLM calls, cost, seconds), every LLM call, a failed call before the other provider takes over, a
+  data source falling back to stored data, and runs continued after a restart. Logs carry IDs, statuses, timings and
+  costs, never questions or answers. A line from a real run:
+
+  ```json
+  {"ts": "2026-10-18T09:26:43.049+00:00", "level": "INFO", "logger": "app.runs", "message": "LLM call", "run_id": "c168fff6c3f5", "agent": "coordinator", "provider": "anthropic", "model": "claude-sonnet-5-5", "ok": true, "latency_ms": 4213, "input_tokens": 2615, "output_tokens": 252, "cost_usd": 0.00775}
+  ```
+
+  To follow one run in Docker:
+
+  ```bash
+  docker compose logs api --no-log-prefix | grep '"run_id": "RUN_ID"'
+  ```
+
+- **LangSmith (optional).** The agents run on LangChain and LangGraph, so `LANGSMITH_TRACING=true`,
+  `LANGSMITH_API_KEY` and `LANGSMITH_PROJECT` in `.env` trace every graph step and LLM call in LangSmith, with no code
+  change (`LANGSMITH_ENDPOINT` selects another region). This sends prompts and data to LangSmith, so leave it off
+  where data must stay in your environment. Personal data is still rejected before anything reaches a model or a
+  trace.
 
 ## Repository layout
 

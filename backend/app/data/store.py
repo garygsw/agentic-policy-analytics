@@ -8,6 +8,7 @@ hidden.
 import datetime as dt
 import io
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -22,6 +23,8 @@ from app.data.database import DatasetTables
 from app.data.http import SourceUnavailable
 from app.data.registry import CURATED, CuratedDataset
 from app.data.sources import DATA_DIR, SOURCES
+
+log = logging.getLogger("app.data")
 
 SNAPSHOT_DIR = DATA_DIR / "snapshots"
 
@@ -100,6 +103,8 @@ class DataStore:
                 raise DataUnavailable(message) from error
             fallback.provenance.warning = (f"Live source unavailable ({error}); using {fallback.provenance.origin} "
                                            f"data retrieved {fallback.provenance.retrieved_at[:10]}")
+            log.warning("live data source unavailable, using stored data", extra={"data": {
+                "dataset": dataset.key, "using": fallback.provenance.origin, "error": str(error)}})
             return fallback
         frame, quality = dataset.clean(raws)
         loaded = LoadedDataset(dataset, frame, quality, self.provenance(dataset, "live", now().isoformat()))

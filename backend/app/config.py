@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     # Demo switch: make every primary call fail so the fallback is visible.
     force_primary_fail: bool = False
 
+    # Logs: text for a terminal, json for a log platform (one JSON object per line). See app/observability.py.
+    log_format: Literal["text", "json"] = "text"
+    log_level: str = "INFO"
+    # Optional LangSmith tracing of every graph step and LLM call. It sends prompts and data to LangSmith.
+    langsmith_tracing: bool = False
+    langsmith_api_key: SecretStr | None = None
+    langsmith_project: str | None = None
+    langsmith_endpoint: str | None = None  # e.g. the EU endpoint; LangSmith's default otherwise
+
     # Data sources: cleaned data younger than this is reused without fetching again.
     data_max_age_hours: float = 24.0
     # Demo switch: treat every live data source as down, so cached data and snapshots are used.

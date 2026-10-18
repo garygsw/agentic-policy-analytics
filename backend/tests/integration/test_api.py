@@ -1,4 +1,5 @@
 """The API with the real graph, database and run manager; LLMs are scripted chat models (no network)."""
+import logging
 import threading
 import time
 
@@ -81,6 +82,17 @@ def test_health_and_options(tmp_path):
         assert "web_scopes" not in options and "triage" not in options["defaults"]
         assert [v["name"] for v in options["verbosity"]] == ["normal", "thinking", "verbose"]
         assert options["defaults"]["reasoning_effort"] == "low"
+
+
+def test_a_run_logs_its_start_each_llm_call_and_its_end_with_its_id(tmp_path, caplog):
+    caplog.set_level(logging.INFO, logger="app.runs")
+    with client_for(ANSWERED, tmp_path) as client:
+        thread = client.post("/api/threads").json()["id"]
+        run_id = client.post(f"/api/threads/{thread}/messages", json={"text": QUESTION}).json()["run_id"]
+        wait(client, run_id)
+    lines = [(r.getMessage(), r.run_id) for r in caplog.records if r.name == "app.runs"]
+    assert lines[0] == ("run started", run_id) and lines[-1] == ("run completed", run_id)
+    assert ("LLM call", run_id) in lines  # logged inside the graph's steps, and still tagged with the run
 
 
 def test_message_runs_in_the_background_to_an_answer(answered):

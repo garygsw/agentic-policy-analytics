@@ -7,6 +7,7 @@ only in memory: any API process can serve its history.
 """
 import asyncio
 import datetime as dt
+import logging
 import threading
 import time
 import uuid
@@ -21,10 +22,12 @@ from app.api.db import LLMCallRecord, Run, RunEvent, Thread, utcnow
 from app.graph.events import LEVELS
 from app.graph.options import RunOptions
 from app.llm.ledger import Ledger
+from app.observability import run_context
 from app.report.export import export_markdown, export_pdf
 
 TERMINAL = {"completed", "failed", "cancelled"}
 RESTART_NOTE = "Server restarted: continuing from the last saved step"
+log = logging.getLogger("app.runs")
 DRAFT_FLUSH_CHARS = 120  # a draft snapshot is stored after about this many new characters, not every token
 
 
@@ -97,11 +100,15 @@ class RunManager:
         for run in orphans:
             pending = self.graph.get_state({"configurable": {"thread_id": run.thread_id}}).next
             if continued_before[run.id] or not pending:
+                with run_context(run.id):
+                    log.warning("run cut off by a restart, not continued")
                 self._finish(run.id, status="failed", ledger=Ledger(), error="Cut off by a server restart")
                 self.append(run.id, {"node": "run", "kind": "end", "level": 1, "status": "failed", "ts": time.time(),
                                      "content": "The server restarted while this analysis was running. "
                                                 "Please ask again."})
                 continue
+            with run_context(run.id):
+                log.warning("run cut off by a restart, continuing from its last step")
             self.append(run.id, {"node": "run", "kind": "observation", "level": 1, "content": RESTART_NOTE,
                                  "restart": True, "ts": time.time()})
             # no input: carry on from the checkpoint
@@ -119,6 +126,13 @@ class RunManager:
 
     # -- the worker thread ---------------------------------------------------------------------------------------
     def _execute(self, run_id: str, thread_id: str, payload, options: dict) -> None:
+        with run_context(run_id):  # every line logged while this run is worked on carries its ID
+            log.info("run started", extra={"data": {"thread_id": thread_id,
+                                                    "step": "continue" if payload is None or isinstance(
+                                                        payload, Command) else "question"}})
+            self._work(run_id, thread_id, payload, options)
+
+    def _work(self, run_id: str, thread_id: str, payload, options: dict) -> None:
         draft = {"id": None, "raw": "", "saved": 0}  # the report draft streaming in, and how much of it is stored
 
         def save(event: dict) -> None:
@@ -135,6 +149,14 @@ class RunManager:
             if kind != "llm_call":
                 return
             usage = record["usage"]
+            fields = {"agent": record["agent"], "provider": record["provider"], "model": record["model"],
+                      "ok": record["ok"], "latency_ms": record["latency_ms"],
+                      "input_tokens": usage["input_uncached"] + usage["cache_read"] + usage["cache_write"],
+                      "output_tokens": usage["output"], "cost_usd": record["cost_usd"]}
+            if record["ok"]:
+                log.info("LLM call", extra={"data": fields})
+            else:  # the other provider is tried next
+                log.warning("LLM call failed", extra={"data": fields | {"error": record["error"]}})
             with self.sessions() as db:
                 db.add(LLMCallRecord(run_id=run_id, agent=record["agent"], provider=record["provider"],
                                      model=record["model"], effort=record.get("effort"), ok=record["ok"],
@@ -185,6 +207,7 @@ class RunManager:
                       "status": "completed", "outcome": values.get("outcome"), "flags": values.get("flags") or [],
                       "ts": time.time()})
         except Exception as error:  # noqa: BLE001 - the run fails visibly; the server keeps going
+            log.exception("run failed")
             self._finish(run_id, status="failed", ledger=ledger, error=f"{type(error).__name__}: {error}")
             save({"node": "run", "kind": "end", "level": 1, "content": f"Run failed: {type(error).__name__}",
                   "status": "failed", "ts": time.time()})
@@ -211,6 +234,12 @@ class RunManager:
             if status != "awaiting_input":
                 run.finished_at = utcnow()
             db.commit()
+            totals, seconds = run.totals or {}, None
+            if run.finished_at and run.started_at:  # the database returns times without a time zone
+                seconds = (run.finished_at.replace(tzinfo=None) - run.started_at.replace(tzinfo=None)).total_seconds()
+            log.info(f"run {status.replace('_', ' ')}", extra={"data": {
+                "outcome": run.outcome, "llm_calls": totals.get("llm_calls"), "cost_usd": totals.get("cost_usd"),
+                "seconds": round(seconds, 1) if seconds is not None else None}})
 
 
 def downloads(values: dict) -> tuple[str | None, bytes | None]:

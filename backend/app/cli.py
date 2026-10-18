@@ -22,6 +22,7 @@ from app.graph.checkpoint import sqlite_checkpointer
 from app.graph.options import RunOptions, available_models, available_tools
 from app.guardrails.pii import rejection_message, screen
 from app.llm.ledger import Ledger
+from app.observability import enable_tracing
 
 CHECKPOINTS = REPO_ROOT / "var" / "checkpoints.sqlite"
 REPORTS = REPO_ROOT / "var" / "reports"
@@ -184,6 +185,7 @@ def main() -> None:
     parser.add_argument("--tools", help="comma-separated optional tools to enable (default: all; see --options)")
     parser.add_argument("--options", action="store_true", help="list the models and tools that can be chosen")
     args = parser.parse_args()
+    enable_tracing()  # LangSmith, when it is set up in .env
     if args.options:
         print(json.dumps({"models": available_models(), "tools": available_tools()}, indent=1))
         return

@@ -13,6 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import get_settings
 from app.data import catalogue
+from app.observability import setup_logging
 from app.rag.embed import get_embedder
 from app.rag.ingest import index_catalogue, ingest_source
 from app.rag.search import open_index
@@ -43,7 +44,7 @@ def run_once() -> list[dict]:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    setup_logging()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--now", action="store_true", help="run once immediately and exit")
     args = parser.parse_args()
