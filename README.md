@@ -472,7 +472,9 @@ Three layers, from built in to optional:
   `https://apac.api.smith.langchain.com`); `python3 scripts/set_keys.py LANGSMITH_API_KEY` finds the region and sets
   it. `LANGSMITH_WORKSPACE_ID` names the workspace when a key can reach several. LangSmith's setup page may also list
   `LANGSMITH_AGENT_ID` and `LANGSMITH_AGENT_ENVIRONMENT`: leave them out. LangChain's tracer always names a project,
-  LangSmith refuses a run addressed to both, and the app drops them with a warning. This sends prompts and data to LangSmith, so leave it off
+  LangSmith refuses a run addressed to both, and the app drops them with a warning. To see the traces on an agent's
+  page instead, set `LANGSMITH_PROJECT` to that agent's project for the environment, `<agent>-<environment>` (for
+  example `my-agent-local`). This sends prompts and data to LangSmith, so leave it off
   where data must stay in your environment. Personal data is still rejected before anything reaches a model or a
   trace.
 
