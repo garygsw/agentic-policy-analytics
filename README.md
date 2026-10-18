@@ -282,8 +282,8 @@ From `backend/`:
 
 | What | Command |
 |---|---|
-| All unit and integration tests (197) | `uv run pytest` |
-| With line coverage (80%) | `uv run pytest --cov=app` |
+| All unit and integration tests (255) | `uv run pytest` |
+| With line coverage (85%) | `uv run pytest --cov=app` |
 | Lint | `uv run ruff check app tests scripts` |
 | Real provider calls (costs cents) | `uv run pytest -m live` |
 | Retrieval evaluation (free) | `uv run python -m app.evals.retrieval run` |
@@ -298,9 +298,12 @@ From `frontend/`:
 | Type check | `npm run typecheck` |
 | Production build | `npm run build` |
 
-GitHub Actions runs the backend and frontend checks on every push, then builds both Docker images, starts them
-and smoke-tests them. On version tags, it publishes the images. The test plan, the hallucination-detection
-method and all results are in [TESTING.md](TESTING.md).
+From the repository root, the deploy and key-entry scripts (21 tests, standard library only):
+`python3 -m unittest discover -s scripts/tests`.
+
+GitHub Actions scans for secrets and runs the backend, frontend and script checks on every push, then builds both
+Docker images, starts them and smoke-tests them. On version tags, it publishes the images. The test plan, the
+hallucination-detection method and all results are in [TESTING.md](TESTING.md).
 
 ## Technology choices
 
@@ -309,14 +312,15 @@ method and all results are in [TESTING.md](TESTING.md).
 | **LangGraph** for the agents | An explicit graph you can draw and test route by route. Checkpoints make requests stateless and let a run pause for the user (clarifying questions, plan approval) and resume later, even after a restart. A run cut off by a restart continues from its last step. |
 | **ReAct coordinator and tool-using agents** | The coordinator decides each step from what has been found, so it can retry, change approach, ask, or decline. A fixed pipeline cannot. |
 | **pandas computes; the model never does** | Numbers are the part users must be able to trust. Every number is a computed fact with an ID, and the report check enforces it in code. |
-| **OpenAI primary, Anthropic fallback** | Two independent providers at the same price tier, behind one interface. Each request can pick the model and its reasoning effort. |
+| **Two providers, by role, each the other's fallback** | Claude Sonnet 5.5 does the main work (coordinator, agents, report writer); GPT 6.1 Sol checks it, so the reviewer is never the model that wrote; GPT 6 Luna does short tasks. Every call falls back to the other provider behind one interface. Each request can pick the model and its reasoning effort. |
 | **FastAPI + WebSocket** | Async endpoints, background runs, and a stream of numbered events that late viewers can replay. Interactive API docs come for free. |
 | **SQLite** (app data, checkpoints, FTS5 + sqlite-vec index) | One file per store, nothing to operate, and enough for one machine. The scaling path to PostgreSQL and pgvector is in ARCHITECTURE.md. |
 | **Hybrid search** (BM25 + local embeddings, rank fusion) | Keyword search finds scheme names and figures; vectors find paraphrases. Fusion beat either alone, and beat adding a reranker, on our retrieval evaluation. |
 | **Local triage classifier, LLM when unsure** | 99% accurate on held-out questions in 3 ms, at a quarter of the cost of always asking an LLM. |
 | **Next.js + TypeScript**, one page | A live trace needs client state. A pure reducer turns events into the view, so live and replayed runs look the same. |
 | **Reports: HTML, Markdown and PDF** from one structure | The HTML (Plotly charts) is shown in the chat. The downloads (charts drawn with matplotlib, PDF with fpdf2) are built from the same state, with pure-Python libraries and no system dependencies. |
-| **Docker Compose, GitHub Actions** | Starts with one command. CI tests everything and smoke-tests the images on each push. |
+| **Docker Compose, GitHub Actions** | `python3 scripts/deploy.py` sets up the keys, checks them and starts everything with one command. CI tests everything and smoke-tests the images on each push. |
+| **JSON logs, optional LangSmith** | One JSON object per line with the run's ID on every line, so any log platform can collect it with no agent installed. LangSmith adds step-by-step traces when its key is set. |
 
 Every decision, with the alternatives considered, is in [docs/DECISIONS.md](docs/DECISIONS.md).
 
@@ -362,6 +366,7 @@ Logs and tracing (see [Observability](#observability)):
 | `LOG_FORMAT` | `text` | `json` writes one JSON object per line, for a log platform |
 | `LOG_LEVEL` | `INFO` | the lowest level logged |
 | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` | off | optional LangSmith tracing (sends prompts and data to LangSmith) |
+| `LANGSMITH_ENDPOINT`, `LANGSMITH_WORKSPACE_ID` | US region | the account's region (EU, APAC) and workspace, when needed |
 
 Deployment (also read by Docker Compose; see the next section):
 
@@ -379,7 +384,7 @@ to the GitHub Container Registry.
 **On one machine, from the published images.** Nothing is built:
 
 ```bash
-VERSION=v1.0.3 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
+VERSION=v1.0.4 docker compose -f docker-compose.yml -f docker-compose.release.yml up -d
 ```
 
 The published web image calls the API at `http://localhost:8000`, so the browser must be on the same machine.
@@ -493,16 +498,18 @@ backend/
     guardrails/  personal-data screen, language detection, triage classifier
     quality/     number grounding
     report/      HTML report template, Markdown and PDF downloads
+    skills/      playbooks for common analyses (Markdown), read by the agents
     evals/       retrieval and answer evaluations
     database.py  the application database (one SQLite file for both sets of tables)
+    observability.py  logs (text or JSON, tagged with the run ID) and optional LangSmith tracing
     cli.py       command-line interface
     admin.py     list and restore deleted conversations
   data/          snapshots, catalogue, mock internal workbook, evaluation sets and results
   tests/         unit/ and integration/ (pytest)
   scripts/       snapshots, mock data, triage trial, load test
 frontend/        Next.js UI (app/, components/, lib/)
-docs/            DECISIONS.md: every design decision
-scripts/         set_keys.py: enter and verify API keys
+docs/            DECISIONS.md: every design decision; diagrams/: the architecture images and their sources
+scripts/         deploy.py: one-command setup and start; set_keys.py: enter and verify API keys; tests/
 ARCHITECTURE.md  TESTING.md  DATA_SOURCES.md
 docker-compose.yml  docker-compose.release.yml (published images)  .github/workflows/ci.yml
 ```

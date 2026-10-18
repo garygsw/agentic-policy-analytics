@@ -102,7 +102,7 @@ Each entry records the date, the decision, the alternatives considered and the r
   - Services that need a separate registered key (LTA DataMall, URA's data API, OneMap): data.gov.sg already carries their datasets.
 - **Why:** One catalogue API covers the whole of government with consistent metadata (size, columns, coverage), and every source is used within its access rules.
 
-## D-015 · 2026-10-14 · LLM layer (tiers confirmed)
+## D-015 · 2026-10-14 · LLM layer (tiers confirmed; provider order changed by D-034 and D-057)
 - **Decision:**
   - LangChain chat models arranged in two tiers, each with an OpenAI primary and an Anthropic fallback: **quality** (`gpt-6.1-sol`, then `claude-sonnet-5-5`) and **fast** (`gpt-6-luna`, then `claude-haiku-5-5`). The models in each tier cost the same per token, so a fallback does not change the cost.
   - Provider endpoints are set in the app's own config, so ambient shell variables cannot redirect calls.

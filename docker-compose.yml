@@ -1,4 +1,5 @@
-# The whole system on one machine:
+# The whole system on one machine, in one command (keys, checks, build, start): python3 scripts/deploy.py
+# Or by hand:
 #   cp .env.example .env    # then add your keys, or: python3 scripts/set_keys.py
 #   docker compose up --build
 # Web UI: http://localhost:3000   API: http://localhost:8000/docs

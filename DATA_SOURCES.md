@@ -1,11 +1,14 @@
 # Data sources
 
-Where the data comes from, how it is fetched and cleaned, and what is mock. Four kinds of source feed the agents:
+Where the data comes from, how it is fetched and cleaned, and what is mock. The platform's own REST API is
+documented in [ARCHITECTURE.md](ARCHITECTURE.md#7-api-and-live-updates) and, when the API runs, at
+`http://localhost:8000/docs`. Four kinds of source feed the agents:
 
 | Kind | Source | Format | Access |
 |---|---|---|---|
 | Statistics | data.gov.sg (74 agencies, 4,655 datasets) | CSV via a JSON API | live, cached, snapshot fallback |
 | Statistics | SingStat Table Builder (Department of Statistics) | JSON API | live, cached, snapshot fallback |
+| Statistics | NASA FIRMS fire hotspots (for the haze analysis) | CSV API | committed snapshot, rebuilt by a script |
 | Internal data (mock) | a fictional agency's system | Excel workbook | local file |
 | Documents | MOM, MOF, PMO, MOH and URA websites | HTML pages | crawled by the ingest service into a search index |
 | Recent context | the web, through Tavily | search API | live, per question |
@@ -63,19 +66,6 @@ NEA's five PSI regions have no published boundaries; maps show them at the point
 
 ## 2. APIs used
 
-**NASA FIRMS** (`backend/app/data/sources.py`, `backend/scripts/make_hotspots.py`, free map key `FIRMS_MAP_KEY`):
-
-| Endpoint | Purpose |
-|---|---|
-| `GET https://firms.modaps.eosdis.nasa.gov/api/data_availability/csv/{key}/ALL` | The dates each product covers: the archive (`MODIS_SP`) ends a few months back; near-real-time (`MODIS_NRT`) covers the rest. |
-| `GET https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/{product}/{west,south,east,north}/{days}/{date}` | Fire detections in a box for up to 5 days. The script asks for July to October of every year since 2014 over Southeast Asia (92°E to 142°E, 12°S to 24°N). |
-
-The key is needed only to rebuild the snapshot, never while answering a question, so reviewers need none. It is part
-of the URL, so the client removes it from any error message. FIRMS data are free to use with acknowledgement:
-*data from LANCE FIRMS operated by NASA's Earth Science Data and Information System (ESDIS)*. Only the counts
-(by season, country and grid cell) are committed, not the detections.
-
-
 **data.gov.sg** (`backend/app/data/sources.py`, no key needed):
 
 | Endpoint | Purpose |
@@ -87,6 +77,18 @@ of the URL, so the client removes it from any error message. FIRMS data are free
 **SingStat Table Builder:**
 `GET https://tablebuilder.singstat.gov.sg/api/table/tabledata/{table_id}` returns a table as JSON. Series are
 nested by numbered rows (1, 1.1, 1.1.1), and the cleaner turns that numbering into hierarchy levels.
+
+**NASA FIRMS** (`backend/app/data/sources.py`, `backend/scripts/make_hotspots.py`, free map key `FIRMS_MAP_KEY`):
+
+| Endpoint | Purpose |
+|---|---|
+| `GET https://firms.modaps.eosdis.nasa.gov/api/data_availability/csv/{key}/ALL` | The dates each product covers: the archive (`MODIS_SP`) ends a few months back; near-real-time (`MODIS_NRT`) covers the rest. |
+| `GET https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/{product}/{west,south,east,north}/{days}/{date}` | Fire detections in a box for up to 5 days. The script asks for July to October of every year since 2014 over Southeast Asia (92°E to 142°E, 12°S to 24°N). |
+
+The key is needed only to rebuild the snapshot, never while answering a question, so reviewers need none. It is part
+of the URL, so the client removes it from any error message. FIRMS data are free to use with acknowledgement:
+*data from LANCE FIRMS operated by NASA's Earth Science Data and Information System (ESDIS)*. Only the counts
+(by season, country and grid cell) are committed, not the detections.
 
 **Tavily** (optional, `TAVILY_API_KEY`): `POST https://api.tavily.com/search`, over the whole web, at most 10
 searches per extraction task (`backend/app/rag/web.py`). The agents are told to prefer official sources

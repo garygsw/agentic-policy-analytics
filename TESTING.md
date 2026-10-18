@@ -5,9 +5,10 @@ re-run from `backend/` (and `frontend/` for the UI tests). Results are saved in 
 
 | Level | What it checks | Count | Command | Cost |
 |---|---|---|---|---|
-| Unit tests | agents, tools, skills, statistics, data cleaning, maps, guardrails, LLM layer, RAG, report check, downloads | 217 | `uv run pytest tests/unit` | free (fake models) |
-| Integration tests | the whole graph and API: background runs, pauses, streaming, replay, concurrency, restarts, downloads | 25 | `uv run pytest tests/integration` | free (scripted models) |
+| Unit tests | agents, tools, skills, statistics, data cleaning, maps, guardrails, LLM layer, RAG, report check, downloads, logging | 228 | `uv run pytest tests/unit` | free (fake models) |
+| Integration tests | the whole graph and API: background runs, pauses, streaming, replay, concurrency, restarts, downloads | 27 | `uv run pytest tests/integration` | free (scripted models) |
 | Frontend tests | the event reducer behind the live view, the history list, sidebar paging and width | 12 | `npm test` (in `frontend/`) | free |
+| Deploy and key scripts | first-run key setup, key checks, Docker checks | 21 | `python3 -m unittest discover -s scripts/tests` (repository root) | free |
 | Live provider tests | real calls to both providers, structured output, fallback | 3 | `uv run pytest -m live` | cents |
 | Retrieval evaluation | recall@k and MRR for each search mode | 50 questions | `uv run python -m app.evals.retrieval run` | free |
 | Triage evaluation | accuracy, F1, latency and cost of each classifier | 84 questions | `uv run python scripts/triage_trial.py` | cents |
@@ -58,7 +59,7 @@ The language models are the part that cannot be unit-tested, so the design keeps
 | Retrieval | `test_rag.py` (24): chunking, crawling rules, incremental re-crawls, each search mode, fusion, filters, per-document cap, web result de-duplication, concurrent searches |
 | Performance and load | `test_load.py`: 20 concurrent runs through the API with no lost events. `scripts/load_test.py`: HTTP load (section 6) |
 | Observability | `test_observability.py` (4): JSON log lines (UTC time, level, logger, message, run ID inside a run, structured fields, exceptions), text lines, setup routing uvicorn's logs through the same format, LangSmith off unless switched on with a key. `test_api.py`: a run's start, LLM calls and end logged with its ID |
-| Deployment scripts | `scripts/tests` (20, stdlib unittest, run in CI): the deploy script's Docker checks, first-run key setup (only missing required keys, optional ones on request), stopping on a missing or rejected required key; the key script's guide for each key, prefix and length checks, hidden input that is never printed, owner-only `.env`, refusal when git would not ignore it, a LangSmith key switching tracing on, `--missing` |
+| Deployment scripts | `scripts/tests` (21, stdlib unittest, run in CI): the deploy script's Docker checks, first-run key setup (only missing required keys, optional ones on request), stopping on a missing or rejected required key; the key script's guide for each key, prefix and length checks, hidden input that is never printed, owner-only `.env`, refusal when git would not ignore it, a LangSmith key switching tracing on, `--missing` |
 | Frontend | `runState.test.ts` (8): replayed events are idempotent, a rejected plan kept to reopen, usage adds up across pauses, draft revisions, status across pause and resume, working time excludes waiting, verbosity filtering. `threads.test.ts` (1): pinned conversations listed apart. `layout.test.ts` (3): sidebar width limits, paging, the list request |
 
 ## 3. Hallucination detection
@@ -87,9 +88,10 @@ The extraction understands thousands separators, percentages and unit words in f
 signs ("fell 6.8%" for −6.8). Every citation must name a fact, source or chart that exists, and every finding
 and caveat must cite something.
 
-A failing draft goes back to the writer with the exact problems, at most twice. After that, the user gets the
-computed facts as a template with no generated prose. A translation that changes any number is discarded, and
-the English report is shown instead.
+A failing draft goes back to the writer with the exact problems, at most twice. A statement that still fails is
+kept and flagged ⚠ with what could not be verified: never dropped, and never passed as checked (D-034). A report
+made only of the computed facts, with no generated prose, is used only when the models themselves fail. A
+translation that changes any number is discarded, and the English report is shown instead.
 
 **3. Measurement, by evaluation.**
 
@@ -107,7 +109,8 @@ statement still unsupported after two fixes is shown flagged ⚠, never dropped.
 judge (section 5); the results so far are mixed.
 
 **Tests that pin this behaviour down:**
-- `test_ungrounded_numbers_are_sent_back_then_fall_back_to_template`
+- `test_numbers_still_ungrounded_after_two_fixes_are_flagged_not_dropped`
+- `test_a_claim_still_unsupported_after_two_fixes_is_flagged_not_dropped`
 - `test_caveats_are_checked_like_findings`
 - `test_a_caveat_may_quote_the_quality_report_of_the_dataset_it_cites`
 - `test_translation_that_changes_a_number_falls_back_to_english`
@@ -117,9 +120,9 @@ judge (section 5); the results so far are mixed.
 
 ## 4. Coverage
 
-Line coverage of the backend is **83%** (`uv run pytest --cov=app`, 4,079 statements). Without the
+Line coverage of the backend is **85%** (`uv run pytest --cov=app`, 4,799 statements). Without the
 command-line programs (the evaluation runners, the terminal client, the ingest scheduler and the admin
-commands), it is **92.5%** (3,580 statements). CI saves the full report with every run: `coverage.xml` and an
+commands), it is **93.1%** (4,265 statements). CI saves the full report with every run: `coverage.xml` and an
 HTML report, under the run's artifacts (section 7).
 
 | Area | Coverage | Note |
@@ -127,7 +130,7 @@ HTML report, under the run's artifacts (section 7).
 | Statistics, workspace, cleaning, graph routing, guardrails, options, number grounding, LLM layer | 93–100% | the logic that decides answers |
 | Agent tools, reporting nodes, charts, the dataset store and its tables | 91–99% | |
 | API and run manager | 93–94% | |
-| Data sources, curated cleaners, RAG ingest and search | 67–94% | network paths are tested with stubs; live calls are not. The cleaners of some curated datasets run only when snapshots are rebuilt from live data |
+| Data sources, curated cleaners, RAG ingest and search | 63–94% | network paths are tested with stubs; live calls are not. The cleaners of some curated datasets run only when snapshots are rebuilt from live data |
 | CLI, admin commands | 34–56% | terminal front ends; the same graph and functions are tested through the API |
 | Ingest scheduler, evaluation runners | 0% | thin wrappers; the scheduler calls the tested ingest, and the runners are exercised by running the evaluations |
 
@@ -355,9 +358,9 @@ about 0.6 s, every run's events are numbered without gaps, and replay still work
 questions run in parallel in the answer evaluation.
 
 **Cost and time per question** (answer evaluation):
-- 35–70 s per answered question (median 51 s, default model Claude Sonnet 5.5)
-- $0.05–0.30 each
-- 10–19 LLM calls
+- 35–131 s per answered question (median 53 s, default model Claude Sonnet 5.5)
+- $0.13–0.55 each (median $0.17)
+- 9–19 LLM calls
 
 Most of the time is model latency. The live view shows elapsed time, tokens and cost while a run works.
 
@@ -365,8 +368,8 @@ Most of the time is model latency. The live view shows elapsed time, tokens and 
 
 `.github/workflows/ci.yml` runs on every push and pull request:
 
-1. **Backend:** `ruff` lint, then all 255 tests with coverage. The coverage report (`coverage.xml` and HTML) is
-   kept with the run for 30 days.
+1. **Backend:** `ruff` lint, the deploy and key script tests (21), then all 255 tests with coverage. The coverage
+   report (`coverage.xml` and HTML) is kept with the run for 30 days.
 2. **Frontend:** type check, unit tests and a production build.
 3. **Secrets:** gitleaks scans every commit in the history, not just the latest, since a key removed later is
    still published. (A local pre-commit hook also blocks keys before they are committed.)

@@ -1,7 +1,7 @@
 # Architecture
 
 How the system is built and why. The decisions behind each part, with the alternatives considered, are in
-[docs/DECISIONS.md](docs/DECISIONS.md) (D-001 to D-032).
+[docs/DECISIONS.md](docs/DECISIONS.md) (D-001 to D-060).
 
 ## 1. Overview
 
@@ -29,7 +29,7 @@ flowchart LR
   EX --> DS[(Data store<br/>data.gov.sg, SingStat,<br/>internal workbook)]
   EX --> IDX[(Document index<br/>SQLite FTS5 + vectors)]
   EX --> WEB[Web search<br/>Tavily]
-  Graph --> LLM[LLMs<br/>OpenAI, Anthropic fallback]
+  Graph --> LLM[LLMs<br/>Anthropic and OpenAI,<br/>each the other's fallback]
   RM --> APPDB[(app.sqlite<br/>runs, events, LLM calls)]
   Graph --> CK[(checkpoints.sqlite<br/>conversation state)]
   ING[Ingest service<br/>cron] --> IDX
@@ -44,7 +44,7 @@ flowchart LR
 | Statistics and charts | `backend/app/analysis/` | pandas, Plotly chart specs |
 | Data | `backend/app/data/` | data.gov.sg and SingStat APIs, Excel, snapshots |
 | Documents (RAG) | `backend/app/rag/` | trafilatura, SQLite FTS5, sqlite-vec, fastembed |
-| LLM layer | `backend/app/llm/` | OpenAI (primary) and Anthropic (fallback), usage ledger |
+| LLM layer | `backend/app/llm/` | Anthropic and OpenAI by role, each the other's fallback; usage ledger |
 | Guardrails | `backend/app/guardrails/` | PII screen, language detection, triage classifier |
 | Report check | `backend/app/quality/`, `graph/nodes/reporting.py` | number and citation grounding |
 | Reports | `backend/app/report/` | Jinja2 HTML with Plotly |
@@ -118,7 +118,7 @@ A run can also pause as `awaiting_input`.
 | | `web_search` | Tavily, over the whole web; returns untrusted passages W1, W2… At most 10 per task. |
 | Analytics | `describe_dataset` | Lists a dimension's values, so filters use exact labels. |
 | | `compute_trend` | A series' values, change, compound annual growth, peak and year-on-year changes. |
-| | `compare_groups` | Groups (e.g. industries) in one period, with shares where the measure can be added up. |
+| | `compare_groups` | Groups (e.g. industries) in one period, with shares where the measure can be added up. Lists every group up to 40 (the 15 highest beyond that) and records the counts as facts. |
 | | `rank_changes` | Ranks groups by their rise or fall between the same two periods. |
 | | `compute_correlation` | Pearson correlation of two series, of levels and of period-to-period changes. |
 | | `list_records` | Counts records in tables without a time dimension (e.g. planned stations). |
@@ -167,7 +167,7 @@ a numbered fact, and the report may only state numbers that match a fact or appe
 6. **Search results are data.** Passages and web pages are marked as source material, never instructions, to
    resist prompt injection. Web results are labelled untrusted.
 
-How well this works is measured in [TESTING.md](TESTING.md#hallucination-detection).
+How well this works is measured in [TESTING.md](TESTING.md#3-hallucination-detection).
 
 ## 4. LLM layer
 
@@ -450,8 +450,8 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
 
 ## 10. Security and privacy
 
-- **Secrets.** Keys live only in `.env`, which is gitignored and entered through `scripts/set_keys.py` with
-  hidden input. Docker images never contain `.env`.
+- **Secrets.** Keys live only in `.env`, which is gitignored and entered with hidden input, by `scripts/deploy.py` on
+  the first run or `scripts/set_keys.py` at any time. Docker images never contain `.env`.
 - **Personal data.** It is rejected before any model call (section 7). Datasets that identify individuals (CEA
   salesperson names and registration numbers) have those columns dropped on load.
 - **Prompt injection.** Search results are labelled as source material, never instructions. Web pages are marked
@@ -476,9 +476,10 @@ One client-rendered Next.js page (`frontend/app/page.tsx`):
 
 What this design would need in order to serve many users:
 
-- **Throughput is set by the language models, not the server.** With the default model, a question takes
-  about 35–70 seconds and costs about $0.05–0.30. With scripted models, 20 concurrent runs complete in 0.6 s with
-  no lost events. Read and search endpoints sustain about 290 requests per second on a laptop (TESTING.md).
+- **Throughput is set by the language models, not the server.** With the default model, an answered question
+  takes 35–131 seconds (median 53) and costs $0.13–0.55 (median $0.17). With scripted models, 20 concurrent
+  runs complete in 0.6 s with no lost events. Read and search endpoints sustain about 290 requests per second on a
+  laptop (TESTING.md).
 - **Stateless requests.** Conversation state is in the checkpointer and run history in the database, so API
   processes can be added behind a load balancer. The SQLite files would become PostgreSQL (LangGraph has a
   Postgres checkpointer; SQLAlchemy needs only a new URL). The vector index would move to pgvector or a vector
@@ -498,5 +499,7 @@ What this design would need in order to serve many users:
   - per-run cost shown live
 
   A per-user budget would sit in front of the run manager.
+- **Monitoring.** With `LOG_FORMAT=json`, the API and the ingest service write one JSON object per line, each
+  tagged with its run's ID, for any log platform; LangSmith tracing is optional (README, "Observability"; D-059).
 - **Data freshness.** Datasets are cached for 24 hours, and documents are re-crawled nightly. Every report says
   where each dataset came from, when it was retrieved, and whether a fallback was used.
