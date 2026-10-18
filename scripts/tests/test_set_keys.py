@@ -15,8 +15,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import set_keys  # noqa: E402
 
-FAKE_OPENAI = "sk-" + "proj-" + "A1b2" * 6
-FAKE_ANTHROPIC = "sk-" + "ant-" + "C3d4" * 6
+FAKE_OPENAI = "sk-" + "proj-" + "A1b2" * 32          # realistic lengths, so only the prefix tests can fail
+FAKE_ANTHROPIC = "sk-" + "ant-" + "api03-" + "C3d4" * 25
+FAKE_LANGSMITH = "lsv2_" + "pt_" + "e5f6" * 8 + "_" + "a7b8c9d0e1"
 
 
 class EnvLinesTest(unittest.TestCase):
@@ -37,6 +38,18 @@ class EnvLinesTest(unittest.TestCase):
         self.assertFalse(set_keys.looks_valid("OPENAI_API_KEY", FAKE_ANTHROPIC))
         self.assertTrue(set_keys.looks_valid("ANTHROPIC_API_KEY", FAKE_ANTHROPIC))
         self.assertFalse(set_keys.looks_valid("ANTHROPIC_API_KEY", FAKE_OPENAI))
+        self.assertTrue(set_keys.looks_valid("LANGSMITH_API_KEY", FAKE_LANGSMITH))
+
+    def test_an_unusual_length_is_named(self):
+        found = set_keys.problems("ANTHROPIC_API_KEY", FAKE_ANTHROPIC[:40])
+        self.assertEqual(found, ["it has 40 characters; expected about 108 characters"])
+
+    def test_the_guide_says_whether_a_key_is_needed_how_to_get_it_and_its_shape(self):
+        text = set_keys.guide("ANTHROPIC_API_KEY", "", "[1/4] ")
+        self.assertTrue(text.startswith("[1/4] ANTHROPIC_API_KEY: Anthropic (Claude) (REQUIRED)"))
+        self.assertIn("https://platform.claude.com/settings/keys", text)
+        self.assertIn("Looks like: sk-ant-api03-", text)
+        self.assertIn("(optional, Enter to skip)", set_keys.guide("TAVILY_API_KEY", ""))
 
 
 class MainTest(unittest.TestCase):
@@ -58,7 +71,7 @@ class MainTest(unittest.TestCase):
         return code, out.getvalue()
 
     def test_new_file_is_seeded_from_example_and_owner_only(self):
-        code, out = self.run_main([FAKE_OPENAI, FAKE_ANTHROPIC, "", "", ""])  # optional keys left blank
+        code, out = self.run_main([FAKE_ANTHROPIC, FAKE_OPENAI, "", ""])  # the two optional keys skipped
         self.assertEqual(code, 0)
         self.assertEqual(self.env.read_text().splitlines(),
                          ["# example", f"OPENAI_API_KEY={FAKE_OPENAI}", f"ANTHROPIC_API_KEY={FAKE_ANTHROPIC}", "DEBUG=false"])
@@ -67,8 +80,8 @@ class MainTest(unittest.TestCase):
         self.assertNotIn(FAKE_ANTHROPIC, out)
 
     def test_blank_input_keeps_the_current_value(self):
-        self.run_main([FAKE_OPENAI, FAKE_ANTHROPIC, "", "", ""])
-        code, out = self.run_main(["", "", "", "", ""])
+        self.run_main([FAKE_ANTHROPIC, FAKE_OPENAI, "", ""])
+        code, out = self.run_main(["", "", "", ""])
         self.assertIn("No changes.", out)
         self.assertIn("ends ..." + FAKE_OPENAI[-4:], out)
         self.assertEqual(set_keys.get_value(set_keys.read_lines(self.env), "OPENAI_API_KEY"), FAKE_OPENAI)
@@ -90,8 +103,20 @@ class MainTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("Refusing", out)
         (self.dir / ".gitignore").write_text(".env\n")
-        code, _ = self.run_main([FAKE_OPENAI, "", "", "", ""])
+        code, _ = self.run_main(["", FAKE_OPENAI, "", ""])
         self.assertEqual(code, 0)
+
+    def test_a_langsmith_key_switches_tracing_on_and_names_a_project(self):
+        self.run_main([FAKE_LANGSMITH], args=["LANGSMITH_API_KEY"])
+        lines = set_keys.read_lines(self.env)
+        self.assertEqual([set_keys.get_value(lines, n) for n in ("LANGSMITH_TRACING", "LANGSMITH_PROJECT")],
+                         ["true", "policy-analytics"])
+
+    def test_missing_only_asks_for_keys_not_set_yet(self):
+        self.run_main([FAKE_ANTHROPIC, FAKE_OPENAI, "", ""])
+        code, out = self.run_main(["", ""], args=["--missing"])  # only the two optional keys are asked again
+        self.assertNotIn("ANTHROPIC_API_KEY:", out)
+        self.assertIn("[1/2] TAVILY_API_KEY", out)
 
 
 class VerifyTest(unittest.TestCase):

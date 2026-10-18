@@ -145,30 +145,41 @@ graph TD;
 
 ## Quick start with Docker
 
-Requires Docker with Compose, and API keys for OpenAI and Anthropic. Tavily, for web search, is optional.
+Requires Docker Desktop (or Docker with Compose v2), Python 3 and git. Two API keys are required, for Anthropic and
+OpenAI; Tavily (web search) and LangSmith (tracing) are optional. The deploy script explains each one, with how to
+get it and what it looks like.
 
 ```bash
 git clone https://github.com/garygsw/agentic-policy-analytics.git
 ```
 
 ```bash
-cd agentic-policy-analytics && cp .env.example .env
+cd agentic-policy-analytics && python3 scripts/deploy.py
 ```
 
-Put your keys in `.env`. Or, to type them hidden and check them with each provider, run `python3 scripts/set_keys.py`
-and then `python3 scripts/set_keys.py --verify`. Then:
+That one command:
+1. checks that Docker is installed and running;
+2. asks for the required keys that are missing (input hidden), with step-by-step instructions, an example of each
+   key's shape and its usual length, and offers the optional ones the first time;
+3. checks each key with its provider (free calls), and stops if a required key is rejected;
+4. builds and starts the API, the web UI and the ingest service;
+5. waits until they answer, then starts building the document index in the background the first time.
 
-```bash
-docker compose up --build
-```
+Run it again at any time: keys already set are not asked for, and only what changed is rebuilt. `--keys` reviews
+every key; `--release v1.0.4` starts the published images instead of building them. On Windows, use `python`
+instead of `python3`.
+
+Prefer to do it by hand? Copy `.env.example` to `.env` and put the keys in it, or run `python3 scripts/set_keys.py`
+(and `--verify`), then `docker compose up -d --build`.
 
 Open the UI at http://localhost:3000; the API's interactive docs are at http://localhost:8000/docs.
 The API has no login (D-040), so run it on your own machine rather than on a shared network.
 
 Runtime state (document index, models, and the database of conversations and datasets) lives in a Docker
 volume, not in a folder shared with your machine, because SQLite is not safe across that boundary (D-036). The
-datasets work at once, from committed snapshots or live. Document search needs the index built once. This crawls up to 500 pages per agency,
-which takes about 40 minutes; a nightly cron job keeps it fresh:
+datasets work at once, from committed snapshots or live. Document search needs the index built once: the deploy
+script starts it, crawling up to 500 pages per agency (about 40 minutes), and a nightly cron job keeps it fresh. To
+build it by hand:
 
 ```bash
 docker compose run --rm ingest python -m app.rag.scheduler --now

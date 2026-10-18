@@ -27,7 +27,7 @@ jobs:
       - run: uv sync --frozen
       - name: Lint
         run: uv run ruff check app tests scripts
-      - name: Tests of the key-entry script (scripts/set_keys.py)
+      - name: Tests of the deploy and key-entry scripts (scripts/deploy.py, scripts/set_keys.py)
         working-directory: .
         run: python3 -m unittest discover -s scripts/tests
       - name: Unit and integration tests (fake language models, no network)

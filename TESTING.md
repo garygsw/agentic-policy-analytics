@@ -58,6 +58,7 @@ The language models are the part that cannot be unit-tested, so the design keeps
 | Retrieval | `test_rag.py` (24): chunking, crawling rules, incremental re-crawls, each search mode, fusion, filters, per-document cap, web result de-duplication, concurrent searches |
 | Performance and load | `test_load.py`: 20 concurrent runs through the API with no lost events. `scripts/load_test.py`: HTTP load (section 6) |
 | Observability | `test_observability.py` (4): JSON log lines (UTC time, level, logger, message, run ID inside a run, structured fields, exceptions), text lines, setup routing uvicorn's logs through the same format, LangSmith off unless switched on with a key. `test_api.py`: a run's start, LLM calls and end logged with its ID |
+| Deployment scripts | `scripts/tests` (20, stdlib unittest, run in CI): the deploy script's Docker checks, first-run key setup (only missing required keys, optional ones on request), stopping on a missing or rejected required key; the key script's guide for each key, prefix and length checks, hidden input that is never printed, owner-only `.env`, refusal when git would not ignore it, a LangSmith key switching tracing on, `--missing` |
 | Frontend | `runState.test.ts` (8): replayed events are idempotent, a rejected plan kept to reopen, usage adds up across pauses, draft revisions, status across pause and resume, working time excludes waiting, verbosity filtering. `threads.test.ts` (1): pinned conversations listed apart. `layout.test.ts` (3): sidebar width limits, paging, the list request |
 
 ## 3. Hallucination detection
