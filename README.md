@@ -19,8 +19,6 @@ for the agents is shown sped up.
 
 https://github.com/user-attachments/assets/4a49a5db-b7ac-4873-8d0c-3e6647caa335
 
-Full quality (1080p, 18 MB): [download it from the v1.0.4 release](https://github.com/garygsw/agentic-policy-analytics/releases/download/v1.0.4/policy-demo.mp4).
-
 **What it does**
 - **Answers from official data.** 22 curated datasets from MOM, HDB, URA, LTA, MOH, NEA, ELD, IMDA, SingStat and
   NASA (fire hotspots across Southeast Asia), plus
